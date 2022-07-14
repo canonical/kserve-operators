@@ -1,0 +1,20 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# For a complete list of supported options, see:
+# https://juju.is/docs/sdk/metadata-reference
+name: kserve-web-app
+description: |
+  KServe Web UI.
+summary: |
+  KServe Web UI.
+
+containers:
+  kserve-web-app:
+    resource: kserve-web-app-image
+
+resources:
+  kserve-web-app-image:
+    type: oci-image
+    description: OCI image for kserve web app
+    upstream-source: kserve/models-web-app:v0.8.0
