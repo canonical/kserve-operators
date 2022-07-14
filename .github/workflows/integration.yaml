@@ -1,0 +1,91 @@
+# reusable workflow triggered by other actions
+name: Continuous Integration
+
+on:
+  workflow_call:
+    secrets:
+      charmcraft-credentials:
+        required: true
+
+jobs:
+
+  lib-check:
+    name: Check libraries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Check libs
+        uses: canonical/charming-actions/check-libraries@1.0.3
+        with:
+          credentials: "${{ secrets.charmcraft-credentials }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        charm: [kserve-web-app]
+    steps:
+    - uses: actions/checkout@v2
+    - run: sudo apt update && sudo apt install tox
+    - run: tox -e ${{ matrix.charm }}-lint
+
+  unit:
+    name: Unit Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        charm: [kserve-web-app]
+    steps:
+    - uses: actions/checkout@v2
+    - run: sudo apt update && sudo apt install tox
+    - run: tox -e ${{ matrix.charm }}-unit
+
+  integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        charm: [kserve-web-app]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.21/stable
+          charmcraft-channel: latest/candidate
+
+      - name: Build and test
+        working-directory: ./charms/${{ matrix.charm }}
+        run: |
+          sg microk8s -c "tox -vve integration -- --model testing"
+
+      # On failure, capture debugging resources
+      - name: Get all
+        run: kubectl get all -A
+        if: failure()
+
+      - name: Describe deployments
+        run: kubectl describe deployments -A
+        if: failure()
+
+      - name: Describe replicasets
+        run: kubectl describe replicasets -A
+        if: failure()
+
+      - name: Get juju status
+        run: juju status
+        if: failure()
+
+      - name: Get application logs
+        run: kubectl logs -n testing --tail 1000 -ljuju-app=${{ matrix.charm }}
+        if: failure()
+
+      - name: Get argo-controller operator logs
+        run: kubectl logs -n testing --tail 1000 -ljuju-operator=${{ matrix.charm }}
+        if: failure()
