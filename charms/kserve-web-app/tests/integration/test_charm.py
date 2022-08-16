@@ -41,13 +41,41 @@ async def test_build_and_deploy(ops_test: OpsTest):
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-@pytest.mark.abort_on_fail
-async def test_application_is_up(ops_test: OpsTest):
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
+async def test_relations(ops_test: OpsTest):
+    istio_pilot = "istio-pilot"
+    istio_gateway = "istio-ingressgateway"
 
-    url = f"http://{address}"
+    await ops_test.model.deploy(
+        entity_url=istio_pilot,
+        channel="latest/edge",
+        config={"default-gateway": "kubeflow-gateway"},
+        trust=True,
+    )
 
-    logger.info("querying app address: %s", url)
-    response = urllib.request.urlopen(url, data=None, timeout=2.0)
-    assert response.code == 200
+    await ops_test.model.deploy(
+        entity_url="istio-gateway",
+        application_name=istio_gateway,
+        channel="latest/edge",
+        config={"kind": "ingress"},
+        trust=True,
+    )
+    await ops_test.model.add_relation(
+        istio_pilot,
+        istio_gateway,
+    )
+
+    await ops_test.model.wait_for_idle(
+        [istio_pilot, istio_gateway],
+        raise_on_blocked=False,
+        status="active",
+        timeout=90 * 10,
+    )
+
+    await ops_test.model.add_relation(f"{istio_pilot}:ingress", f"{APP_NAME}:ingress")
+
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=True,
+        timeout=600,
+    )

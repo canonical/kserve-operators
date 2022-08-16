@@ -82,6 +82,20 @@ class KServeWebAppCharm(CharmBase):
         """
         pass
 
+    def _handle_ingress_relation(self, event):
+        ingress = self._get_interface("ingress")
+
+        if ingress:
+            for app_name, version in ingress.versions.items():
+                data = {
+                    "prefix": "/kserve-endpoints/",
+                    "rewrite": "/",
+                    "service": self.model.app.name,
+                    "port": self.model.config["port"],
+                }
+
+                ingress.send_data(data, app_name)
+
     def _update_layer(self) -> None:
         """Updates the Pebble configuration layer if changed."""
         current_layer = self.container.get_plan()
@@ -97,6 +111,34 @@ class KServeWebAppCharm(CharmBase):
                 self.unit.status = BlockedStatus("Failed to replan")
                 raise e
                 return
+
+    def _get_interface(self, interface_name):
+        # Remove this abstraction when SDI adds .status attribute to NoVersionsListed,
+        # NoCompatibleVersionsListed:
+        # https://github.com/canonical/serialized-data-interface/issues/26
+        try:
+            try:
+                interface = get_interface(self, interface_name)
+            except NoVersionsListed as err:
+                raise CheckFailedError(str(err), WaitingStatus)
+        except CheckFailedError as err:
+            log.debug("_get_interface ~ Checkfailederror catch")
+            self.model.unit.status = err.status
+            log.info(str(err.status))
+            return
+
+        return interface
+
+
+class CheckFailedError(Exception):
+    """Raise this exception if one of the checks in main fails."""
+
+    def __init__(self, msg, status_type=None):
+        super().__init__()
+
+        self.msg = str(msg)
+        self.status_type = status_type
+        self.status = status_type(msg)
 
 
 if __name__ == "__main__":
