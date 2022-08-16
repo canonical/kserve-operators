@@ -1,0 +1,3 @@
+pytest
+juju
+pytest-operator>=0.13.0

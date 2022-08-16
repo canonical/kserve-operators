@@ -13,43 +13,76 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
+import traceback
 
+from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from ops.charm import CharmBase
-from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, BlockedStatus
+from ops.pebble import ChangeError, Layer
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class KServeWebAppCharm(CharmBase):
     """Charm the service."""
 
-
     def __init__(self, *args):
         super().__init__(*args)
-        self.framework.observe(self.on.httpbin_pebble_ready, self._on_kserve_web_app_ready)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.fortune_action, self._on_fortune_action)
+        self.framework.observe(self.on.kserve_web_app_pebble_ready, self._on_kserve_web_app_ready)
+
+        self._container_name = "kserve-web-app"
+        self.container = self.unit.get_container(self._container_name)
+
+        self.service_patcher = KubernetesServicePatch(
+            self, [(self._container_name, self.model.config["port"])]
+        )
+
+    @property
+    def _pebble_layer(self):
+        """Return the Pebble layer for the workload."""
+        return Layer(
+            {
+                "services": {
+                    "kserve-web-app": {
+                        "override": "replace",
+                        "summary": "KServe Web App",
+                        "command": "gunicorn -w 3 --bind 0.0.0.0:5000 --access-logfile - entrypoint:app",
+                        "startup": "enabled",
+                        "environment": {
+                            "USERID_HEADER": "kubeflow-userid",
+                            "APP_PREFIX": "/kserve-endpoints",
+                            "APP_DISABLE_AUTH": True,
+                        },
+                    }
+                }
+            }
+        )
 
     def _on_kserve_web_app_ready(self, event):
         """Define and start a workload using the Pebble API.
 
         Learn more about Pebble layers at https://github.com/canonical/pebble
         """
-        pass
+        self._update_layer()
+        self.unit.status = ActiveStatus()
 
-    def _on_config_changed(self, _):
-        """Just an example to show how to deal with changed configuration.
+    def _update_layer(self) -> None:
+        """Updates the Pebble configuration layer if changed."""
+        current_layer = self.container.get_plan()
+        new_layer = self._pebble_layer
 
-        TEMPLATE-TODO: change this example to suit your needs.
-        If you don't need to handle config, you can remove this method,
-        the hook created in __init__.py for it, the corresponding test,
-        and the config.py file.
+        if current_layer.services != new_layer.services:
+            self.container.add_layer(self._container_name, new_layer, combine=True)
+            try:
+                log.info("Pebble plan updated with new configuration, replanning")
+                self.container.replan()
+            except ChangeError as e:
+                log.error(traceback.format_exc())
+                self.unit.status = BlockedStatus("Failed to replan")
+                raise e
+                return
 
-        Learn more about config at https://juju.is/docs/sdk/config
-        """
-        pass
 
 if __name__ == "__main__":
     main(KServeWebAppCharm)
