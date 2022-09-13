@@ -7,6 +7,8 @@ import logging
 import urllib.request
 from pathlib import Path
 
+import lightkube
+from lightkube.resources.core_v1 import Service
 import pytest
 import yaml
 from pytest_operator.plugin import OpsTest
@@ -18,6 +20,7 @@ APP_NAME = METADATA["name"]
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms.
 
@@ -41,6 +44,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.skip_if_deployed
 async def test_relations(ops_test: OpsTest):
     istio_pilot = "istio-pilot"
     istio_gateway = "istio-ingressgateway"
@@ -79,3 +83,16 @@ async def test_relations(ops_test: OpsTest):
         raise_on_error=True,
         timeout=600,
     )
+
+async def test_ui(ops_test: OpsTest):
+    lightkube_client = lightkube.Client()
+    gateway_svc = lightkube_client.get(
+        Service, "istio-ingressgateway-workload", namespace=ops_test.model_name
+    )
+
+    endpoint = gateway_svc.status.loadBalancer.ingress[0].ip
+    url = f"http://{endpoint}.nip.io/kserve-endpoints/"
+
+    get = urllib.request.urlopen(url)
+
+    assert get.getcode() == 200
