@@ -1,0 +1,7 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+options:
+  port:
+    type: int
+    default: 9443
+    description: Listening port
