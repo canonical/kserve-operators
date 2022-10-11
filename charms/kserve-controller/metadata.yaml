@@ -1,0 +1,27 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# For a complete list of supported options, see:
+# https://juju.is/docs/sdk/metadata-reference
+name: kserve-controller
+description: |
+  KServe Controller.
+summary: |
+  KServe Controller.
+
+containers:
+  kserve-controller:
+    resource: kserve-controller-image
+  kube-rbac-proxy:
+    resource: kube-rbac-proxy-image
+
+resources:
+  kserve-controller-image:
+    type: oci-image
+    description: OCI image for kserve controller
+    upstream-source: kserve/kserve-controller:v0.8.0
+  kube-rbac-proxy-image:
+    type: oci-image
+    description: OCI image for kube rbac proxy
+    upstream-source: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+
