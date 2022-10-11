@@ -1,0 +1,5 @@
+#charmed-kubeflow-chisme
+git+https://github.com/canonical/charmed-kubeflow-chisme@add-auto-generate-generic-resources#egg=charmed-kubeflow-chisme
+lightkube
+lightkube-models
+ops >= 1.2.0
