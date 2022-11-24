@@ -27,7 +27,7 @@ webhooks:
     caBundle: {{ cert }}
     service:
       name: kserve-webhook-server-service
-      namespace: kubeflow
+      namespace: {{ namespace }}
       path: /mutate-serving-kserve-io-v1beta1-inferenceservice
   failurePolicy: Fail
   name: inferenceservice.kserve-webhook-server.defaulter
