@@ -7,7 +7,99 @@ Upstream documentation can be found at https://kserve.github.io/website/0.8/
 
 ## Usage
 
-TBD
+### Pre-requisites
+
+* Microk8s <supported-version>/stable, supported-version=1.22, 1.23, 1.24
+>NOTE: These instructions assume you have run `microk8s enable dns storage rbac metallb:"10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111"`
+
+* `istio-pilot` and `istio-ingressgateway` charms deployed. See "Deploy dependencies" for deploy instructions.
+
+### Add a model and set variables
+
+```
+MODEL_NAME="kserve"
+DEFAULT_GATEWAY="kserve-gateway"
+juju add-model ${MODEL_NAME}
+```
+
+### Deploy dependencies
+
+KServe requires istio to be deployed in the cluster. To correctly configure them, you can:
+
+```
+ISTIO_CHANNEL=1.11/stable
+juju deploy istio-pilot --config default-gateway=${DEFAULT_GATEWAY} --channel ${ISTIO_CHANNEL} --trust
+juju deploy istio-gateway istio-ingressgateway --config kind="ingress" --channel ${ISTIO_CHANNEL} --trust
+juju relate istio-pilot istio-ingressgateway
+```
+
+### Deploy in `RawDeployment` mode
+
+KServe supports `RawDeployment` mode to enable `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
+
+1. Deploy `kserver-conttroller`
+
+```
+juju deploy kserve-controller --channel <channel> --trust
+```
+
+> `channel` is the available channels of the Charmed KServe:
+* latest/stable
+* 0.8/stable
+
+### Deploy in `Serverless` mode
+
+TODO
+
+## Deploy a simple `InferenceService`
+
+To deploy a simple example of an `InferenceServer`, you can use the one provided in `examples/`
+
+> NOTE: this example is based on [First InferenceService](https://kserve.github.io/website/0.9/get_started/first_isvc/#2-create-an-inferenceservice)
+
+1. Create an `InferenceService`
+
+```
+kubectl apply -f sklearn-iris.yaml
+``` 
+
+2. Check the `InferenceService` status
+
+```
+kubectl get inferenceservices sklearn-iris
+```
+
+3. Determine the URL for performing inference
+
+* Using the `ClusterIP`
+
+> NOTE: this method can only be used for performing inference within the cluster.
+
+```
+SERVICE_IP=$(kubectl get svc sklearn-iris-predictor-default -ojsonpath='{.spec.clusterIP}')
+INFERENCE_URL="${SERVICE_IP}/v1/models/sklearn-iris:predict"
+```
+
+* Using Istio Ingress and LoadBalancer
+
+> NOTE: This step assumes you enabled MetalLB addon in Microk8s at the beginning of this tutorial.
+
+```
+LOADBALANCER_IP=$(kubectl get svc istio-ingressgateway-workload -n${MODEL_NAME} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+INFERENCE_URL="{LOADBALANCER_IP}/v1/models/sklearn-iris:predict"
+```
+
+4. Perform inference
+
+```
+curl -v INFERENCE_URL -d @examples/iris-input.json
+```
+
+Expected output:
+
+```
+{"predictions": [1, 1]}
+```
 
 ## Looking for a fully supported platform for MLOps?
 
