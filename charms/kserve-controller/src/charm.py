@@ -15,7 +15,6 @@ develop a new k8s charm using the Operator Framework:
 import logging
 import traceback
 
-from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
