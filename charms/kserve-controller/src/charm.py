@@ -32,6 +32,7 @@ from ops.pebble import ChangeError, Layer
 
 #from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
+log = logging.getLogger(__name__)
 
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
@@ -57,7 +58,6 @@ class CheckFailed(Exception):
 class KServeControllerCharm(CharmBase):
     """Charm the service."""
 
-    log = logging.getLogger(__name__)
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -70,15 +70,6 @@ class KServeControllerCharm(CharmBase):
         self.framework.observe(
             self.on.kube_rbac_proxy_pebble_ready, self._on_kube_rbac_proxy_ready
         )
-        
-        self.gen_certs(self.model.name, self.app.name)
-        ca_context = b64encode(Path('/run/ca.crt').read_text().encode("ascii"))
-
-        self._context = {
-            "app_name": self.app.name,
-            "namespace": self.model.name,
-            "cert": f"'{ca_context.decode('utf-8')}'",
-        }
 
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
@@ -90,13 +81,24 @@ class KServeControllerCharm(CharmBase):
         self.rbac_proxy_container = self.unit.get_container(self._rbac_proxy_container_name)
 
     @property
+    def _context(self):
+        """Returns a dictionary containing context to be used for rendering."""
+        self.gen_certs(self.model.name, self.app.name)
+        ca_context = b64encode(Path('/run/ca.crt').read_text().encode("ascii"))
+        return {
+            "app_name": self.app.name,
+            "namespace": self.model.name,
+            "cert": f"'{ca_context.decode('utf-8')}'",
+        }
+
+    @property
     def k8s_resource_handler(self):
         if not self._k8s_resource_handler:
             self._k8s_resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
                 template_files=K8S_RESOURCE_FILES,
                 context=self._context,
-                logger=self.log,
+                logger=log,
             )
         return self._k8s_resource_handler
 
@@ -151,14 +153,14 @@ class KServeControllerCharm(CharmBase):
                 self._controller_container_name,
                 self.controller_container,
                 self._controller_pebble_layer,
-                self.log,
+                log,
             )
         except ErrorWithStatus as e:
             self.model.unit.status = e.status
             if isinstance(e.status, BlockedStatus):
-                self.log.error(str(e.msg))
+                log.error(str(e.msg))
             else:
-                self.log.info(str(e.msg))
+                log.info(str(e.msg))
 
         # TODO determine status checking if rbac proxy is also up
         self.unit.status = ActiveStatus()
@@ -173,14 +175,14 @@ class KServeControllerCharm(CharmBase):
                 self._rbac_proxy_container_name,
                 self.rbac_proxy_container,
                 self._rbac_proxy_pebble_layer,
-                self.log,
+                log,
             )
         except ErrorWithStatus as e:
             self.model.unit.status = e.status
             if isinstance(e.status, BlockedStatus):
-                self.log.error(str(e.msg))
+                log.error(str(e.msg))
             else:
-                self.log.info(str(e.msg))
+                log.info(str(e.msg))
 
 
         #TODO determine status checking if controller is also up
@@ -191,7 +193,8 @@ class KServeControllerCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.k8s_resource_handler.apply()
         except ApiError as e:
-            self.log.error(e)
+            log.error(e)
+            raise
         self.model.unit.status = ActiveStatus()
 
     def _on_remove(self, _):
@@ -203,13 +206,13 @@ class KServeControllerCharm(CharmBase):
                     k8s_resources_manifests,
                 )
         except ApiError as e:
-            self.log.warning(f"Failed to delete resources, with error: {e}")
+            log.warning(f"Failed to delete resources, with error: {e}")
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
     def gen_certs(self, namespace, service_name):
         if Path("/run/cert.pem").exists():
-            self.log.info("Found existing cert.pem, not generating new cert.")
+            log.info("Found existing cert.pem, not generating new cert.")
             return
     
         Path("/run/ssl.conf").write_text(
