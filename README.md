@@ -37,7 +37,7 @@ juju relate istio-pilot istio-ingressgateway
 
 KServe supports `RawDeployment` mode to enable `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
 
-1. Deploy `kserver-conttroller`
+1. Deploy `kserver-controller`
 
 ```
 juju deploy kserve-controller --channel <channel> --trust
