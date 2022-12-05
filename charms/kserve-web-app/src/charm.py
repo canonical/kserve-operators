@@ -15,16 +15,13 @@ develop a new k8s charm using the Operator Framework:
 import logging
 
 from ops.charm import CharmBase
-from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
 
 
 class KServeWebAppCharm(CharmBase):
     """Charm the service."""
-
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -50,6 +47,7 @@ class KServeWebAppCharm(CharmBase):
         Learn more about config at https://juju.is/docs/sdk/config
         """
         pass
+
 
 if __name__ == "__main__":
     main(KServeWebAppCharm)
