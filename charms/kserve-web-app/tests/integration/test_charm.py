@@ -25,7 +25,9 @@ async def test_build_and_deploy(ops_test: OpsTest):
     """
     # build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
-    resources = {"kserve-web-app-image": METADATA["resources"]["kserve-web-app-image"]["upstream-source"]}
+    resources = {
+        "kserve-web-app-image": METADATA["resources"]["kserve-web-app-image"]["upstream-source"]
+    }
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
 
     # issuing dummy update_status just to trigger an event
