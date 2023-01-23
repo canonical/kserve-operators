@@ -44,17 +44,6 @@ K8S_RESOURCE_FILES = [
 CONFIG_FILE = "src/config/inference-config.j2"
 
 
-class CheckFailed(Exception):
-    """Raise this exception if one of the checks in main fails."""
-
-    def __init__(self, msg: str, status_type=None):
-        super().__init__()
-
-        self.msg = str(msg)
-        self.status_type = status_type
-        self.status = status_type(self.msg)
-
-
 class KServeControllerCharm(CharmBase):
     """Charm the service."""
 
@@ -138,17 +127,26 @@ class KServeControllerCharm(CharmBase):
             }
         )
 
+    def _upload_certs_to_container(self):
+        """Upload generated certificates to workload container."""
+        if not self.controller_container.can_connect():
+            raise ErrorWithStatus("Failed to upload files, container is not ready", WaitingStatus)
+
+        # Generate certificates
+        self.gen_certs(self.model.name, self.app.name)
+
+        # Push certificate files to workload container
+        self.controller_container.push("/tmp/k8s-webhook-server/serving-certs/tls.crt", Path("/run/cert.pem").read_text(), make_dirs=True)
+        self.controller_container.push("/tmp/k8s-webhook-server/serving-certs/tls.key", Path("/run/server.key").read_text(), make_dirs=True)
+
     def _on_kserve_controller_ready(self, event):
         """Define and start a workload using the Pebble API.
 
         Learn more about Pebble layers at https://github.com/canonical/pebble
         """
         try:
-            self.gen_certs(self.model.name, self.app.name)
 
-            self.controller_container.push("/tmp/k8s-webhook-server/serving-certs/tls.crt", Path("/run/cert.pem").read_text(), make_dirs=True)
-            self.controller_container.push("/tmp/k8s-webhook-server/serving-certs/tls.key", Path("/run/server.key").read_text(), make_dirs=True)
-
+            self._upload_certs_to_container()
             update_layer(
                 self._controller_container_name,
                 self.controller_container,
@@ -215,42 +213,8 @@ class KServeControllerCharm(CharmBase):
             log.info("Found existing cert.pem, not generating new cert.")
             return
     
-        Path("/run/ssl.conf").write_text(
-            f"""[ req ]
-default_bits = 2048
-prompt = no
-default_md = sha256
-req_extensions = req_ext
-distinguished_name = dn
-[ dn ]
-C = GB
-ST = Canonical
-L = Canonical
-O = Canonical
-OU = Canonical
-CN = 127.0.0.1
-[ req_ext ]
-subjectAltName = @alt_names
-[ alt_names ]
-DNS.1 = {service_name}
-DNS.2 = {service_name}.{namespace}
-DNS.3 = {service_name}.{namespace}.svc
-DNS.4 = {service_name}.{namespace}.svc.cluster
-DNS.5 = {service_name}.{namespace}.svc.cluster.local
-DNS.6 = kserve-webhook-server-service
-DNS.7 = kserve-webhook-server-service.{namespace}
-DNS.8 = kserve-webhook-server-service.{namespace}.svc
-DNS.9 = kserve-webhook-server-service.{namespace}.svc.cluster
-DNS.10 = kserve-webhook-server-service.{namespace}.svc.cluster.local
-IP.1 = 127.0.0.1
-[ v3_ext ]
-authorityKeyIdentifier=keyid,issuer:always
-basicConstraints=CA:FALSE
-keyUsage=keyEncipherment,dataEncipherment,digitalSignature
-extendedKeyUsage=serverAuth,clientAuth
-subjectAltName=@alt_names"""
-        )
-    
+        Path("/run/ssl.conf").write_text(ssl_conf)
+
         check_call(["openssl", "genrsa", "-out", "/run/ca.key", "2048"])
         check_call(["openssl", "genrsa", "-out", "/run/server.key", "2048"])
         check_call(
