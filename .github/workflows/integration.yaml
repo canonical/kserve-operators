@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - name: Check libs
@@ -30,7 +30,7 @@ jobs:
       matrix:
         charm: [kserve-web-app]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-lint
 
@@ -41,7 +41,7 @@ jobs:
       matrix:
         charm: [kserve-web-app]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-unit
 
@@ -52,7 +52,7 @@ jobs:
       matrix:
         charm: [kserve-web-app]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
