@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - name: Check libs
@@ -28,9 +28,9 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        charm: [kserve-web-app]
+        charm: [controller, web-app]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-lint
 
@@ -39,31 +39,29 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        charm: [kserve-web-app]
+        charm: [controller, web-app]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-unit
 
-  integration:
-    name: Integration Test
+  charm-integration:
+    name: Individual Integration Tests
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        charm: [kserve-web-app]
+        charm: [controller, web-app]
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.21/stable
+          channel: 1.24/stable
           charmcraft-channel: latest/candidate
-
-      - name: Build and test
-        working-directory: ./charms/${{ matrix.charm }}
-        run: |
-          sg microk8s -c "tox -vve integration -- --model testing"
+      - run: tox -e ${{ matrix.charm }}-integration
 
       # On failure, capture debugging resources
       - name: Get all
@@ -84,8 +82,4 @@ jobs:
 
       - name: Get application logs
         run: kubectl logs -n testing --tail 1000 -ljuju-app=${{ matrix.charm }}
-        if: failure()
-
-      - name: Get argo-controller operator logs
-        run: kubectl logs -n testing --tail 1000 -ljuju-operator=${{ matrix.charm }}
         if: failure()
