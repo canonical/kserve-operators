@@ -13,7 +13,6 @@ from ops.testing import Harness
 
 from charm import KServeControllerCharm
 
-
 RBAC_PROXY_EXPECTED_LAYER = {
     "services": {
         "kube-rbac-proxy": {
