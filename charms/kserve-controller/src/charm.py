@@ -13,24 +13,21 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
-import traceback
+from base64 import b64encode
+from pathlib import Path
+from subprocess import check_call
 
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.pebble import update_layer
-from lightkube.generic_resource import load_in_cluster_generic_resources
 from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.main import main
-from subprocess import check_call
-from pathlib import Path
-from base64 import b64encode
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.pebble import Layer
 
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ChangeError, Layer
-
-#from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
+# from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
 log = logging.getLogger(__name__)
 
@@ -44,20 +41,8 @@ K8S_RESOURCE_FILES = [
 CONFIG_FILE = "src/config/inference-config.j2"
 
 
-class CheckFailed(Exception):
-    """Raise this exception if one of the checks in main fails."""
-
-    def __init__(self, msg: str, status_type=None):
-        super().__init__()
-
-        self.msg = str(msg)
-        self.status_type = status_type
-        self.status = status_type(self.msg)
-
-
 class KServeControllerCharm(CharmBase):
     """Charm the service."""
-
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -84,7 +69,7 @@ class KServeControllerCharm(CharmBase):
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
         self.gen_certs(self.model.name, self.app.name)
-        ca_context = b64encode(Path('/run/ca.crt').read_text().encode("ascii"))
+        ca_context = b64encode(Path("/run/ca.crt").read_text().encode("ascii"))
         return {
             "app_name": self.app.name,
             "namespace": self.model.name,
@@ -93,6 +78,7 @@ class KServeControllerCharm(CharmBase):
 
     @property
     def k8s_resource_handler(self):
+        """Returns an instance of the KubernetesResourceHandler."""
         if not self._k8s_resource_handler:
             self._k8s_resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
@@ -146,8 +132,16 @@ class KServeControllerCharm(CharmBase):
         try:
             self.gen_certs(self.model.name, self.app.name)
 
-            self.controller_container.push("/tmp/k8s-webhook-server/serving-certs/tls.crt", Path("/run/cert.pem").read_text(), make_dirs=True)
-            self.controller_container.push("/tmp/k8s-webhook-server/serving-certs/tls.key", Path("/run/server.key").read_text(), make_dirs=True)
+            self.controller_container.push(
+                "/tmp/k8s-webhook-server/serving-certs/tls.crt",
+                Path("/run/cert.pem").read_text(),
+                make_dirs=True,
+            )
+            self.controller_container.push(
+                "/tmp/k8s-webhook-server/serving-certs/tls.key",
+                Path("/run/server.key").read_text(),
+                make_dirs=True,
+            )
 
             update_layer(
                 self._controller_container_name,
@@ -184,8 +178,7 @@ class KServeControllerCharm(CharmBase):
             else:
                 log.info(str(e.msg))
 
-
-        #TODO determine status checking if controller is also up
+        # TODO determine status checking if controller is also up
         self.unit.status = ActiveStatus()
 
     def _on_install(self, event):
@@ -202,19 +195,20 @@ class KServeControllerCharm(CharmBase):
         k8s_resources_manifests = self.k8s_resource_handler.render_manifests()
         try:
             delete_many(
-                    self.k8s_resource_handler.lightkube_client,
-                    k8s_resources_manifests,
-                )
+                self.k8s_resource_handler.lightkube_client,
+                k8s_resources_manifests,
+            )
         except ApiError as e:
             log.warning(f"Failed to delete resources, with error: {e}")
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
     def gen_certs(self, namespace, service_name):
+        """Generate certificates."""
         if Path("/run/cert.pem").exists():
             log.info("Found existing cert.pem, not generating new cert.")
             return
-    
+
         Path("/run/ssl.conf").write_text(
             f"""[ req ]
 default_bits = 2048
@@ -250,7 +244,7 @@ keyUsage=keyEncipherment,dataEncipherment,digitalSignature
 extendedKeyUsage=serverAuth,clientAuth
 subjectAltName=@alt_names"""
         )
-    
+
         check_call(["openssl", "genrsa", "-out", "/run/ca.key", "2048"])
         check_call(["openssl", "genrsa", "-out", "/run/server.key", "2048"])
         check_call(
