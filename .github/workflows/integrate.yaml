@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
+        # are merged. Not running web-app lint tests as the charm is still WIP.
         charm: [controller, web-app]
     steps:
     - uses: actions/checkout@v3
@@ -39,7 +41,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        charm: [controller, web-app]
+        # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
+        # are merged. Not running web-app lint tests as the charm is still WIP.
+        charm: [controller]
     steps:
     - uses: actions/checkout@v3
     - run: sudo apt update && sudo apt install tox
@@ -50,7 +54,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        charm: [controller, web-app]
+        # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
+        # are merged. Not running web-app individual integration tests as
+        # the charm is still WIP.
+        charm: [controller]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -59,7 +66,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.24/stable
+          channel: 1.25/stable
           charmcraft-channel: latest/candidate
       - run: tox -e ${{ matrix.charm }}-integration
 
