@@ -53,6 +53,8 @@ def harness():
     """Returns a harnessed charm with leader == True."""
     harness = Harness(KServeControllerCharm)
     harness.set_leader(True)
+    harness.set_can_connect("kserve-controller", True)
+    harness.set_can_connect("kube-rbac-proxy", True)
     return harness
 
 

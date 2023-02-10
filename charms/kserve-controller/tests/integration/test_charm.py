@@ -7,7 +7,11 @@ import logging
 import urllib.request
 from pathlib import Path
 
+import lightkube
+import lightkube.codecs
+import lightkube.generic_resource
 import pytest
+import tenacity
 import yaml
 from pytest_operator.plugin import OpsTest
 
@@ -26,10 +30,12 @@ async def test_build_and_deploy(ops_test: OpsTest):
     # build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     resources = {
-        "kserve-web-app-image": METADATA["resources"]["kserve-web-app-image"]["upstream-source"]
+        "kserve-controller-image": METADATA["resources"]["kserve-controller-image"][
+            "upstream-source"
+        ],
+        "kube-rbac-proxy-image": METADATA["resources"]["kube-rbac-proxy-image"]["upstream-source"],
     }
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
-
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
@@ -41,13 +47,47 @@ async def test_build_and_deploy(ops_test: OpsTest):
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-@pytest.mark.abort_on_fail
-async def test_application_is_up(ops_test: OpsTest):
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
+def test_inference_service_raw_deployment(ops_test: OpsTest):
+    """Validates that an InferenceService can be deployed."""
 
-    url = f"http://{address}"
+    # Identify testing namespace (same as model)
+    namespace = ops_test.model_name
 
-    logger.info("querying app address: %s", url)
-    response = urllib.request.urlopen(url, data=None, timeout=2.0)
-    assert response.code == 200
+    # Instantiate a lightkube client
+    lightkube_client = lightkube.Client()
+
+    # Read InferenceService example and create namespaced resource
+    inference_service_resource = lightkube.generic_resource.create_namespaced_resource(
+        group="serving.kserve.io",
+        version="v1beta1",
+        kind="InferenceService",
+        plural="inferenceservices",
+        verbs=None,
+    )
+    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
+    inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
+
+    # Create InferenceService from example file
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(30),
+        reraise=True,
+    )
+    def create_inf_svc():
+        lightkube_client.create(inf_svc_object, namespace=namespace)
+
+    # Get InferenceService state
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(30),
+        reraise=True,
+    )
+    def get_inf_svc_state():
+        inf_svc = lightkube_client.get(inference_service_resource, "sklearn-iris", namespace=namespace)
+        state = inf_svc.get("status", {}).get("state")
+        return state
+
+    # Assert InferenceService state is Available
+    create_inf_svc()
+    inf_svc_state = get_inf_svc_state()
+    assert inf_svc_state == "Available"
