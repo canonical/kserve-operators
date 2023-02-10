@@ -95,7 +95,7 @@ markupsafe==2.1.1
     # via jinja2
 matplotlib-inline==0.1.6
     # via ipython
-mypy-extensions==0.4.3
+mypy-extensions==1.0.0
     # via typing-inspect
 oauthlib==3.2.2
     # via requests-oauthlib
