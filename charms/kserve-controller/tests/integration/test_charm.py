@@ -81,10 +81,12 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
         reraise=True,
     )
     def assert_inf_svc_state():
-        inf_svc = lightkube_client.get(inference_service_resource, "sklearn-iris", namespace=namespace)
+        inf_svc = lightkube_client.get(
+            inference_service_resource, "sklearn-iris", namespace=namespace
+        )
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
-            if condition.get("status") == 'False':
+            if condition.get("status") == "False":
                 status_overall = False
                 break
             status_overall = True
