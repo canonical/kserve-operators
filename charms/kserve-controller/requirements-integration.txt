@@ -267,7 +267,7 @@ wcwidth==0.2.6
     # via prompt-toolkit
 websocket-client==1.5.1
     # via kubernetes
-websockets==9.0
+websockets==10.4
     # via juju
 yarl==1.8.2
     # via aiohttp
