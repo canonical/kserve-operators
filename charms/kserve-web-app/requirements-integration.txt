@@ -213,7 +213,7 @@ toml==0.10.2
     # via ipdb
 tomli==2.0.1
     # via pytest
-toposort==1.7
+toposort==1.9
     # via juju
 traitlets==5.7.0
     # via
