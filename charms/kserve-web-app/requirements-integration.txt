@@ -234,7 +234,7 @@ urllib3[socks]==1.26.13
     #   kubernetes
     #   requests
     #   selenium
-wcwidth==0.2.5
+wcwidth==0.2.6
     # via prompt-toolkit
 websocket-client==1.4.2
     # via kubernetes
