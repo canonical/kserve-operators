@@ -205,7 +205,7 @@ sortedcontainers==2.4.0
     # via trio
 stack-data==0.6.2
     # via ipython
-tenacity==8.1.0
+tenacity==8.2.1
     # via -r ./requirements-integration.in
 theblues==0.5.2
     # via juju
