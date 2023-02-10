@@ -4,7 +4,6 @@
 
 
 import logging
-import urllib.request
 from pathlib import Path
 
 import lightkube
@@ -19,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
+
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
@@ -48,7 +48,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 def test_inference_service_raw_deployment(ops_test: OpsTest):
     """Validates that an InferenceService can be deployed."""
-
     # Identify testing namespace (same as model)
     namespace = ops_test.model_name
 
@@ -89,8 +88,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
                 status_overall = False
                 break
             status_overall = True
-        assert status_overall == True
+        assert status_overall is True
 
     create_inf_svc()
     assert_inf_svc_state()
-
