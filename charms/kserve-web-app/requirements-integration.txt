@@ -133,7 +133,7 @@ pyasn1-modules==0.2.8
     # via google-auth
 pycparser==2.21
     # via cffi
-pygments==2.13.0
+pygments==2.14.0
     # via ipython
 pymacaroons==0.13.0
     # via macaroonbakery
