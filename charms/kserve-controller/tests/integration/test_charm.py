@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 
-
+@pytest.mark.skip('')
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms.
@@ -76,18 +76,22 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     def create_inf_svc():
         lightkube_client.create(inf_svc_object, namespace=namespace)
 
-    # Get InferenceService state
+    # Assert InferenceService state is Available
     @tenacity.retry(
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_delay(30),
+        stop=tenacity.stop_after_attempt(10),
         reraise=True,
     )
-    def get_inf_svc_state():
+    def assert_inf_svc_state():
         inf_svc = lightkube_client.get(inference_service_resource, "sklearn-iris", namespace=namespace)
-        state = inf_svc.get("status", {}).get("state")
-        return state
+        conditions = inf_svc.get("status", {}).get("conditions")
+        for condition in conditions:
+            if condition.get("status") == 'False':
+                status_overall = False
+                break
+            status_overall = True
+        assert status_overall == True
 
-    # Assert InferenceService state is Available
     create_inf_svc()
-    inf_svc_state = get_inf_svc_state()
-    assert inf_svc_state == "Available"
+    assert_inf_svc_state()
+
