@@ -1,0 +1,6 @@
+#charmed-kubeflow-chisme
+git+https://github.com/canonical/charmed-kubeflow-chisme@main#egg=charmed-kubeflow-chisme
+lightkube
+lightkube-models
+ops
+deepdiff==6.2.1

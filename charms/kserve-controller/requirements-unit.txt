@@ -1,5 +1,4 @@
-charmed-kubeflow-chisme
-lightkube>=0.10.1
 pytest
 pytest-mock
 coverage[toml]
+-r requirements.txt
