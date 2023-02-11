@@ -34,7 +34,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         ],
         "kube-rbac-proxy-image": METADATA["resources"]["kube-rbac-proxy-image"]["upstream-source"],
     }
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
+    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME, trust=True)
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
