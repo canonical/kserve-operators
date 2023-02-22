@@ -67,8 +67,6 @@ jobs:
         with:
           provider: microk8s
           channel: 1.25/stable
-          # Pinned until this bug is resolved: https://bugs.launchpad.net/juju/+bug/1992833
-          bootstrap-options: "--agent-version=2.9.34"
           charmcraft-channel: latest/candidate
       - run: tox -e ${{ matrix.charm }}-integration
 
