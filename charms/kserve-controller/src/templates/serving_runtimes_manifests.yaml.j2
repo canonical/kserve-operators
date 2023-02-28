@@ -5,11 +5,11 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }}
+    - --model_name={{.Name}}
     - --model_dir=/mnt/models
     - --http_port=8080
     - --nthread=1
-    image: kserve/lgbserver:v0.8.0
+    image: kserve/lgbserver:v0.10.0
     name: kserve-container
     resources:
       limits:
@@ -18,10 +18,12 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
   supportedModelFormats:
   - autoSelect: true
     name: lightgbm
-    version: "2"
+    version: "3"
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
@@ -31,14 +33,14 @@ spec:
   containers:
   - env:
     - name: MLSERVER_MODEL_IMPLEMENTATION
-      value: {{ '\'{{.Labels.modelClass}}\'' }}
+      value: '{{.Labels.modelClass}}'
     - name: MLSERVER_HTTP_PORT
       value: "8080"
     - name: MLSERVER_GRPC_PORT
       value: "9000"
     - name: MODELS_DIR
       value: /mnt/models
-    image: docker.io/seldonio/mlserver:0.5.3
+    image: docker.io/seldonio/mlserver:1.0.0
     name: kserve-container
     resources:
       limits:
@@ -47,12 +49,17 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v2
   supportedModelFormats:
-  - name: sklearn
+  - autoSelect: true
+    name: sklearn
     version: "0"
-  - name: xgboost
+  - autoSelect: true
+    name: xgboost
     version: "1"
-  - name: lightgbm
+  - autoSelect: true
+    name: lightgbm
     version: "3"
   - autoSelect: true
     name: mlflow
@@ -65,10 +72,10 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }}
+    - --model_name={{.Name}}
     - --model_dir=/mnt/models
     - --http_port=8080
-    image: kserve/paddleserver:v0.8.0
+    image: kserve/paddleserver:v0.10.0
     name: kserve-container
     resources:
       limits:
@@ -77,6 +84,8 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
   supportedModelFormats:
   - autoSelect: true
     name: paddle
@@ -89,10 +98,10 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }}
+    - --model_name={{.Name}}
     - --model_dir=/mnt/models
     - --http_port=8080
-    image: kserve/pmmlserver:v0.8.0
+    image: kserve/pmmlserver:v0.10.0
     name: kserve-container
     resources:
       limits:
@@ -101,6 +110,8 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
   supportedModelFormats:
   - autoSelect: true
     name: pmml
@@ -116,10 +127,10 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }}
+    - --model_name={{.Name}}
     - --model_dir=/mnt/models
     - --http_port=8080
-    image: kserve/sklearnserver:v0.8.0
+    image: kserve/sklearnserver:v0.10.0
     name: kserve-container
     resources:
       limits:
@@ -128,6 +139,8 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
   supportedModelFormats:
   - autoSelect: true
     name: sklearn
@@ -140,7 +153,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }}
+    - --model_name={{.Name}}
     - --port=9000
     - --rest_api_port=8080
     - --model_base_path=/mnt/models
@@ -156,6 +169,9 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
+  - grpc-v1
   supportedModelFormats:
   - autoSelect: true
     name: tensorflow
@@ -177,8 +193,8 @@ spec:
     - --ts-config=/mnt/models/config/config.properties
     env:
     - name: TS_SERVICE_ENVELOPE
-      value: {{ '\'{{.Labels.serviceEnvelope}}\'' }}
-    image: kserve/torchserve-kfs:0.5.3
+      value: '{{.Labels.serviceEnvelope}}'
+    image: pytorch/torchserve-kfs:0.7.0
     name: kserve-container
     resources:
       limits:
@@ -187,6 +203,10 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
+  - v2
+  - grpc-v1
   supportedModelFormats:
   - autoSelect: true
     name: pytorch
@@ -214,12 +234,18 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v2
+  - grpc-v2
   supportedModelFormats:
-  - name: tensorrt
+  - autoSelect: true
+    name: tensorrt
     version: "8"
-  - name: tensorflow
+  - autoSelect: true
+    name: tensorflow
     version: "1"
-  - name: tensorflow
+  - autoSelect: true
+    name: tensorflow
     version: "2"
   - autoSelect: true
     name: onnx
@@ -237,11 +263,11 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }}
+    - --model_name={{.Name}}
     - --model_dir=/mnt/models
     - --http_port=8080
     - --nthread=1
-    image: kserve/xgbserver:v0.8.0
+    image: kserve/xgbserver:v0.10.0
     name: kserve-container
     resources:
       limits:
@@ -250,6 +276,8 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+  protocolVersions:
+  - v1
   supportedModelFormats:
   - autoSelect: true
     name: xgboost
