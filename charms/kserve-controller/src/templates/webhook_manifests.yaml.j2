@@ -65,3 +65,84 @@ webhooks:
     resources:
     - pods
   sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: inferencegraph.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: kserve-webhook-server-service
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha1-inferencegraph
+  failurePolicy: Fail
+  name: inferencegraph.kserve-webhook-server.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - inferencegraphs
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: inferenceservice.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: kserve-webhook-server-service
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1beta1-inferenceservice
+  failurePolicy: Fail
+  name: inferenceservice.kserve-webhook-server.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - inferenceservices
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: trainedmodel.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: kserve-webhook-server-service
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha1-trainedmodel
+  failurePolicy: Fail
+  name: trainedmodel.kserve-webhook-server.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - trainedmodels
+  sideEffects: None
