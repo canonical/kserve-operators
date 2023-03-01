@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name= {{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     - --nthread=1
@@ -33,7 +33,7 @@ spec:
   containers:
   - env:
     - name: MLSERVER_MODEL_IMPLEMENTATION
-      value: '{{.Labels.modelClass}}'
+      value: {{ '\'{{.Labels.modelClass}}\'' }}
     - name: MLSERVER_HTTP_PORT
       value: "8080"
     - name: MLSERVER_GRPC_PORT
@@ -72,7 +72,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name= {{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     image: kserve/paddleserver:v0.10.0
@@ -98,7 +98,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     image: kserve/pmmlserver:v0.10.0
@@ -127,7 +127,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name={{ '{{.Name}}' }
     - --model_dir=/mnt/models
     - --http_port=8080
     image: kserve/sklearnserver:v0.10.0
@@ -153,7 +153,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name={{ '{{.Name}}' }
     - --port=9000
     - --rest_api_port=8080
     - --model_base_path=/mnt/models
@@ -193,7 +193,7 @@ spec:
     - --ts-config=/mnt/models/config/config.properties
     env:
     - name: TS_SERVICE_ENVELOPE
-      value: '{{.Labels.serviceEnvelope}}'
+      value: { '\'{{.Labels.serviceEnvelope}}\'' }}
     image: pytorch/torchserve-kfs:0.7.0
     name: kserve-container
     resources:
@@ -263,7 +263,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name={{ '{{.Name}}' }
     - --model_dir=/mnt/models
     - --http_port=8080
     - --nthread=1
