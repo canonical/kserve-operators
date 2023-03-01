@@ -127,7 +127,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }
+    - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     image: kserve/sklearnserver:v0.10.0
@@ -153,7 +153,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }
+    - --model_name={{ '{{.Name}}' }}
     - --port=9000
     - --rest_api_port=8080
     - --model_base_path=/mnt/models
@@ -263,7 +263,7 @@ metadata:
 spec:
   containers:
   - args:
-    - --model_name={{ '{{.Name}}' }
+    - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     - --nthread=1
