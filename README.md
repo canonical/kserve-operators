@@ -91,8 +91,22 @@ INFERENCE_URL="{LOADBALANCER_IP}/v1/models/sklearn-iris:predict"
 
 4. Perform inference
 
+Create a file with the input request:
+
 ```
-curl -v INFERENCE_URL -d @examples/iris-input.json
+cat <<EOF > "./iris-input.json"
+{
+  "instances": [
+    [6.8,  2.8,  4.8,  1.4],
+    [6.0,  3.4,  4.5,  1.6]
+  ]
+}
+EOF
+
+Now call the `InferenceService`:
+
+```
+curl -v $INFERENCE_URL -d @iris-input.json
 ```
 
 Expected output:
