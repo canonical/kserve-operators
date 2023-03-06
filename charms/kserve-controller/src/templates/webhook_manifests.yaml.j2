@@ -1,14 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  labels:
-    app.kubernetes.io/name: {{ app_name }}
   name: kserve-webhook-server-service
   namespace: {{ namespace }}
 spec:
   ports:
   - port: 443
-    name: kserve-controller
     targetPort: 9443
   selector:
     app.kubernetes.io/name: {{ app_name }}
@@ -16,9 +13,6 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  labels:
-    app: {{ app_name }}
-    app.kubernetes.io/name: {{ app_name }}
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -75,9 +69,33 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  labels:
-    app: {{ app_name }}
-    app.kubernetes.io/name: {{ app_name }}
+  name: inferencegraph.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: kserve-webhook-server-service
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha1-inferencegraph
+  failurePolicy: Fail
+  name: inferencegraph.kserve-webhook-server.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - inferencegraphs
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -105,9 +123,6 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  labels:
-    app: {{ app_name }}
-    app.kubernetes.io/name: {{ app_name }}
   name: trainedmodel.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
