@@ -51,7 +51,7 @@ exceptiongroup==1.0.4
     #   trio
 executing==1.2.0
     # via stack-data
-google-auth==2.15.0
+google-auth==2.16.2
     # via kubernetes
 h11==0.14.0
     # via wsproto
