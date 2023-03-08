@@ -255,7 +255,7 @@ traitlets==5.9.0
     # via
     #   ipython
     #   matplotlib-inline
-typing-extensions==4.4.0
+typing-extensions==4.5.0
     # via typing-inspect
 typing-inspect==0.8.0
     # via juju
