@@ -130,7 +130,7 @@ mypy-extensions==1.0.0
     # via typing-inspect
 oauthlib==3.2.2
     # via requests-oauthlib
-ops==2.0.0
+ops==2.1.1
     # via
     #   -r ./requirements.txt
     #   charmed-kubeflow-chisme

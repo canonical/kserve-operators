@@ -99,7 +99,7 @@ mypy-extensions==0.4.3
     # via typing-inspect
 oauthlib==3.2.2
     # via requests-oauthlib
-ops==1.5.4
+ops==2.1.1
     # via -r ./requirements.txt
 outcome==1.2.0
     # via trio
