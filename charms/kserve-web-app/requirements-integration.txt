@@ -71,7 +71,7 @@ iniconfig==1.1.1
     # via pytest
 ipdb==0.13.9
     # via pytest-operator
-ipython==8.7.0
+ipython==8.11.0
     # via ipdb
 jedi==0.18.2
     # via ipython
