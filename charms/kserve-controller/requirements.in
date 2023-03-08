@@ -3,4 +3,4 @@ git+https://github.com/canonical/charmed-kubeflow-chisme@main#egg=charmed-kubefl
 lightkube
 lightkube-models
 ops
-deepdiff==6.2.1
+deepdiff==6.2.3
