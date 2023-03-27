@@ -1,28 +1,25 @@
 # reusable workflow triggered by other actions
-name: Continuous Integration
+name: CI
 
 on:
   workflow_call:
     secrets:
-      charmcraft-credentials:
+      CHARMCRAFT_CREDENTIALS:
         required: true
 
 jobs:
-
   lib-check:
     name: Check libraries
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Check libs
-        uses: canonical/charming-actions/check-libraries@2.2.3
-        with:
-          credentials: "${{ secrets.charmcraft-credentials }}"
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-          
+    strategy:
+      matrix:
+        charm:
+        - kserve-controller
+        - kserve-web-app
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
+    secrets: inherit
+    with:
+        charm-path: ./charms/${{ matrix.charm }}
+
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
