@@ -25,5 +25,7 @@ resources:
 requires:
   gateway-info:
     interface: istio-ingress-gateway
+    limit: 1
   local-gateway:
     interface: serving-local-gateway
+    limit: 1

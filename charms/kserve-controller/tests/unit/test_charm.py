@@ -6,9 +6,9 @@
 from unittest.mock import MagicMock
 
 import pytest
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
-from lightkube.core.exceptions import ApiError
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from lightkube import ApiError
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import KServeControllerCharm
@@ -106,6 +106,7 @@ def test_events(harness, mocked_resource_handler, mocker):
 def test_on_install_active(harness, mocked_resource_handler):
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm._cm_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
     mocked_resource_handler.apply.assert_called()
     assert harness.charm.model.unit.status == ActiveStatus()
@@ -116,6 +117,7 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     harness.begin()
     mocked_resource_handler.apply.side_effect = _FakeApiError()
     harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm._cm_resource_handler = mocked_resource_handler
     with pytest.raises(ApiError):
         harness.charm.on.install.emit()
     mocked_logger.error.assert_called()
@@ -202,15 +204,168 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler, mocked_gen_
     mocked_logger.warning.assert_called()
 
 
-def test_generate_gateways_context_raw_mode_pass(harness):
+def test_generate_gateways_context_raw_mode_no_relation(
+    harness, mocker, mocked_resource_handler, mocked_gen_certs
+):
+    """Assert the unit gets blocked if no relation."""
     harness.set_model_name("test-model")
     harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm.on.install.emit()
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "Please relate to istio-pilot:gateway-info"
+    )
 
-    # Add relation with gateway-info provider.
+
+def test_generate_gateways_context_serverless_no_relation(
+    harness, mocker, mocked_resource_handler, mocked_gen_certs
+):
+    """Assert the unit gets blocked if no relation."""
+    harness.set_model_name("test-model")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # Change deployment-mode to serverless
+    harness.update_config({"deployment-mode": "serverless"})
+
+    # Add only gateway-info relation
+    relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
+    remote_ingress_data = {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"}
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+
+    harness.charm.on.install.emit()
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "Please relate to knative-serving:local-gateway"
+    )
+
+
+@pytest.mark.parametrize(
+    "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
+)
+def test_generate_gateways_context_raw_mode_missing_data(
+    remote_data, harness, mocker, mocked_resource_handler, mocked_gen_certs
+):
+    """Assert the unit goes to waiting status if there is incomplete data"""
+    harness.set_model_name("test-model")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # Add relation with gateway-info provider, in the case of kserve it will
+    # always be istio-pilot
     relation_id = harness.add_relation("gateway-info", "test-istio-pilot")
 
     # Updated the data bag with gateway-info
-    remote_data = {"gateway_name": "test-name", "gateway_namespace": "test-namespace"})
     harness.update_relation_data(relation_id, "test-istio-pilot", remote_data)
 
+    assert harness.charm.model.unit.status == WaitingStatus("Waiting for ingress gateway data.")
 
+
+@pytest.mark.parametrize(
+    "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
+)
+def test_generate_gateways_context_serverless_missing_data(
+    remote_data, harness, mocker, mocked_resource_handler, mocked_gen_certs
+):
+    """Assert the unit goes to waiting status if there is incomplete data"""
+    harness.set_model_name("test-model")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # Change deployment-mode to serverless
+    harness.update_config({"deployment-mode": "serverless"})
+
+    # Add gateway-info relation
+    relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
+    remote_ingress_data = {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"}
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+
+    # Add relation with gateway-info provider, in the case of kserve it will
+    # always be istio-pilot
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with gateway-info
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_data)
+
+    assert harness.charm.model.unit.status == WaitingStatus("Waiting for local gateway data.")
+
+
+def test_generate_gateways_context_raw_mode_pass(
+    harness, mocker, mocked_resource_handler, mocked_gen_certs
+):
+    """Assert the gateway context is correct."""
+    harness.set_model_name("test-model")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # Add relation with gateway-info provider, in the case of kserve it will
+    # always be istio-pilot
+    relation_id = harness.add_relation("gateway-info", "test-istio-pilot")
+
+    # Updated the data bag with gateway-info
+    remote_data = {"gateway_name": "test-name", "gateway_namespace": "test-namespace"}
+    harness.update_relation_data(relation_id, "test-istio-pilot", remote_data)
+
+    # Get relation data
+    ingress_gateway_info = harness.get_relation_data(relation_id, "test-istio-pilot")
+    # Compare actual and expected gateways context
+    expected_gateway_context = {
+        "ingress_gateway_name": "test-name",
+        "ingress_gateway_namespace": "test-namespace",
+        "ingress_gateway_service_name": "istio-ingressgateway-workload",
+        "local_gateway_name": "",
+        "local_gateway_namespace": "",
+        "local_gateway_service_name": "",
+    }
+    actual_gateway_context = {
+        "ingress_gateway_name": ingress_gateway_info["gateway_name"],
+        "ingress_gateway_namespace": ingress_gateway_info["gateway_namespace"],
+        "ingress_gateway_service_name": "istio-ingressgateway-workload",
+        "local_gateway_name": "",
+        "local_gateway_namespace": "",
+        "local_gateway_service_name": "",
+    }
+    assert actual_gateway_context == expected_gateway_context
+
+
+def test_generate_gateways_context_serverless_mode_pass(
+    harness, mocker, mocked_resource_handler, mocked_gen_certs
+):
+    """Assert the gateway context is correct."""
+    harness.set_model_name("test-model")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # Change deployment-mode to serverless
+    harness.update_config({"deployment-mode": "serverless"})
+
+    # Add relation with gateway-info providers
+    relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with gateway-info
+    remote_ingress_data = {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"}
+    remote_local_data = {"gateway_name": "test-local-name", "gateway_namespace": "test-local-namespace"}
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
+
+    # Get relation data
+    ingress_gateway_info = harness.get_relation_data(relation_id_ingress, "test-istio-pilot")
+    local_gateway_info = harness.get_relation_data(relation_id_local, "test-knative-serving")
+    # Compare actual and expected gateways context
+    expected_gateway_context = {
+        "ingress_gateway_name": "test-ingress-name",
+        "ingress_gateway_namespace": "test-ingress-namespace",
+        "ingress_gateway_service_name": "istio-ingressgateway-workload",
+        "local_gateway_name": "test-local-name",
+        "local_gateway_namespace": "test-local-namespace",
+        "local_gateway_service_name": "knative-local-gateway",
+    }
+    actual_gateway_context = {
+        "ingress_gateway_name": ingress_gateway_info["gateway_name"],
+        "ingress_gateway_namespace": ingress_gateway_info["gateway_namespace"],
+        "ingress_gateway_service_name": "istio-ingressgateway-workload",
+        "local_gateway_name": local_gateway_info["gateway_name"],
+        "local_gateway_namespace": local_gateway_info["gateway_namespace"],
+        "local_gateway_service_name": "knative-local-gateway",
+    }
+    assert actual_gateway_context == expected_gateway_context

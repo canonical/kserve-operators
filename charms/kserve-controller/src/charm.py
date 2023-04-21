@@ -17,7 +17,7 @@ from base64 import b64encode
 from pathlib import Path
 from subprocess import check_call
 
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
@@ -244,7 +244,11 @@ class KServeControllerCharm(CharmBase):
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
             return
-        self.model.unit.status = ActiveStatus()
+        except ApiError as api_err:
+            log.error(api_err)
+            raise
+        else:
+            self.model.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event):
         self._on_install(event)
@@ -305,7 +309,7 @@ class KServeControllerCharm(CharmBase):
 
         # Get the local-gateway info. This value should only
         # be get and rendered in Serverless Mode.
-        if self.model.config["deployment_mode"] == "Serverless":
+        if self.model.config["deployment-mode"].lower() == "serverless":
             try:
                 local_gateway_info = self._local_gateway_info
                 # FIXME: the local_gateway_service_name is hardcoded in knative-serving
@@ -321,7 +325,7 @@ class KServeControllerCharm(CharmBase):
                 raise ErrorWithStatus("Please relate to knative-serving:local-gateway", BlockedStatus)
             except GatewayRelationDataMissingError:
                 log.error("Missing or incomplete local gateway data.")
-                raise ErrorWithStatus("Waiting local gateway data.", WaitingStatus)
+                raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
 
         return gateways_context
 
