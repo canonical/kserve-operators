@@ -50,7 +50,7 @@ class KServeControllerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="gateway-info")
+        self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="ingress-gateway")
         self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
 
         self.framework.observe(self.on.install, self._on_install)
@@ -63,7 +63,7 @@ class KServeControllerCharm(CharmBase):
             self.on.kube_rbac_proxy_pebble_ready, self._on_kube_rbac_proxy_ready
         )
         self.framework.observe(
-            self.on["gateway-info"].relation_changed, self._on_gateway_info_relation_changed
+            self.on["ingress-gateway"].relation_changed, self._on_ingress_gateway_relation_changed
         )
         self.framework.observe(
             self.on["local-gateway"].relation_changed, self._on_local_gateway_relation_changed
@@ -266,8 +266,8 @@ class KServeControllerCharm(CharmBase):
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
-    def _on_gateway_info_relation_changed(self, event) -> None:
-        """Handle the gateway-info relation changed event."""
+    def _on_ingress_gateway_relation_changed(self, event) -> None:
+        """Handle the ingress-gateway relation changed event."""
         # Just call the event handler that applies manifest files
         self._on_install(event)
 
@@ -290,7 +290,7 @@ class KServeControllerCharm(CharmBase):
         try:
             ingress_gateway_info = self._ingress_gateway_info
         except GatewayRelationMissingError:
-            raise ErrorWithStatus("Please relate to istio-pilot:gateway-info", BlockedStatus)
+            raise ErrorWithStatus("Please relate to istio-pilot:ingress-gateway", BlockedStatus)
         except GatewayRelationDataMissingError:
             log.error("Missing or incomplete ingress gateway data.")
             raise ErrorWithStatus("Waiting for ingress gateway data.", WaitingStatus)

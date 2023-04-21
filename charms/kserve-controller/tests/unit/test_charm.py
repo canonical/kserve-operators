@@ -213,7 +213,7 @@ def test_generate_gateways_context_raw_mode_no_relation(
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
     assert harness.charm.model.unit.status == BlockedStatus(
-        "Please relate to istio-pilot:gateway-info"
+        "Please relate to istio-pilot:ingress-gateway"
     )
 
 
@@ -228,8 +228,8 @@ def test_generate_gateways_context_serverless_no_relation(
     # Change deployment-mode to serverless
     harness.update_config({"deployment-mode": "serverless"})
 
-    # Add only gateway-info relation
-    relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
+    # Add only ingress-gateway relation
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
     remote_ingress_data = {
         "gateway_name": "test-ingress-name",
         "gateway_namespace": "test-ingress-namespace",
@@ -253,11 +253,11 @@ def test_generate_gateways_context_raw_mode_missing_data(
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
-    # Add relation with gateway-info provider, in the case of kserve it will
+    # Add relation with ingress-gateway provider, in the case of kserve it will
     # always be istio-pilot
-    relation_id = harness.add_relation("gateway-info", "test-istio-pilot")
+    relation_id = harness.add_relation("ingress-gateway", "test-istio-pilot")
 
-    # Updated the data bag with gateway-info
+    # Updated the data bag with ingress-gateway
     harness.update_relation_data(relation_id, "test-istio-pilot", remote_data)
 
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for ingress gateway data.")
@@ -277,19 +277,19 @@ def test_generate_gateways_context_serverless_missing_data(
     # Change deployment-mode to serverless
     harness.update_config({"deployment-mode": "serverless"})
 
-    # Add gateway-info relation
-    relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
+    # Add ingress-gateway relation
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
     remote_ingress_data = {
         "gateway_name": "test-ingress-name",
         "gateway_namespace": "test-ingress-namespace",
     }
     harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
 
-    # Add relation with gateway-info provider, in the case of kserve it will
+    # Add relation with ingress-gateway provider, in the case of kserve it will
     # always be istio-pilot
     relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
 
-    # Updated the data bag with gateway-info
+    # Updated the data bag with ingress-gateway
     harness.update_relation_data(relation_id_local, "test-knative-serving", remote_data)
 
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for local gateway data.")
@@ -303,11 +303,11 @@ def test_generate_gateways_context_raw_mode_pass(
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
-    # Add relation with gateway-info provider, in the case of kserve it will
+    # Add relation with ingress-gateway provider, in the case of kserve it will
     # always be istio-pilot
-    relation_id = harness.add_relation("gateway-info", "test-istio-pilot")
+    relation_id = harness.add_relation("ingress-gateway", "test-istio-pilot")
 
-    # Updated the data bag with gateway-info
+    # Updated the data bag with ingress-gateway
     remote_data = {"gateway_name": "test-name", "gateway_namespace": "test-namespace"}
     harness.update_relation_data(relation_id, "test-istio-pilot", remote_data)
 
@@ -344,11 +344,11 @@ def test_generate_gateways_context_serverless_mode_pass(
     # Change deployment-mode to serverless
     harness.update_config({"deployment-mode": "serverless"})
 
-    # Add relation with gateway-info providers
-    relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
     relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
 
-    # Updated the data bag with gateway-info
+    # Updated the data bag with ingress-gateway
     remote_ingress_data = {
         "gateway_name": "test-ingress-name",
         "gateway_namespace": "test-ingress-namespace",

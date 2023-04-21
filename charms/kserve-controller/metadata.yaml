@@ -23,7 +23,7 @@ resources:
     description: OCI image for kube rbac proxy
     upstream-source: gcr.io/kubebuilder/kube-rbac-proxy:v0.10.0
 requires:
-  gateway-info:
+  ingress-gateway:
     interface: istio-gateway-info
     limit: 1
   local-gateway:
