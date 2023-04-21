@@ -73,21 +73,32 @@ class ProviderCharm(self):
             raise <your preferred exception with a message> from error
 ```
 
+Note that GatewayProvider.send_gateway_data() sends data to all related applications, and will
+execute without error even if no applications are related. If you want to ensure that the someone
+is listening for the data, please add checks separately.
+
 ## Relation data
 
-The data shared by this library has only two items:
-
+The data shared by this library is:
 * gateway_name: the name of the Gateway the provider knows about. It corresponds to
-the `name` field in the Gateway definition. In the following example `gateway_name` value will be equal to `my-gateway`
+  the `name` field in the Gateway definition
+* gateway_namespace: the namespace where the Gateway is deployed.
+* gateway_up: (new in v0.3) boolean indicating whether the Gateway is up.  This being True
+  indicates that the Gateway should be fully established and accepting traffic.
+  If relating a Requirer of v0.3 to a Provider using v0.2 or earlier of this library, the Requirer
+  will return gateway_up=True by default.
+
+The following example shows an Istio Gateway with `gateway_name=my-gateway` and
+`gateway_namespace=my-gateway-namespace`
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
   name: my-gateway
+  namespace: my-gateway-namespace
 ```
 
-* gateway_namespace: the namespace where the Gateway is deployed.
 """
 
 import logging
@@ -103,12 +114,13 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 # Default relation and interface names. If changed, consistency must be kept
 # across the provider and requirer.
 DEFAULT_RELATION_NAME = "gateway-info"
 DEFAULT_INTERFACE_NAME = "istio-gateway-info"
+REQUIRED_ATTRIBUTES = ["gateway_name", "gateway_namespace"]
 
 logger = logging.getLogger(__name__)
 
@@ -172,9 +184,8 @@ class GatewayRequirer(Object):
             raise GatewayRelationDataMissingError("No data found in relation data bag.")
 
         # Check if the relation data contains the expected attributes
-        expected_attributes = ["gateway_name", "gateway_namespace"]
         missing_attributes = [
-            attribute for attribute in expected_attributes if attribute not in relation_data
+            attribute for attribute in REQUIRED_ATTRIBUTES if attribute not in relation_data
         ]
         if missing_attributes:
             raise GatewayRelationDataMissingError(f"Missing attributes: {missing_attributes}")
@@ -194,9 +205,14 @@ class GatewayRequirer(Object):
         # Get relation data from remote app
         relation_data = relation.data[relation.app]
 
+        # Convert string gateway_up back to boolean, defaulting to True if it does not exist.
+        gateway_up = relation_data.get("gateway_up", "true")
+        gateway_up = gateway_up.lower() == "true"
+
         return {
             "gateway_name": relation_data["gateway_name"],
             "gateway_namespace": relation_data["gateway_namespace"],
+            "gateway_up": gateway_up,
         }
 
 
@@ -217,18 +233,19 @@ class GatewayProvider(Object):
         self.provider_charm = provider_charm
         self.relation_name = relation_name
 
-    def send_gateway_relation_data(self, gateway_name: str, gateway_namespace: str) -> None:
-        """Updates the relation data bag with data from the localGateway.
+    def send_gateway_relation_data(self, gateway_name: str, gateway_namespace: str, gateway_up: bool = True) -> None:
+        """Updates the relation data bag of any related applications with data from the localGateway.
+
+        This method will complete successfully even if there are no related applications.
+
         Args:
             gateway_name (str): the name of the Gateway the provider knows about
             gateway_namespace(str): the namespace of the Gateway the provider knows about
+            gateway_up (bool): (optional) the status of the Gateway.  Defaults to True if not
+                               provided.
         """
         # Update the relation data bag with localgateway information
         relations = self.model.relations[self.relation_name]
-
-        # Raise if there is no related applicaton
-        if not relations:
-            raise GatewayRelationMissingError()
 
         # Update relation data
         for relation in relations:
@@ -236,5 +253,6 @@ class GatewayProvider(Object):
                 {
                     "gateway_name": gateway_name,
                     "gateway_namespace": gateway_namespace,
+                    "gateway_up": str(gateway_up).lower(),
                 }
             )
