@@ -22,9 +22,9 @@ from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charms.istio_pilot.v0.istio_gateway_info import (
-    GatewayRequirer,
     GatewayRelationDataMissingError,
     GatewayRelationMissingError,
+    GatewayRequirer,
 )
 from lightkube import ApiError
 from ops.charm import CharmBase
@@ -304,7 +304,8 @@ class KServeControllerCharm(CharmBase):
             "local_gateway_service_name": "",
         }
 
-        # Get the local-gateway info. This value should only be get and rendered in Serverless Mode.
+        # Get the local-gateway info. This value should only
+        # be get and rendered in Serverless Mode.
         if self.model.config["deployment_mode"] == "Serverless":
             try:
                 local_gateway_info = self._local_gateway_info
