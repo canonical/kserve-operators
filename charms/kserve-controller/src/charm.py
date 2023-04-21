@@ -96,7 +96,12 @@ class KServeControllerCharm(CharmBase):
         deployment_mode = self.model.config["deployment-mode"].lower()
         if deployment_mode == "serverless":
             deployment_mode = "Serverless"
-        deployment_mode = "RawDeployment"
+        elif deployment_mode == "rawdeployment":
+            deployment_mode = "RawDeployment"
+        else:
+            self.unit.status = BlockedStatus(
+                "Please set deployment-mode to either Serverless or RawDeployment"
+            )
 
         inference_service_context = {
             "ingress_domain": self.model.config["domain-name"],
@@ -126,7 +131,7 @@ class KServeControllerCharm(CharmBase):
         if not self._cm_resource_handler:
             self._cm_resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
-                template_files=CONFIG_FILE,
+                template_files=CONFIG_FILES,
                 context=self._inference_service_context,
                 logger=log,
             )
