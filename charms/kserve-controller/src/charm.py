@@ -42,7 +42,7 @@ K8S_RESOURCE_FILES = [
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
-CONFIG_FILE = ["src/templates/configmap_manifests.yaml.j2"]
+CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
 
 
 class KServeControllerCharm(CharmBase):
