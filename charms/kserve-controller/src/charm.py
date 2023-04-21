@@ -63,7 +63,7 @@ class KServeControllerCharm(CharmBase):
             self.on.kube_rbac_proxy_pebble_ready, self._on_kube_rbac_proxy_ready
         )
         self.framework.observe(
-            self.on["ingress-gateway"].relation_changed, self._on_ingress_gateway_relation_changed
+            self.on["gateway-info"].relation_changed, self._on_gateway_info_relation_changed
         )
         self.framework.observe(
             self.on["local-gateway"].relation_changed, self._on_local_gateway_relation_changed
@@ -160,7 +160,7 @@ class KServeControllerCharm(CharmBase):
                 "services": {
                     self._rbac_proxy_container_name: {
                         "override": "replace",
-                        "summary": "Kube Rbac Proxy",
+                       "summary": "Kube Rbac Proxy",
                         "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",
                         "startup": "enabled",
                     }
@@ -240,9 +240,10 @@ class KServeControllerCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
-        except ApiError as e:
-            log.error(e)
-            raise
+        except ErrorWithStatus as err:
+            self.model.unit.status = err.status
+            log.error(f"Failed to handle {event} with error: {err}")
+            return
         self.model.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event):
@@ -261,17 +262,17 @@ class KServeControllerCharm(CharmBase):
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
-    def _on_ingress_gateway_relation_changed(self, event) -> None:
-        """Handle the ingress-gateway relation changed event."""
+    def _on_gateway_info_relation_changed(self, event) -> None:
+        """Handle the gateway-info relation changed event."""
         # Just call the event handler that applies manifest files
         self._on_install(event)
 
     def _on_local_gateway_relation_changed(self, event) -> None:
-        """Handle the ingress-gateway relation changed event."""
+        """Handle the local-gateway relation changed event."""
         # Just call the event handler that applies manifest files
         self._on_install(event)
 
-    def _generate_gateways_context(self) -> dict(str):
+    def _generate_gateways_context(self) -> dict:
         """Generates the ingress context based on certain rules.
 
         Returns:
@@ -285,12 +286,10 @@ class KServeControllerCharm(CharmBase):
         try:
             ingress_gateway_info = self._ingress_gateway_info
         except GatewayRelationMissingError:
-            self.unit.status = BlockedStatus("Please relate to istio-pilot:gateway-info")
-            return
+            raise ErrorWithStatus("Please relate to istio-pilot:gateway-info", BlockedStatus)
         except GatewayRelationDataMissingError:
             log.error("Missing or incomplete ingress gateway data.")
-            self.unit.status = WaitingStatus("Waiting for ingress gateway data.")
-            return
+            raise ErrorWithStatus("Waiting for ingress gateway data.", WaitingStatus)
 
         # A temporal context with values only from ingress gateway
         # FIXME: the ingress_gateway_service_name is hardcoded in istio-pilot
@@ -319,12 +318,10 @@ class KServeControllerCharm(CharmBase):
                     }
                 )
             except GatewayRelationMissingError:
-                self.unit.status = BlockedStatus("Please relate to knative-serving:local-gateway")
-                return
+                raise ErrorWithStatus("Please relate to knative-serving:local-gateway", BlockedStatus)
             except GatewayRelationDataMissingError:
                 log.error("Missing or incomplete local gateway data.")
-                self.unit.status = WaitingStatus("Waiting for local gateway data.")
-                return
+                raise ErrorWithStatus("Waiting local gateway data.", WaitingStatus)
 
         return gateways_context
 

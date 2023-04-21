@@ -200,3 +200,17 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler, mocked_gen_
     with pytest.raises(ApiError):
         harness.charm.on.remove.emit()
     mocked_logger.warning.assert_called()
+
+
+def test_generate_gateways_context_raw_mode_pass(harness):
+    harness.set_model_name("test-model")
+    harness.begin()
+
+    # Add relation with gateway-info provider.
+    relation_id = harness.add_relation("gateway-info", "test-istio-pilot")
+
+    # Updated the data bag with gateway-info
+    remote_data = {"gateway_name": "test-name", "gateway_namespace": "test-namespace"})
+    harness.update_relation_data(relation_id, "test-istio-pilot", remote_data)
+
+

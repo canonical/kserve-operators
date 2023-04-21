@@ -4,11 +4,11 @@ options:
   deployment-mode:
     default: "RawDeployment"
     description: Deployment mode for kserve. It can only be RawDeployment or Serverless, and the latter requires knative-serving to be present in the model, and the local-gateway relation to be established.
-    type: str
+    type: string
   domain-name:
     default: "example.com"
     description: The domain name used for all fully-qualified route names shown. In serverless mode, it has to be the same as knative-serving's domain name; otherwise, it can be changed to match the cluster ingress configuration.
-    type: str
+    type: string
   port:
     type: int
     default: 9443
