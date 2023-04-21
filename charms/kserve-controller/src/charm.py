@@ -17,7 +17,7 @@ from base64 import b64encode
 from pathlib import Path
 from subprocess import check_call
 
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
@@ -160,7 +160,7 @@ class KServeControllerCharm(CharmBase):
                 "services": {
                     self._rbac_proxy_container_name: {
                         "override": "replace",
-                       "summary": "Kube Rbac Proxy",
+                        "summary": "Kube Rbac Proxy",
                         "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",
                         "startup": "enabled",
                     }
@@ -322,7 +322,9 @@ class KServeControllerCharm(CharmBase):
                     }
                 )
             except GatewayRelationMissingError:
-                raise ErrorWithStatus("Please relate to knative-serving:local-gateway", BlockedStatus)
+                raise ErrorWithStatus(
+                    "Please relate to knative-serving:local-gateway", BlockedStatus
+                )
             except GatewayRelationDataMissingError:
                 log.error("Missing or incomplete local gateway data.")
                 raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)

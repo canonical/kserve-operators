@@ -6,7 +6,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
@@ -230,7 +230,10 @@ def test_generate_gateways_context_serverless_no_relation(
 
     # Add only gateway-info relation
     relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
-    remote_ingress_data = {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"}
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
     harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
 
     harness.charm.on.install.emit()
@@ -245,7 +248,7 @@ def test_generate_gateways_context_serverless_no_relation(
 def test_generate_gateways_context_raw_mode_missing_data(
     remote_data, harness, mocker, mocked_resource_handler, mocked_gen_certs
 ):
-    """Assert the unit goes to waiting status if there is incomplete data"""
+    """Assert the unit goes to waiting status if there is incomplete data."""
     harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -266,7 +269,7 @@ def test_generate_gateways_context_raw_mode_missing_data(
 def test_generate_gateways_context_serverless_missing_data(
     remote_data, harness, mocker, mocked_resource_handler, mocked_gen_certs
 ):
-    """Assert the unit goes to waiting status if there is incomplete data"""
+    """Assert the unit goes to waiting status if there is incomplete data."""
     harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -276,7 +279,10 @@ def test_generate_gateways_context_serverless_missing_data(
 
     # Add gateway-info relation
     relation_id_ingress = harness.add_relation("gateway-info", "test-istio-pilot")
-    remote_ingress_data = {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"}
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
     harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
 
     # Add relation with gateway-info provider, in the case of kserve it will
@@ -343,8 +349,14 @@ def test_generate_gateways_context_serverless_mode_pass(
     relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
 
     # Updated the data bag with gateway-info
-    remote_ingress_data = {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"}
-    remote_local_data = {"gateway_name": "test-local-name", "gateway_namespace": "test-local-namespace"}
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
     harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
     harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
 
