@@ -100,7 +100,7 @@ class KServeControllerCharm(CharmBase):
 
         inference_service_context = {
             "ingress_domain": self.model.config["domain-name"],
-            "deployment_mode": self.model.config["deployment-mode"],
+            "deployment_mode": deployment_mode,
             "namespace": self.model.name,
         }
         # Generate and add gateway context
@@ -290,7 +290,7 @@ class KServeControllerCharm(CharmBase):
         try:
             ingress_gateway_info = self._ingress_gateway_info
         except GatewayRelationMissingError:
-            raise ErrorWithStatus("Please relate to istio-pilot:ingress-gateway", BlockedStatus)
+            raise ErrorWithStatus("Please relate to istio-pilot:gateway-info", BlockedStatus)
         except GatewayRelationDataMissingError:
             log.error("Missing or incomplete ingress gateway data.")
             raise ErrorWithStatus("Waiting for ingress gateway data.", WaitingStatus)

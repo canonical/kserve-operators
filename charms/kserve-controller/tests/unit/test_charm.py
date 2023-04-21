@@ -213,7 +213,7 @@ def test_generate_gateways_context_raw_mode_no_relation(
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
     assert harness.charm.model.unit.status == BlockedStatus(
-        "Please relate to istio-pilot:ingress-gateway"
+        "Please relate to istio-pilot:gateway-info"
     )
 
 
