@@ -54,15 +54,14 @@ data:
     }
   ingress: |-
     {
-      "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }},
+      "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressService" : "{{ ingress_gateway_service_name }}.{{ ingress_gateway_namespace }}.svc.cluster.local",
       {% if local_gateway_namespace and local_gateway_name %}
       "localGateway" : "{{ local_gateway_namespace }}/ {{ local_gateway_name }}",
       "localGatewayService" : "{{ local_gateway_service_name }}.{{ local_gateway_namespace}}.svc.cluster.local",
-      {% endif }
+      {% endif %}
       "ingressDomain"  : "{{ ingress_domain}}",
       "ingressClassName" : "istio"
-      "domainTemplate": "{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}",
       "urlScheme": "http",
     }
   logger: |-
