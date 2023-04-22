@@ -156,7 +156,7 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     )
 
     # Change deployment mode to Serverless
-    ops_test.update_config({"deployment-mode": "serverless"})
+    await ops_test.model.applications["kserve-controller"].set_config({"deployment-mode": "serverless"})
 
     # Relate kserve-controller and knative-serving
     await ops_test.model.add_relation("knative-serving", "kserve-controller")
