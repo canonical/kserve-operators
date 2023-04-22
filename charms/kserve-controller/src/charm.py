@@ -295,13 +295,13 @@ class KServeControllerCharm(CharmBase):
         # Just call the event handler that applies manifest files
         self._on_install(event)
 
-    def _on_ingress_gateway_relation_broken(self,_) -> None:
+    def _on_ingress_gateway_relation_broken(self, _) -> None:
         """Handle the ingress-gateway relation broken event."""
         # Ingress is always needed, so immediately go into BlockedStatus
         self.unit.status = BlockedStatus("Please relate to istio-pilot:gateway-info")
         return
 
-    def _on_local_gateway_relation_broken(self,_) -> None:
+    def _on_local_gateway_relation_broken(self, _) -> None:
         """Handle the local-gateway relation broken event."""
         if self.model.config["deployment-mode"].lower() == "serverless":
             self.unit.status = BlockedStatus("Please relate to knative-serving:local-gateway")

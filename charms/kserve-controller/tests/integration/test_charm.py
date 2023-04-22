@@ -188,7 +188,6 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
 
-
     # Create InferenceService from example file
     @tenacity.retry(
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
