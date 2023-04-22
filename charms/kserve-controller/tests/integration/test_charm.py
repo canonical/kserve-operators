@@ -164,7 +164,7 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     await ops_test.model.add_relation("knative-serving", "kserve-controller")
 
     await ops_test.model.wait_for_idle(
-        "kserve-controller",
+        ["kserve-controller"],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
