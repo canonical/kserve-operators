@@ -127,8 +127,8 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     lightkube_client.delete(inference_service_resource, name="sklearn-iris", namespace=namespace)
 
 
-async def test_serverless_mode(ops_test: OpsTest):
-    """Test the charm in serverless mode."""
+async def test_deploy_knative_dependencies(ops_test: OpsTest):
+    """Deploy knative-operators as dependencies for serverless mode."""
     # Deploy knative for serverless mode
     namespace = ops_test.model_name
 
