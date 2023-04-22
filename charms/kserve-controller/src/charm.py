@@ -348,7 +348,7 @@ class KServeControllerCharm(CharmBase):
                 gateways_context.update(
                     {
                         "local_gateway_name": local_gateway_info["gateway_name"],
-                        "local_gateway_namespace": local_gateway_info["gateway_namespace"],
+                        "local_gateway_namespace": ingress_gateway_info["gateway_namespace"],
                         "local_gateway_service_name": "knative-local-gateway",
                     }
                 )
