@@ -269,11 +269,17 @@ class KServeControllerCharm(CharmBase):
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
         k8s_resources_manifests = self.k8s_resource_handler.render_manifests()
+        cm_resources_manifests = self.cm_resource_handler.render_manifests()
         try:
             delete_many(
                 self.k8s_resource_handler.lightkube_client,
                 k8s_resources_manifests,
             )
+            delete_many(
+                self.cm_resource_handler.lightkube_client,
+                cm_resources_manifests,
+            )
+
         except ApiError as e:
             log.warning(f"Failed to delete resources, with error: {e}")
             raise e
