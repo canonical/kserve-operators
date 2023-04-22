@@ -139,7 +139,7 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         trust=True,
     )
     await ops_test.model.deploy(
-        "knative-operator",
+        "knative-serving",
         channel=KNATIVE_VERSION,
         config={
             "namespace": "knative-serving",

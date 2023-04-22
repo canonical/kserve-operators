@@ -110,6 +110,7 @@ class KServeControllerCharm(CharmBase):
             self.unit.status = BlockedStatus(
                 "Please set deployment-mode to either Serverless or RawDeployment"
             )
+            return
 
         inference_service_context = {
             "ingress_domain": self.model.config["domain-name"],
