@@ -68,10 +68,10 @@ async def test_build_and_deploy(ops_test: OpsTest):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             status="active",
-            raise_on_blocked=True,
+            raise_on_blocked=False,
             timeout=1000,
         )
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
 def test_inference_service_raw_deployment(ops_test: OpsTest):
