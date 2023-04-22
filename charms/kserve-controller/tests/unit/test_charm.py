@@ -185,6 +185,7 @@ def test_on_remove_success(harness, mocker, mocked_resource_handler, mocked_gen_
     mocked_delete_many = mocker.patch("charm.delete_many")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm._cm_resource_handler = mocked_resource_handler
     harness.charm.on.remove.emit()
     mocked_delete_many.assert_called()
     assert isinstance(harness.charm.model.unit.status, MaintenanceStatus)
@@ -198,6 +199,7 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler, mocked_gen_
     mocked_logger = mocker.patch("charm.log")
 
     harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm._cm_resource_handler = mocked_resource_handler
 
     with pytest.raises(ApiError):
         harness.charm.on.remove.emit()
