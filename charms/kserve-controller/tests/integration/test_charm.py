@@ -16,7 +16,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-ISTIO_VERSION = "latest/edge"
+ISTIO_VERSION = "1.16/stable"
 KNATIVE_VERSION = "latest/edge"
 ISTIO_INGRESS_GATEWAY = "test-gateway"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -123,6 +123,9 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     create_inf_svc()
     assert_inf_svc_state()
 
+    # Remove the old InferenceService
+    lightkube_client.delete(inference_service_resource, name="sklearn-iris", namespace=namespace)
+
 
 async def test_serverless_mode(ops_test: OpsTest):
     """Test the charm in serverless mode."""
@@ -153,7 +156,7 @@ async def test_serverless_mode(ops_test: OpsTest):
     )
 
     # Change deployment mode to Serverless
-    ops_test.update_config({"deployment-mode": "Serverless"})
+    ops_test.update_config({"deployment-mode": "serverless"})
 
     # Relate kserve-controller and knative-serving
     await ops_test.model.add_relation("knative-serving", "kserve-controller")
@@ -185,8 +188,6 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
 
-    # Remove the old InferenceService
-    lightkube_client.delete(inference_service_resource, name="sklearn-iris", namespace=namespace)
 
     # Create InferenceService from example file
     @tenacity.retry(
