@@ -9,7 +9,7 @@ Upstream documentation can be found at https://kserve.github.io/website/0.8/
 
 ### Supported versions
 
-* Kubernetes 1.22, 1.23, 1.24
+* Kubernetes 1.24
 * istio-operators 1.16/stable
 * knative-operators 1.8/stable
 
