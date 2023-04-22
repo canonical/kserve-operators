@@ -65,9 +65,17 @@ class KServeControllerCharm(CharmBase):
         self.framework.observe(
             self.on["ingress-gateway"].relation_changed, self._on_ingress_gateway_relation_changed
         )
+        # Observe if relation is removed by juju remove-application or juju remove-relation
+        self.framework.observe(
+            self.on["ingress-gateway"].relation_broken, self._on_ingress_gateway_relation_broken
+        )
         self.framework.observe(
             self.on["local-gateway"].relation_changed, self._on_local_gateway_relation_changed
         )
+        self.framework.observe(
+            self.on["local-gateway"].relation_broken, self._on_local_gateway_relation_broken
+        )
+
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
         self._cm_resource_handler = None
@@ -280,6 +288,18 @@ class KServeControllerCharm(CharmBase):
         """Handle the local-gateway relation changed event."""
         # Just call the event handler that applies manifest files
         self._on_install(event)
+
+    def _on_ingress_gateway_relation_broken(self,_) -> None:
+        """Handle the ingress-gateway relation broken event."""
+        # Ingress is always needed, so immediately go into BlockedStatus
+        self.unit.status = BlockedStatus("Please relate to istio-pilot:gateway-info")
+        return
+
+    def _on_local_gateway_relation_broken(self,_) -> None:
+        """Handle the local-gateway relation broken event."""
+        if self.model.config["deployment-mode"].lower() == "serverless":
+            self.unit.status = BlockedStatus("Please relate to knative-serving:local-gateway")
+        return
 
     def _generate_gateways_context(self) -> dict:
         """Generates the ingress context based on certain rules.
