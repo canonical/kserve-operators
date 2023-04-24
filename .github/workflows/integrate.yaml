@@ -22,7 +22,7 @@ jobs:
 
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
@@ -35,7 +35,7 @@ jobs:
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
@@ -48,7 +48,7 @@ jobs:
 
   charm-integration:
     name: Individual Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
