@@ -35,7 +35,7 @@ data:
     }
   deploy: |-
     {
-      "defaultDeploymentMode": "RawDeployment"
+      "defaultDeploymentMode": "{{ deployment_mode }}"
     }
   explainers: |-
     {
@@ -54,13 +54,15 @@ data:
     }
   ingress: |-
     {
-      "ingressGateway" : "kubeflow/kubeflow-gateway",
-      "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",
-      "localGateway" : "kubeflow/kubeflow-gateway",
-      "localGatewayService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",
-      "ingressDomain"  : "example.com",
-      "urlScheme": "http",
-      "disableIstioVirtualHost": false
+      "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
+      "ingressService" : "{{ ingress_gateway_service_name }}.{{ ingress_gateway_namespace }}.svc.cluster.local",
+      "ingressDomain"  : "{{ ingress_domain}}",
+      "ingressClassName" : "istio",
+      {% if local_gateway_namespace and local_gateway_name -%}
+      "localGateway" : "{{ local_gateway_namespace }}/{{ local_gateway_name }}",
+      "localGatewayService" : "{{ local_gateway_service_name }}.{{ local_gateway_namespace}}.svc.cluster.local",
+      {%- endif %}
+      "urlScheme": "http"
     }
   logger: |-
     {

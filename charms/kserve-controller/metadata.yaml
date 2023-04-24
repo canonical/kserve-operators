@@ -8,13 +8,11 @@ description: |
   KServe Controller.
 summary: |
   KServe Controller.
-
 containers:
   kserve-controller:
     resource: kserve-controller-image
   kube-rbac-proxy:
     resource: kube-rbac-proxy-image
-
 resources:
   kserve-controller-image:
     type: oci-image
@@ -24,3 +22,10 @@ resources:
     type: oci-image
     description: OCI image for kube rbac proxy
     upstream-source: gcr.io/kubebuilder/kube-rbac-proxy:v0.10.0
+requires:
+  ingress-gateway:
+    interface: istio-gateway-info
+    limit: 1
+  local-gateway:
+    interface: serving-local-gateway
+    limit: 1
