@@ -155,13 +155,13 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
+    # Relate kserve-controller and knative-serving
+    await ops_test.model.add_relation("knative-serving", "kserve-controller")
+
     # Change deployment mode to Serverless
     await ops_test.model.applications["kserve-controller"].set_config(
         {"deployment-mode": "serverless"}
     )
-
-    # Relate kserve-controller and knative-serving
-    await ops_test.model.add_relation("knative-serving", "kserve-controller")
 
     await ops_test.model.wait_for_idle(
         ["kserve-controller"],
