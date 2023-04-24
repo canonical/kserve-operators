@@ -13,9 +13,10 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
+import tempfile
 from base64 import b64encode
 from pathlib import Path
-from subprocess import check_call
+from subprocess import DEVNULL, check_call
 
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
@@ -361,106 +362,97 @@ class KServeControllerCharm(CharmBase):
                 raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
 
         return gateways_context
-
-    def gen_certs(self, namespace, service_name):
+    def _gen_certs(self):
         """Generate certificates."""
-        if Path("/run/cert.pem").exists():
-            log.info("Found existing cert.pem, not generating new cert.")
+        # generate SSL configuration based on template
+        model = self.model.name
+
+        try:
+            ssl_conf_template = open(SSL_CONFIG_FILE)
+            ssl_conf = ssl_conf_template.read()
+        except IOError as err:
+            self.logger.warning(f"Failed to open SSL config file, error: {err}")
             return
 
-        Path("/run/ssl.conf").write_text(
-            f"""[ req ]
-default_bits = 2048
-prompt = no
-default_md = sha256
-req_extensions = req_ext
-distinguished_name = dn
-[ dn ]
-C = GB
-ST = Canonical
-L = Canonical
-O = Canonical
-OU = Canonical
-CN = 127.0.0.1
-[ req_ext ]
-subjectAltName = @alt_names
-[ alt_names ]
-DNS.1 = {service_name}
-DNS.2 = {service_name}.{namespace}
-DNS.3 = {service_name}.{namespace}.svc
-DNS.4 = {service_name}.{namespace}.svc.cluster
-DNS.5 = {service_name}.{namespace}.svc.cluster.local
-DNS.6 = kserve-webhook-server-service
-DNS.7 = kserve-webhook-server-service.{namespace}
-DNS.8 = kserve-webhook-server-service.{namespace}.svc
-DNS.9 = kserve-webhook-server-service.{namespace}.svc.cluster
-DNS.10 = kserve-webhook-server-service.{namespace}.svc.cluster.local
-IP.1 = 127.0.0.1
-[ v3_ext ]
-authorityKeyIdentifier=keyid,issuer:always
-basicConstraints=CA:FALSE
-keyUsage=keyEncipherment,dataEncipherment,digitalSignature
-extendedKeyUsage=serverAuth,clientAuth
-subjectAltName=@alt_names"""
-        )
+        ssl_conf = ssl_conf.replace("{{ model }}", str(model))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            Path(tmp_dir + "/seldon-cert-gen-ssl.conf").write_text(ssl_conf)
 
-        check_call(["openssl", "genrsa", "-out", "/run/ca.key", "2048"])
-        check_call(["openssl", "genrsa", "-out", "/run/server.key", "2048"])
-        check_call(
-            [
-                "openssl",
-                "req",
-                "-x509",
-                "-new",
-                "-sha256",
-                "-nodes",
-                "-days",
-                "3650",
-                "-key",
-                "/run/ca.key",
-                "-subj",
-                "/CN=127.0.0.1",
-                "-out",
-                "/run/ca.crt",
-            ]
-        )
-        check_call(
-            [
-                "openssl",
-                "req",
-                "-new",
-                "-sha256",
-                "-key",
-                "/run/server.key",
-                "-out",
-                "/run/server.csr",
-                "-config",
-                "/run/ssl.conf",
-            ]
-        )
-        check_call(
-            [
-                "openssl",
-                "x509",
-                "-req",
-                "-sha256",
-                "-in",
-                "/run/server.csr",
-                "-CA",
-                "/run/ca.crt",
-                "-CAkey",
-                "/run/ca.key",
-                "-CAcreateserial",
-                "-out",
-                "/run/cert.pem",
-                "-days",
-                "365",
-                "-extensions",
-                "v3_ext",
-                "-extfile",
-                "/run/ssl.conf",
-            ]
-        )
+            # execute OpenSSL commands
+            check_call(["openssl", "genrsa", "-out", tmp_dir + "/seldon-cert-gen-ca.key", "2048"])
+            check_call(
+                ["openssl", "genrsa", "-out", tmp_dir + "/seldon-cert-gen-server.key", "2048"],
+                stdout=DEVNULL,
+            )
+            check_call(
+                [
+                    "openssl",
+                    "req",
+                    "-x509",
+                    "-new",
+                    "-sha256",
+                    "-nodes",
+                    "-days",
+                    "3650",
+                    "-key",
+                    tmp_dir + "/seldon-cert-gen-ca.key",
+                    "-subj",
+                    "/CN=127.0.0.1",
+                    "-out",
+                    tmp_dir + "/seldon-cert-gen-ca.crt",
+                ],
+                stdout=DEVNULL,
+            )
+            check_call(
+                [
+                    "openssl",
+                    "req",
+                    "-new",
+                    "-sha256",
+                    "-key",
+                    tmp_dir + "/seldon-cert-gen-server.key",
+                    "-out",
+                    tmp_dir + "/seldon-cert-gen-server.csr",
+                    "-config",
+                    tmp_dir + "/seldon-cert-gen-ssl.conf",
+                ],
+                stdout=DEVNULL,
+            )
+            check_call(
+                [
+                    "openssl",
+                    "x509",
+                    "-req",
+                    "-sha256",
+                    "-in",
+                    tmp_dir + "/seldon-cert-gen-server.csr",
+                    "-CA",
+                    tmp_dir + "/seldon-cert-gen-ca.crt",
+                    "-CAkey",
+                    tmp_dir + "/seldon-cert-gen-ca.key",
+                    "-CAcreateserial",
+                    "-out",
+                    tmp_dir + "/seldon-cert-gen-cert.pem",
+                    "-days",
+                    "365",
+                    "-extensions",
+                    "v3_ext",
+                    "-extfile",
+                    tmp_dir + "/seldon-cert-gen-ssl.conf",
+                ],
+                stdout=DEVNULL,
+            )
+
+            ret_certs = {
+                "cert": Path(tmp_dir + "/seldon-cert-gen-cert.pem").read_text(),
+                "key": Path(tmp_dir + "/seldon-cert-gen-server.key").read_text(),
+                "ca": Path(tmp_dir + "/seldon-cert-gen-ca.crt").read_text(),
+            }
+
+            # cleanup temporary files
+            check_call(["rm", "-f", tmp_dir + "/seldon-cert-gen-*"])
+
+        return ret_certs
 
 
 if __name__ == "__main__":
