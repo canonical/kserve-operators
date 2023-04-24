@@ -13,10 +13,9 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
-import tempfile
 from base64 import b64encode
 from pathlib import Path
-from subprocess import DEVNULL, check_call
+from subprocess import check_call
 
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
@@ -27,27 +26,39 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRelationMissingError,
     GatewayRequirer,
 )
+from jinja2 import Template
 from lightkube import ApiError
 from ops.charm import CharmBase
+from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    Container,
+    MaintenanceStatus,
+    WaitingStatus,
+)
 from ops.pebble import Layer
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
 log = logging.getLogger(__name__)
 
+CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
-CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
+CONTAINER_CERTS_DEST = "/tmp/webhook-server/serving-certs/"
+SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
 
 
 class KServeControllerCharm(CharmBase):
     """Charm the service."""
+
+    _stored = StoredState()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -84,14 +95,21 @@ class KServeControllerCharm(CharmBase):
         self._controller_container_name = "kserve-controller"
         self.controller_container = self.unit.get_container(self._controller_container_name)
 
+        # Generate self-signed certificates and store them
+        self._stored.set_default(
+            **self._gen_certs(
+                ssl_config_file=SSL_CONFIG_FILE, ssl_config_context=self._ssl_config_context
+            ),
+            targets={},
+        )
+
         self._rbac_proxy_container_name = "kube-rbac-proxy"
         self.rbac_proxy_container = self.unit.get_container(self._rbac_proxy_container_name)
 
     @property
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
-        self.gen_certs(self.model.name, self.app.name)
-        ca_context = b64encode(Path("/run/ca.crt").read_text().encode("ascii"))
+        ca_context = b64encode(self._stored.ca.encode("ascii"))
         return {
             "app_name": self.app.name,
             "namespace": self.model.name,
@@ -99,6 +117,15 @@ class KServeControllerCharm(CharmBase):
         }
 
     @property
+    def _ssl_config_context(self):
+        """Returns a dictionary containing the context for rendering SSL config file."""
+        ssl_config_context = {
+            "namespace": self.model.name,
+            "service_name": self.app.name,
+            "webhook_server_service": "kserve-webhook-server-service",
+        }
+        return ssl_config_context
+
     def _inference_service_context(self):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
@@ -198,19 +225,11 @@ class KServeControllerCharm(CharmBase):
         Learn more about Pebble layers at https://github.com/canonical/pebble
         """
         try:
-            self.gen_certs(self.model.name, self.app.name)
-
-            self.controller_container.push(
-                "/tmp/k8s-webhook-server/serving-certs/tls.crt",
-                Path("/run/cert.pem").read_text(),
-                make_dirs=True,
+            self._upload_certs_to_container(
+                container=self.controller_container,
+                destination_path=CONTAINER_CERTS_DEST,
+                certs_store=self._stored,
             )
-            self.controller_container.push(
-                "/tmp/k8s-webhook-server/serving-certs/tls.key",
-                Path("/run/server.key").read_text(),
-                make_dirs=True,
-            )
-
             update_layer(
                 self._controller_container_name,
                 self.controller_container,
@@ -261,8 +280,7 @@ class KServeControllerCharm(CharmBase):
         except ApiError as api_err:
             log.error(api_err)
             raise
-        else:
-            self.model.unit.status = ActiveStatus()
+        self.model.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event):
         self._on_install(event)
@@ -307,6 +325,18 @@ class KServeControllerCharm(CharmBase):
         if self.model.config["deployment-mode"].lower() == "serverless":
             self.unit.status = BlockedStatus("Please relate to knative-serving:local-gateway")
         return
+
+    def _check_container_connection(self, container: Container) -> None:
+        """Check if connection can be made with container.
+
+        Args:
+            container: the named container in a unit to check.
+
+        Raises:
+            ErrorWithStatus if the connection cannot be made.
+        """
+        if not container.can_connect():
+            raise ErrorWithStatus("Pod startup is not complete", MaintenanceStatus)
 
     def _generate_gateways_context(self) -> dict:
         """Generates the ingress context based on certain rules.
@@ -362,97 +392,109 @@ class KServeControllerCharm(CharmBase):
                 raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
 
         return gateways_context
-    def _gen_certs(self):
-        """Generate certificates."""
-        # generate SSL configuration based on template
-        model = self.model.name
 
-        try:
-            ssl_conf_template = open(SSL_CONFIG_FILE)
-            ssl_conf = ssl_conf_template.read()
-        except IOError as err:
-            self.logger.warning(f"Failed to open SSL config file, error: {err}")
-            return
+    def _gen_certs(self, ssl_config_context: dict, ssl_config_file: str) -> dict:
+        """Generate self-signed certificates.
 
-        ssl_conf = ssl_conf.replace("{{ model }}", str(model))
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            Path(tmp_dir + "/seldon-cert-gen-ssl.conf").write_text(ssl_conf)
+        Args:
+            ssl_config_context (dict): a dictionary with key-value pairs
+                to render the ssl_config_file
+            ssl_config_file (str): a path to the ssl configuration template file in string format
 
-            # execute OpenSSL commands
-            check_call(["openssl", "genrsa", "-out", tmp_dir + "/seldon-cert-gen-ca.key", "2048"])
-            check_call(
-                ["openssl", "genrsa", "-out", tmp_dir + "/seldon-cert-gen-server.key", "2048"],
-                stdout=DEVNULL,
-            )
-            check_call(
-                [
-                    "openssl",
-                    "req",
-                    "-x509",
-                    "-new",
-                    "-sha256",
-                    "-nodes",
-                    "-days",
-                    "3650",
-                    "-key",
-                    tmp_dir + "/seldon-cert-gen-ca.key",
-                    "-subj",
-                    "/CN=127.0.0.1",
-                    "-out",
-                    tmp_dir + "/seldon-cert-gen-ca.crt",
-                ],
-                stdout=DEVNULL,
-            )
-            check_call(
-                [
-                    "openssl",
-                    "req",
-                    "-new",
-                    "-sha256",
-                    "-key",
-                    tmp_dir + "/seldon-cert-gen-server.key",
-                    "-out",
-                    tmp_dir + "/seldon-cert-gen-server.csr",
-                    "-config",
-                    tmp_dir + "/seldon-cert-gen-ssl.conf",
-                ],
-                stdout=DEVNULL,
-            )
-            check_call(
-                [
-                    "openssl",
-                    "x509",
-                    "-req",
-                    "-sha256",
-                    "-in",
-                    tmp_dir + "/seldon-cert-gen-server.csr",
-                    "-CA",
-                    tmp_dir + "/seldon-cert-gen-ca.crt",
-                    "-CAkey",
-                    tmp_dir + "/seldon-cert-gen-ca.key",
-                    "-CAcreateserial",
-                    "-out",
-                    tmp_dir + "/seldon-cert-gen-cert.pem",
-                    "-days",
-                    "365",
-                    "-extensions",
-                    "v3_ext",
-                    "-extfile",
-                    tmp_dir + "/seldon-cert-gen-ssl.conf",
-                ],
-                stdout=DEVNULL,
-            )
+        Returns:
+            ret_certs (dict): a dictionary with the contents of cert.pem, server.key, and ca.crt.
+        """
+        # Render SSL configuration based on template file
+        # and save rendered configuration file
+        template = Template(Path(ssl_config_file).read_text())
+        template.stream(ssl_config_context).dump("/run/ssl.conf")
 
-            ret_certs = {
-                "cert": Path(tmp_dir + "/seldon-cert-gen-cert.pem").read_text(),
-                "key": Path(tmp_dir + "/seldon-cert-gen-server.key").read_text(),
-                "ca": Path(tmp_dir + "/seldon-cert-gen-ca.crt").read_text(),
-            }
+        check_call(["openssl", "genrsa", "-out", "/run/ca.key", "2048"])
+        check_call(["openssl", "genrsa", "-out", "/run/server.key", "2048"])
+        check_call(
+            [
+                "openssl",
+                "req",
+                "-x509",
+                "-new",
+                "-sha256",
+                "-nodes",
+                "-days",
+                "3650",
+                "-key",
+                "/run/ca.key",
+                "-subj",
+                "/CN=127.0.0.1",
+                "-out",
+                "/run/ca.crt",
+            ]
+        )
+        check_call(
+            [
+                "openssl",
+                "req",
+                "-new",
+                "-sha256",
+                "-key",
+                "/run/server.key",
+                "-out",
+                "/run/server.csr",
+                "-config",
+                "/run/ssl.conf",
+            ]
+        )
+        check_call(
+            [
+                "openssl",
+                "x509",
+                "-req",
+                "-sha256",
+                "-in",
+                "/run/server.csr",
+                "-CA",
+                "/run/ca.crt",
+                "-CAkey",
+                "/run/ca.key",
+                "-CAcreateserial",
+                "-out",
+                "/run/cert.pem",
+                "-days",
+                "365",
+                "-extensions",
+                "v3_ext",
+                "-extfile",
+                "/run/ssl.conf",
+            ]
+        )
 
-            # cleanup temporary files
-            check_call(["rm", "-f", tmp_dir + "/seldon-cert-gen-*"])
+        ret_certs = {
+            "cert": Path("/run/cert.pem").read_text(),
+            "key": Path("/run/server.key").read_text(),
+            "ca": Path("/run/ca.crt").read_text(),
+        }
 
         return ret_certs
+
+    def _upload_certs_to_container(
+        self, container: Container, destination_path: str, certs_store: StoredState
+    ) -> None:
+        """Upload generated certs to container.
+
+        Args:
+            container (Container): the container object to push certs to.
+            destination_path (str): path in str format where certificates will
+                be stored in the container.
+            certs_store (StoredState): an object where the certificate contents are stored.
+        """
+        try:
+            self._check_container_connection(container)
+        except ErrorWithStatus as error:
+            self.model.unit.status = error.status
+            return
+
+        self.container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
+        self.container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
+        self.container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
 
 
 if __name__ == "__main__":
