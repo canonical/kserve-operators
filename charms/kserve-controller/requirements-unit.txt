@@ -13,7 +13,7 @@ certifi==2022.12.7
     #   -r requirements.txt
     #   httpcore
     #   httpx
-charmed-kubeflow-chisme @ git+https://github.com/canonical/charmed-kubeflow-chisme@main
+charmed-kubeflow-chisme==0.0.9
     # via -r requirements.txt
 coverage==7.2.3
     # via -r requirements-unit.in
