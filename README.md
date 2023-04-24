@@ -7,12 +7,18 @@ Upstream documentation can be found at https://kserve.github.io/website/0.8/
 
 ## Usage
 
+### Supported versions
+
+* Kubernetes 1.24
+* istio-operators 1.16/stable
+* knative-operators 1.8/stable
+
 ### Pre-requisites
 
-* Microk8s <supported-version>/stable, supported-version=1.22, 1.23, 1.24
->NOTE: These instructions assume you have run `microk8s enable dns storage rbac metallb:"10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111"`
+* Kubernetes cluster
+>NOTE: If you are using Microk8s, it is assumed you have run `microk8s enable dns storage rbac metallb:"10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111"`.
 
-* `istio-pilot` and `istio-ingressgateway` charms deployed. See "Deploy dependencies" for deploy instructions.
+* `istio-pilot` and `istio-ingressgateway`. See "Deploy dependencies" for deploy instructions.
 
 ### Add a model and set variables
 
@@ -24,18 +30,30 @@ juju add-model ${MODEL_NAME}
 
 ### Deploy dependencies
 
-KServe requires istio to be deployed in the cluster. To correctly configure them, you can:
+kserve-operators require istio-operators to be deployed in the cluster. To correctly configure them, you can:
 
 ```
-ISTIO_CHANNEL=1.11/stable
+ISTIO_CHANNEL=1.16/stable
 juju deploy istio-pilot --config default-gateway=${DEFAULT_GATEWAY} --channel ${ISTIO_CHANNEL} --trust
 juju deploy istio-gateway istio-ingressgateway --config kind="ingress" --channel ${ISTIO_CHANNEL} --trust
 juju relate istio-pilot istio-ingressgateway
 ```
 
+#### Only for Serverless mode
+
+For serverless operations kserve-operators depends on knative-serving. To correctly configure it, you can:
+
+> NOTE: these instructions assume you have deployed Microk8s and MetalLB is enabled. If your cloud configuration is different than this, please refer to [knative-operators](https://github.com/canonical/knative-operators#usage) documentation.
+
+```
+KNATIVE_CHANNEL=1.8/stable
+juju deploy knative-operator --channel ${KNATIVE_CHANNEL} --trust
+juju deploy knative-serving --config namespace="knative-serving" --config istio.gateway.namespace=${MODEL_NAME} --config istio.gateway.name=${DEFAULT_GATEWAY} --channel ${KNATIVE_CHANNEL} --trust
+```
+
 ### Deploy in `RawDeployment` mode
 
-KServe supports `RawDeployment` mode to enable `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
+kserve-operators support `RawDeployment` mode to manage `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
 
 1. Deploy `kserver-controller`
 
@@ -43,13 +61,37 @@ KServe supports `RawDeployment` mode to enable `InferenceService`, which removes
 juju deploy kserve-controller --channel <channel> --trust
 ```
 
+2. Relate `kserve-controller` and `istio-pilot`
+
+```
+juju relate istio-pilot:gateway-info kserve-controller:ingress-gateway
+```
+
 > `channel` is the available channels of the Charmed KServe:
-* latest/stable
-* 0.8/stable
+* latest/edge
+* 0.10/stable
 
 ### Deploy in `Serverless` mode
 
-TODO
+kserve-operatos support `Serveless` mode to manage event driven `InferenceService`s, which enables autoscaling on demand, and supports scaling down to zero.
+
+1. Deploy `kserver-controller`
+
+```
+juju deploy kserve-controller --channel <channel> --config deployment-mode="serverless" --trust
+```
+
+2. Relate `kserve-controller` and `istio-pilot`
+
+```
+juju relate istio-pilot:gateway-info kserve-controller:ingress-gateway
+```
+
+3. Relate `kserve-controller` and `knative-serving`
+
+```
+juju relate kserve-controller:local-gateway knative-serving:local-gateway
+```
 
 ## Deploy a simple `InferenceService`
 
@@ -57,16 +99,18 @@ To deploy a simple example of an `InferenceServer`, you can use the one provided
 
 > NOTE: this example is based on [First InferenceService](https://kserve.github.io/website/0.9/get_started/first_isvc/#2-create-an-inferenceservice)
 
-1. Create an `InferenceService`
+1. Create an `InferenceService` in a testing namespace
 
 ```
-kubectl apply -f sklearn-iris.yaml
+USER_NS="kserve-testing"
+kubectl create ns ${USER_NS}
+kubectl apply -f sklearn-iris.yaml -n${USER_NS}
 ```
 
 2. Check the `InferenceService` status
 
 ```
-kubectl get inferenceservices sklearn-iris
+kubectl get inferenceservices sklearn-iris -n${USER_NS}
 ```
 
 3. Determine the URL for performing inference
@@ -76,17 +120,16 @@ kubectl get inferenceservices sklearn-iris
 > NOTE: this method can only be used for performing inference within the cluster.
 
 ```
-SERVICE_IP=$(kubectl get svc sklearn-iris-predictor-default -ojsonpath='{.spec.clusterIP}')
+SERVICE_IP=$(kubectl get svc sklearn-iris-predictor-default -n${USER_NS} -ojsonpath='{.spec.clusterIP}')
 INFERENCE_URL="${SERVICE_IP}/v1/models/sklearn-iris:predict"
 ```
 
-* Using Istio Ingress and LoadBalancer
-
-> NOTE: This step assumes you enabled MetalLB addon in Microk8s at the beginning of this tutorial.
+* Using the `InferenceService` URL
 
 ```
-LOADBALANCER_IP=$(kubectl get svc istio-ingressgateway-workload -n${MODEL_NAME} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-INFERENCE_URL="{LOADBALANCER_IP}/v1/models/sklearn-iris:predict"
+kubectl get inferenceservice sklearn-iris -n${USER_NS}
+# From the output, take the URL
+INFERENCE_URL="${URL}/v1/models/sklearn-iris:predict"
 ```
 
 4. Perform inference
@@ -102,6 +145,7 @@ cat <<EOF > "./iris-input.json"
   ]
 }
 EOF
+```
 
 Now call the `InferenceService`:
 
