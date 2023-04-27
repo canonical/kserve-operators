@@ -13,6 +13,7 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
+import tempfile
 from base64 import b64encode
 from pathlib import Path
 from subprocess import check_call
@@ -26,7 +27,6 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRelationMissingError,
     GatewayRequirer,
 )
-from jinja2 import Template
 from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -97,9 +97,7 @@ class KServeControllerCharm(CharmBase):
 
         # Generate self-signed certificates and store them
         self._stored.set_default(
-            **self._gen_certs(
-                ssl_config_file=SSL_CONFIG_FILE, ssl_config_context=self._ssl_config_context
-            ),
+            **self._gen_certs(),
             targets={},
         )
 
@@ -117,15 +115,6 @@ class KServeControllerCharm(CharmBase):
         }
 
     @property
-    def _ssl_config_context(self):
-        """Returns a dictionary containing the context for rendering SSL config file."""
-        ssl_config_context = {
-            "namespace": self.model.name,
-            "service_name": self.app.name,
-            "webhook_server_service": "kserve-webhook-server-service",
-        }
-        return ssl_config_context
-
     def _inference_service_context(self):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
@@ -202,7 +191,7 @@ class KServeControllerCharm(CharmBase):
                     self._rbac_proxy_container_name: {
                         "override": "replace",
                         "summary": "Kube Rbac Proxy",
-                        "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",
+                        "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",  # noqa E501
                         "startup": "enabled",
                     }
                 }
@@ -393,7 +382,7 @@ class KServeControllerCharm(CharmBase):
 
         return gateways_context
 
-    def _gen_certs(self, ssl_config_context: dict, ssl_config_file: str) -> dict:
+    def _gen_certs(self) -> dict:
         """Generate self-signed certificates.
 
         Args:
@@ -406,72 +395,88 @@ class KServeControllerCharm(CharmBase):
         """
         # Render SSL configuration based on template file
         # and save rendered configuration file
-        template = Template(Path(ssl_config_file).read_text())
-        template.stream(ssl_config_context).dump("/run/ssl.conf")
 
-        check_call(["openssl", "genrsa", "-out", "/run/ca.key", "2048"])
-        check_call(["openssl", "genrsa", "-out", "/run/server.key", "2048"])
-        check_call(
-            [
-                "openssl",
-                "req",
-                "-x509",
-                "-new",
-                "-sha256",
-                "-nodes",
-                "-days",
-                "3650",
-                "-key",
-                "/run/ca.key",
-                "-subj",
-                "/CN=127.0.0.1",
-                "-out",
-                "/run/ca.crt",
-            ]
-        )
-        check_call(
-            [
-                "openssl",
-                "req",
-                "-new",
-                "-sha256",
-                "-key",
-                "/run/server.key",
-                "-out",
-                "/run/server.csr",
-                "-config",
-                "/run/ssl.conf",
-            ]
-        )
-        check_call(
-            [
-                "openssl",
-                "x509",
-                "-req",
-                "-sha256",
-                "-in",
-                "/run/server.csr",
-                "-CA",
-                "/run/ca.crt",
-                "-CAkey",
-                "/run/ca.key",
-                "-CAcreateserial",
-                "-out",
-                "/run/cert.pem",
-                "-days",
-                "365",
-                "-extensions",
-                "v3_ext",
-                "-extfile",
-                "/run/ssl.conf",
-            ]
-        )
+        service_name = self.app.name
+        namespace = (self.model.name,)
+        webhook_service = "kserve-webhook-server-service"
 
-        ret_certs = {
-            "cert": Path("/run/cert.pem").read_text(),
-            "key": Path("/run/server.key").read_text(),
-            "ca": Path("/run/ca.crt").read_text(),
-        }
+        try:
+            ssl_conf_template = open(SSL_CONFIG_FILE)
+            ssl_conf = ssl_conf_template.read()
+        except IOError as err:
+            self.logger.warning(f"Failed to open SSL config file, error: {err}")
+            return
+
+        ssl_conf = ssl_conf.replace("{{ service_name }}", str(service_name))
+        ssl_conf = ssl_conf.replace("{{ namespace }}", str(namespace))
+        ssl_conf = ssl_conf.replace("{{ webhook_server_service }}", str(webhook_service))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            Path(tmp_dir + "/ssl.conf").write_text(ssl_conf)
+
+            check_call(["openssl", "genrsa", "-out", tmp_dir + "/ca.key", "2048"])
+            check_call(["openssl", "genrsa", "-out", tmp_dir + "/server.key", "2048"])
+            check_call(
+                [
+                    "openssl",
+                    "req",
+                    "-x509",
+                    "-new",
+                    "-sha256",
+                    "-nodes",
+                    "-days",
+                    "3650",
+                    "-key",
+                    tmp_dir + "/ca.key",
+                    "-subj",
+                    "/CN=127.0.0.1",
+                    "-out",
+                    tmp_dir + "/ca.crt",
+                ]
+            )
+            check_call(
+                [
+                    "openssl",
+                    "req",
+                    "-new",
+                    "-sha256",
+                    "-key",
+                    tmp_dir + "/server.key",
+                    "-out",
+                    tmp_dir + "/server.csr",
+                    "-config",
+                    tmp_dir + "/ssl.conf",
+                ]
+            )
+            check_call(
+                [
+                    "openssl",
+                    "x509",
+                    "-req",
+                    "-sha256",
+                    "-in",
+                    tmp_dir + "/server.csr",
+                    "-CA",
+                    tmp_dir + "/ca.crt",
+                    "-CAkey",
+                    tmp_dir + "/ca.key",
+                    "-CAcreateserial",
+                    "-out",
+                    tmp_dir + "/cert.pem",
+                    "-days",
+                    "365",
+                    "-extensions",
+                    "v3_ext",
+                    "-extfile",
+                    tmp_dir + "/ssl.conf",
+                ]
+            )
+
+            ret_certs = {
+                "cert": Path(tmp_dir + "/cert.pem").read_text(),
+                "key": Path(tmp_dir + "/server.key").read_text(),
+                "ca": Path(tmp_dir + "/ca.crt").read_text(),
+            }
 
         return ret_certs
 

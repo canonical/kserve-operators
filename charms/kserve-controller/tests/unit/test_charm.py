@@ -18,7 +18,7 @@ RBAC_PROXY_EXPECTED_LAYER = {
         "kube-rbac-proxy": {
             "override": "replace",
             "summary": "Kube Rbac Proxy",
-            "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",
+            "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",  # noqa E501
             "startup": "enabled",
         }
     }
@@ -77,6 +77,7 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
 def mocked_gen_certs(mocker):
     """Yields a mocked gen_certs."""
     yield mocker.patch("charm.KServeControllerCharm._gen_certs")
+
 
 @pytest.mark.usefixtures('mocked_gen_certs')
 def test_events(harness, mocked_resource_handler, mocker):
@@ -213,10 +214,9 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler):
         harness.charm.on.remove.emit()
     mocked_logger.warning.assert_called()
 
+
 @pytest.mark.usefixtures('mocked_gen_certs')
-def test_generate_gateways_context_raw_mode_no_relation(
-    harness, mocker, mocked_resource_handler
-):
+def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_resource_handler):
     """Assert the unit gets blocked if no relation."""
     harness.set_model_name("test-model")
     harness.begin()
@@ -309,9 +309,7 @@ def test_generate_gateways_context_serverless_missing_data(
 
 
 @pytest.mark.usefixtures('mocked_gen_certs')
-def test_generate_gateways_context_raw_mode_pass(
-    harness, mocker, mocked_resource_handler
-):
+def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resource_handler):
     """Assert the gateway context is correct."""
     harness.set_model_name("test-model")
     harness.begin()
@@ -348,9 +346,7 @@ def test_generate_gateways_context_raw_mode_pass(
 
 
 @pytest.mark.usefixtures('mocked_gen_certs')
-def test_generate_gateways_context_serverless_mode_pass(
-    harness, mocker, mocked_resource_handler
-):
+def test_generate_gateways_context_serverless_mode_pass(harness, mocker, mocked_resource_handler):
     """Assert the gateway context is correct."""
     harness.set_model_name("test-model")
     harness.begin()
@@ -396,3 +392,17 @@ def test_generate_gateways_context_serverless_mode_pass(
         "local_gateway_service_name": "knative-local-gateway",
     }
     assert actual_gateway_context == expected_gateway_context
+
+
+def test_get_certs(harness, mocker, mocked_resource_handler):
+    """Test certs generation."""
+    harness.set_model_name("test-model")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # obtain certs and verify contents
+    cert_info = harness.charm._gen_certs()
+    assert cert_info is not None
+    assert len(cert_info) == 3
+    for cert in cert_info.items():
+        assert len(str(cert[1])) != 0
