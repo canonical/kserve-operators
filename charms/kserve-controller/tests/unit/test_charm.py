@@ -73,13 +73,6 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     yield mocked_resource_handler.lightkube_client
 
 
-@pytest.fixture()
-def mocked_gen_certs(mocker):
-    """Yields a mocked gen_certs."""
-    yield mocker.patch("charm.KServeControllerCharm._gen_certs")
-
-
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_events(harness, mocked_resource_handler, mocker):
     harness.begin()
     on_install = mocker.patch("charm.KServeControllerCharm._on_install")
@@ -104,7 +97,6 @@ def test_events(harness, mocked_resource_handler, mocker):
     on_kube_rbac_proxy_ready.assert_called_once()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_install_active(harness, mocked_resource_handler):
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -114,7 +106,6 @@ def test_on_install_active(harness, mocked_resource_handler):
     assert harness.charm.model.unit.status == ActiveStatus()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger = mocker.patch("charm.log")
     harness.begin()
@@ -126,7 +117,6 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger.error.assert_called()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_kube_rbac_proxy_ready_active(harness, mocker):
     harness.begin()
 
@@ -147,7 +137,6 @@ def test_on_kube_rbac_proxy_ready_active(harness, mocker):
     assert harness.model.unit.status == ActiveStatus()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_kube_rbac_proxy_ready_exception_blocked(harness, mocker):
     harness.begin()
 
@@ -160,7 +149,6 @@ def test_on_kube_rbac_proxy_ready_exception_blocked(harness, mocker):
     mocked_logger.info.assert_not_called()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_kube_rbac_proxy_ready_exception_other(harness, mocker):
     harness.begin()
 
@@ -174,7 +162,6 @@ def test_on_kube_rbac_proxy_ready_exception_other(harness, mocker):
     mocked_logger.error.assert_not_called()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_kserve_controller_ready_active(harness, mocker):
     harness.begin()
 
@@ -188,7 +175,6 @@ def test_on_kserve_controller_ready_active(harness, mocker):
     # assert harness.get_container_pebble_plan("kserve-controller")._services != {}
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_remove_success(harness, mocker, mocked_resource_handler):
     mocked_delete_many = mocker.patch("charm.delete_many")
     harness.begin()
@@ -199,7 +185,6 @@ def test_on_remove_success(harness, mocker, mocked_resource_handler):
     assert isinstance(harness.charm.model.unit.status, MaintenanceStatus)
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_on_remove_failure(harness, mocker, mocked_resource_handler):
     harness.begin()
 
@@ -215,7 +200,6 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler):
     mocked_logger.warning.assert_called()
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_resource_handler):
     """Assert the unit gets blocked if no relation."""
     harness.set_model_name("test-model")
@@ -227,7 +211,6 @@ def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_
     )
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_generate_gateways_context_serverless_no_relation(
     harness, mocker, mocked_resource_handler
 ):
@@ -253,7 +236,6 @@ def test_generate_gateways_context_serverless_no_relation(
     )
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 @pytest.mark.parametrize(
     "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
 )
@@ -275,7 +257,6 @@ def test_generate_gateways_context_raw_mode_missing_data(
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for ingress gateway data.")
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 @pytest.mark.parametrize(
     "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
 )
@@ -308,7 +289,6 @@ def test_generate_gateways_context_serverless_missing_data(
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for local gateway data.")
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resource_handler):
     """Assert the gateway context is correct."""
     harness.set_model_name("test-model")
@@ -345,7 +325,6 @@ def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resourc
     assert actual_gateway_context == expected_gateway_context
 
 
-@pytest.mark.usefixtures('mocked_gen_certs')
 def test_generate_gateways_context_serverless_mode_pass(harness, mocker, mocked_resource_handler):
     """Assert the gateway context is correct."""
     harness.set_model_name("test-model")
@@ -400,9 +379,53 @@ def test_get_certs(harness, mocker, mocked_resource_handler):
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
+    cert_attributes = ["cert", "ca", "key"]
+
     # obtain certs and verify contents
-    cert_info = harness.charm._gen_certs()
-    assert cert_info is not None
-    assert len(cert_info) == 3
-    for cert in cert_info.items():
-        assert len(str(cert[1])) != 0
+    for attr in cert_attributes:
+        assert hasattr(harness.charm._stored, attr)
+
+
+@pytest.mark.parametrize(
+    "cert_data_dict, should_certs_refresh",
+    [
+        # Cases where we should generate a new cert
+        # No cert data, we should refresh certs
+        ({}, True),
+        # We are missing one of the required cert data fields, we should refresh certs
+        ({"ca": "x", "key": "x"}, True),
+        ({"cert": "x", "key": "x"}, True),
+        ({"cert": "x", "ca": "x"}, True),
+        # Cases where we should not generate a new cert
+        # Cert data already exists, we should not refresh certs
+        (
+            {
+                "cert": "x",
+                "ca": "x",
+                "key": "x",
+            },
+            False,
+        ),
+    ],
+)
+def test_gen_certs_if_missing(cert_data_dict, should_certs_refresh, harness: Harness, mocker):
+    """Test _gen_certs_if_missing.
+    This tests whether _gen_certs_if_missing:
+    * generates a new cert if there is no existing one
+    * does not generate a new cert if there is an existing one
+    """
+    # Arrange
+    # Mock away gen_certs so the class does not generate any certs unless we want it to
+    mocked_gen_certs = mocker.patch("charm.KServeControllerCharm._gen_certs", autospec=True)
+    harness.begin()
+    mocked_gen_certs.reset_mock()
+
+    # Set any provided cert data to _stored
+    for k, v in cert_data_dict.items():
+        setattr(harness.charm._stored, k, v)
+
+    # Act
+    harness.charm._gen_certs_if_missing()
+
+    # Assert that we have/have not called refresh_certs, as expected
+    assert mocked_gen_certs.called == should_certs_refresh

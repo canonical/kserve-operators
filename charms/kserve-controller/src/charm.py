@@ -13,10 +13,7 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
-import tempfile
 from base64 import b64encode
-from pathlib import Path
-from subprocess import check_call
 
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
@@ -39,6 +36,8 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import Layer
+
+from certs import gen_certs
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
@@ -94,12 +93,12 @@ class KServeControllerCharm(CharmBase):
         self._lightkube_field_manager = "lightkube"
         self._controller_container_name = "kserve-controller"
         self.controller_container = self.unit.get_container(self._controller_container_name)
+        self._service_name = self.app.name
+        self._namespace = self.model.name
+        self._webhook_service = "kserve-webhook-server-service"
 
         # Generate self-signed certificates and store them
-        self._stored.set_default(
-            **self._gen_certs(),
-            targets={},
-        )
+        self._gen_certs_if_missing()
 
         self._rbac_proxy_container_name = "kube-rbac-proxy"
         self.rbac_proxy_container = self.unit.get_container(self._rbac_proxy_container_name)
@@ -382,103 +381,29 @@ class KServeControllerCharm(CharmBase):
 
         return gateways_context
 
-    def _gen_certs(self) -> dict:
-        """Generate self-signed certificates.
+    def _gen_certs_if_missing(self):
+        """Generate certificates if they don't already exist in _stored."""
+        log.info("Generating certificates if missing.")
+        cert_attributes = ["cert", "ca", "key"]
+        # Generate new certs if any cert attribute is missing
+        for cert_attribute in cert_attributes:
+            try:
+                getattr(self._stored, cert_attribute)
+            except AttributeError:
+                self._gen_certs()
+                break
+        log.info("Certificates already exist.")
 
-        Args:
-            ssl_config_context (dict): a dictionary with key-value pairs
-                to render the ssl_config_file
-            ssl_config_file (str): a path to the ssl configuration template file in string format
-
-        Returns:
-            ret_certs (dict): a dictionary with the contents of cert.pem, server.key, and ca.crt.
-        """
-        # Render SSL configuration based on template file
-        # and save rendered configuration file
-
-        service_name = self.app.name
-        namespace = (self.model.name,)
-        webhook_service = "kserve-webhook-server-service"
-
-        try:
-            ssl_conf_template = open(SSL_CONFIG_FILE)
-            ssl_conf = ssl_conf_template.read()
-        except IOError as err:
-            self.logger.warning(f"Failed to open SSL config file, error: {err}")
-            return
-
-        ssl_conf = ssl_conf.replace("{{ service_name }}", str(service_name))
-        ssl_conf = ssl_conf.replace("{{ namespace }}", str(namespace))
-        ssl_conf = ssl_conf.replace("{{ webhook_server_service }}", str(webhook_service))
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            Path(tmp_dir + "/ssl.conf").write_text(ssl_conf)
-
-            check_call(["openssl", "genrsa", "-out", tmp_dir + "/ca.key", "2048"])
-            check_call(["openssl", "genrsa", "-out", tmp_dir + "/server.key", "2048"])
-            check_call(
-                [
-                    "openssl",
-                    "req",
-                    "-x509",
-                    "-new",
-                    "-sha256",
-                    "-nodes",
-                    "-days",
-                    "3650",
-                    "-key",
-                    tmp_dir + "/ca.key",
-                    "-subj",
-                    "/CN=127.0.0.1",
-                    "-out",
-                    tmp_dir + "/ca.crt",
-                ]
-            )
-            check_call(
-                [
-                    "openssl",
-                    "req",
-                    "-new",
-                    "-sha256",
-                    "-key",
-                    tmp_dir + "/server.key",
-                    "-out",
-                    tmp_dir + "/server.csr",
-                    "-config",
-                    tmp_dir + "/ssl.conf",
-                ]
-            )
-            check_call(
-                [
-                    "openssl",
-                    "x509",
-                    "-req",
-                    "-sha256",
-                    "-in",
-                    tmp_dir + "/server.csr",
-                    "-CA",
-                    tmp_dir + "/ca.crt",
-                    "-CAkey",
-                    tmp_dir + "/ca.key",
-                    "-CAcreateserial",
-                    "-out",
-                    tmp_dir + "/cert.pem",
-                    "-days",
-                    "365",
-                    "-extensions",
-                    "v3_ext",
-                    "-extfile",
-                    tmp_dir + "/ssl.conf",
-                ]
-            )
-
-            ret_certs = {
-                "cert": Path(tmp_dir + "/cert.pem").read_text(),
-                "key": Path(tmp_dir + "/server.key").read_text(),
-                "ca": Path(tmp_dir + "/ca.crt").read_text(),
-            }
-
-        return ret_certs
+    def _gen_certs(self):
+        """Refresh the certificates, overwriting them if they already existed."""
+        log.info("Generating certificates..")
+        certs = gen_certs(
+            service_name=self._service_name,
+            namespace=self._namespace,
+            webhook_service=self._webhook_service,
+        )
+        for k, v in certs.items():
+            setattr(self._stored, k, v)
 
     def _upload_certs_to_container(
         self, container: Container, destination_path: str, certs_store: StoredState
