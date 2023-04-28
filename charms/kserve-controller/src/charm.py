@@ -35,7 +35,7 @@ from ops.model import (
     MaintenanceStatus,
     WaitingStatus,
 )
-from ops.pebble import Layer
+from ops.pebble import Layer, PathError, ProtocolError
 
 from certs import gen_certs
 
@@ -422,9 +422,13 @@ class KServeControllerCharm(CharmBase):
             self.model.unit.status = error.status
             return
 
-        container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
-        container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
-        container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
+        try:
+            container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
+            container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
+            container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
+        except (ProtocolError, PathError) as e:
+            log.error(str(e))
+            self.unit.status = BlockedStatus(str(e))
 
 
 if __name__ == "__main__":
