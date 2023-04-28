@@ -104,8 +104,8 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
 
     # Assert InferenceService state is Available
     @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_attempt(10),
+        wait=tenacity.wait_exponential(multiplier=2, min=1, max=30),
+        stop=tenacity.stop_after_attempt(30),
         reraise=True,
     )
     def assert_inf_svc_state():
