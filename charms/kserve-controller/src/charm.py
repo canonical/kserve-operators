@@ -50,7 +50,7 @@ K8S_RESOURCE_FILES = [
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
-CONTAINER_CERTS_DEST = "/tmp/webhook-server/serving-certs/"
+CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
 
 
