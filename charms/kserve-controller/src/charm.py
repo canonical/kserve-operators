@@ -422,9 +422,9 @@ class KServeControllerCharm(CharmBase):
             self.model.unit.status = error.status
             return
 
-        self.container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
-        self.container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
-        self.container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
+        container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
+        container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
+        container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
 
 
 if __name__ == "__main__":
