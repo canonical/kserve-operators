@@ -391,7 +391,7 @@ class KServeControllerCharm(CharmBase):
                 getattr(self._stored, cert_attribute)
             except AttributeError:
                 self._gen_certs()
-                break
+                return
         log.info("Certificates already exist.")
 
     def _gen_certs(self):
