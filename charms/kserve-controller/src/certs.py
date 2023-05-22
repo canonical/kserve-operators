@@ -1,11 +1,12 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# Learn more about testing at: https://juju.is/docs/sdk/testing
+
 
 import tempfile
 from pathlib import Path
 from subprocess import check_call
+from jinja2 import Template
+
 
 SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
 
@@ -13,10 +14,12 @@ SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
 def gen_certs(service_name: str, namespace: str, webhook_service: str):
     """Generate certificates."""
 
-    ssl_conf = Path(SSL_CONFIG_FILE).read_text()
-    ssl_conf = ssl_conf.replace("{{ service_name }}", str(service_name))
-    ssl_conf = ssl_conf.replace("{{ namespace }}", str(namespace))
-    ssl_conf = ssl_conf.replace("{{ webhook_server_service }}", str(webhook_service))
+    template = Template(Path(SSL_CONFIG_FILE).read_text())
+    ssl_conf = template.render(
+        service_name=str(service_name),
+        namespace=str(namespace),
+        webhook_server_service=str(webhook_service),
+    )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
