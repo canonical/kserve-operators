@@ -44,14 +44,13 @@ from certs import gen_certs
 log = logging.getLogger(__name__)
 
 CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
+CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
-CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
-SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
 
 
 class KServeControllerCharm(CharmBase):
@@ -93,9 +92,9 @@ class KServeControllerCharm(CharmBase):
         self._lightkube_field_manager = "lightkube"
         self._controller_container_name = "kserve-controller"
         self.controller_container = self.unit.get_container(self._controller_container_name)
-        self._service_name = self.app.name
+        self._controller_service_name = self.app.name
         self._namespace = self.model.name
-        self._webhook_service = "kserve-webhook-server-service"
+        self._webhook_service_name = "kserve-webhook-server-service"
 
         # Generate self-signed certificates and store them
         self._gen_certs_if_missing()
@@ -381,7 +380,7 @@ class KServeControllerCharm(CharmBase):
 
         return gateways_context
 
-    def _gen_certs_if_missing(self):
+    def _gen_certs_if_missing(self) -> None:
         """Generate certificates if they don't already exist in _stored."""
         log.info("Generating certificates if missing.")
         cert_attributes = ["cert", "ca", "key"]
@@ -389,18 +388,18 @@ class KServeControllerCharm(CharmBase):
         for cert_attribute in cert_attributes:
             try:
                 getattr(self._stored, cert_attribute)
+                log.info(f"Certificate {cert_attribute} already exists, skipping generation.")
             except AttributeError:
                 self._gen_certs()
                 return
-        log.info("Certificates already exist.")
 
     def _gen_certs(self):
-        """Refresh the certificates, overwriting them if they already existed."""
+        """Refresh the certificates, overwriting all attributes if any attribute is missing."""
         log.info("Generating certificates..")
         certs = gen_certs(
-            service_name=self._service_name,
+            service_name=self._controller_service_name,
             namespace=self._namespace,
-            webhook_service=self._webhook_service,
+            webhook_service=self._webhook_service_name,
         )
         for k, v in certs.items():
             setattr(self._stored, k, v)
