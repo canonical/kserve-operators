@@ -202,7 +202,6 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler):
 
 def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_resource_handler):
     """Assert the unit gets blocked if no relation."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
@@ -215,7 +214,6 @@ def test_generate_gateways_context_serverless_no_relation(
     harness, mocker, mocked_resource_handler
 ):
     """Assert the unit gets blocked if no relation."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
@@ -243,7 +241,6 @@ def test_generate_gateways_context_raw_mode_missing_data(
     remote_data, harness, mocker, mocked_resource_handler
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
@@ -264,7 +261,6 @@ def test_generate_gateways_context_serverless_missing_data(
     remote_data, harness, mocker, mocked_resource_handler
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
@@ -291,7 +287,6 @@ def test_generate_gateways_context_serverless_missing_data(
 
 def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resource_handler):
     """Assert the gateway context is correct."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
@@ -327,7 +322,6 @@ def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resourc
 
 def test_generate_gateways_context_serverless_mode_pass(harness, mocker, mocked_resource_handler):
     """Assert the gateway context is correct."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
@@ -375,7 +369,6 @@ def test_generate_gateways_context_serverless_mode_pass(harness, mocker, mocked_
 
 def test_get_certs(harness, mocker, mocked_resource_handler):
     """Test certs generation."""
-    harness.set_model_name("test-model")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
