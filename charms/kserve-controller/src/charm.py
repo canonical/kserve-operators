@@ -17,7 +17,7 @@ from base64 import b64encode
 from pathlib import Path
 from subprocess import check_call
 
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
@@ -30,7 +30,7 @@ from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import Layer
+from ops.pebble import APIError, Layer
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
@@ -265,6 +265,16 @@ class KServeControllerCharm(CharmBase):
 
     def _on_config_changed(self, event):
         self._on_install(event)
+
+        # The kserve-controller service must be restarted whenever the
+        # configuration is changed, otherwise the service will remain
+        # unaware of the changes.
+        try:
+            self.controller_container.restart(self._controller_container_name)
+        except APIError as err:
+            raise GenericCharmRuntimeError(
+                f"Failed to restart {self._controller_container_name} service"
+            ) from err
 
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
