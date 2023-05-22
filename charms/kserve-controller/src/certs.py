@@ -5,8 +5,8 @@
 import tempfile
 from pathlib import Path
 from subprocess import check_call
-from jinja2 import Template
 
+from jinja2 import Template
 
 SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
 
