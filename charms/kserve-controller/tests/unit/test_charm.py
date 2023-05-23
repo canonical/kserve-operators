@@ -3,7 +3,7 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
@@ -12,6 +12,11 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.testing import Harness
 
 from charm import KServeControllerCharm
+
+import ops.testing
+
+# enable simulation of container networking
+ops.testing.SIMULATE_CAN_CONNECT = True
 
 RBAC_PROXY_EXPECTED_LAYER = {
     "services": {
@@ -77,12 +82,6 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
 def mocked_gen_certs(mocker):
     """Yields a mocked gen_certs."""
     yield mocker.patch("charm.KServeControllerCharm.gen_certs")
-
-
-@pytest.fixture()
-def mocked_restart_controller_service(mocker):
-    """Yields a mocked gen_certs."""
-    yield mocker.patch("charm.KServeControllerCharm._restart_controller_service")
 
 
 def test_events(harness, mocked_resource_handler, mocker):
@@ -225,11 +224,12 @@ def test_generate_gateways_context_raw_mode_no_relation(
     )
 
 
+@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_serverless_no_relation(
+    _mocked_restart_controller_service,
     harness,
     mocker,
     mocked_resource_handler,
-    mocked_restart_controller_service,
 ):
     """Assert the unit gets blocked if no relation."""
     harness.set_model_name("test-model")
@@ -277,13 +277,14 @@ def test_generate_gateways_context_raw_mode_missing_data(
 @pytest.mark.parametrize(
     "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
 )
+@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_serverless_missing_data(
+    _mocked_restart_controller_service,
     remote_data,
     harness,
     mocker,
     mocked_resource_handler,
     mocked_gen_certs,
-    mocked_restart_controller_service,
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
     harness.set_model_name("test-model")
@@ -349,12 +350,13 @@ def test_generate_gateways_context_raw_mode_pass(
     assert actual_gateway_context == expected_gateway_context
 
 
+@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_serverless_mode_pass(
+    _mocked_restart_controller_service,
     harness,
     mocker,
     mocked_resource_handler,
     mocked_gen_certs,
-    mocked_restart_controller_service,
 ):
     """Assert the gateway context is correct."""
     harness.set_model_name("test-model")
@@ -401,3 +403,22 @@ def test_generate_gateways_context_serverless_mode_pass(
         "local_gateway_service_name": "knative-local-gateway",
     }
     assert actual_gateway_context == expected_gateway_context
+
+@patch("charm.KServeControllerCharm.gen_certs")
+@patch("charm.KServeControllerCharm._push_controller_certificates")
+def test_restart_controller_service(_gen_certs, _push_controller_certificates, harness, mocker):
+    """Checks the controller service is restarted correctly."""
+    harness.begin()
+
+    # Before pebble ready, the service should not be
+    # there, so no action should be taken
+    harness.charm._restart_controller_service()
+    controller_pebble_plan = harness.get_container_pebble_plan(harness.charm._controller_container_name)
+    controller_service = controller_pebble_plan.services.get(harness.charm._controller_container_name)
+    assert controller_service is None
+
+    # Simulate what happens after the pebble ready event
+    harness.container_pebble_ready(harness.charm._controller_container_name)
+    mocked_container_restart = mocker.patch.object(harness.charm.controller_container, "restart")
+    harness.charm._restart_controller_service()
+    mocked_container_restart.assert_called_once()

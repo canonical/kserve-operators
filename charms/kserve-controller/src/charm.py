@@ -29,7 +29,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError, WaitingStatus
 from ops.pebble import APIError, Layer
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
@@ -198,17 +198,7 @@ class KServeControllerCharm(CharmBase):
         """
         try:
             self.gen_certs(self.model.name, self.app.name)
-
-            self.controller_container.push(
-                "/tmp/k8s-webhook-server/serving-certs/tls.crt",
-                Path("/run/cert.pem").read_text(),
-                make_dirs=True,
-            )
-            self.controller_container.push(
-                "/tmp/k8s-webhook-server/serving-certs/tls.key",
-                Path("/run/server.key").read_text(),
-                make_dirs=True,
-            )
+            self._push_controller_certificates()
 
             update_layer(
                 self._controller_container_name,
@@ -268,7 +258,13 @@ class KServeControllerCharm(CharmBase):
 
         # The kserve-controller service must be restarted whenever the
         # configuration is changed, otherwise the service will remain
-        # unaware of the changes.
+        # unaware of such changes.
+        # Because of the above, a check for container connection must be
+        # placed before actually attempting to restart the service
+        if not self.controller_container.can_connect():
+            self.unit.status = MaintenanceStatus("Waiting for kserve-controller to be reachable")
+            event.defer()
+            return
         self._restart_controller_service()
 
     def _on_remove(self, _):
@@ -467,8 +463,28 @@ subjectAltName=@alt_names"""
             ]
         )
 
+    def _push_controller_certificates(self):
+        """Push certificates to the kserve-controller workload container."""
+        self.controller_container.push(
+            "/tmp/k8s-webhook-server/serving-certs/tls.crt",
+            Path("/run/cert.pem").read_text(),
+            make_dirs=True,
+        )
+        self.controller_container.push(
+            "/tmp/k8s-webhook-server/serving-certs/tls.key",
+            Path("/run/server.key").read_text(),
+            make_dirs=True,
+        )
+
     def _restart_controller_service(self) -> None:
         """Restart the kserve-controller service."""
+        # If the kserve-controller service is not running, do nothing
+        try:
+            self.controller_container.get_service(self._controller_container_name).is_running()
+        except ModelError:
+            log.info("Service not found, nothing to restart.")
+            return
+
         try:
             self.controller_container.restart(self._controller_container_name)
         except APIError as err:
