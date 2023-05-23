@@ -29,7 +29,13 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    MaintenanceStatus,
+    ModelError,
+    WaitingStatus,
+)
 from ops.pebble import APIError, Layer
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
