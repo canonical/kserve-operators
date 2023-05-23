@@ -79,6 +79,12 @@ def mocked_gen_certs(mocker):
     yield mocker.patch("charm.KServeControllerCharm.gen_certs")
 
 
+@pytest.fixture()
+def mocked_restart_controller_service(mocker):
+    """Yields a mocked gen_certs."""
+    yield mocker.patch("charm.KServeControllerCharm._restart_controller_service")
+
+
 def test_events(harness, mocked_resource_handler, mocker):
     harness.begin()
     on_install = mocker.patch("charm.KServeControllerCharm._on_install")
@@ -220,7 +226,10 @@ def test_generate_gateways_context_raw_mode_no_relation(
 
 
 def test_generate_gateways_context_serverless_no_relation(
-    harness, mocker, mocked_resource_handler, mocked_gen_certs
+    harness,
+    mocker,
+    mocked_resource_handler,
+    mocked_restart_controller_service,
 ):
     """Assert the unit gets blocked if no relation."""
     harness.set_model_name("test-model")
@@ -248,7 +257,7 @@ def test_generate_gateways_context_serverless_no_relation(
     "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
 )
 def test_generate_gateways_context_raw_mode_missing_data(
-    remote_data, harness, mocker, mocked_resource_handler, mocked_gen_certs
+    remote_data, harness, mocker, mocked_resource_handler
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
     harness.set_model_name("test-model")
@@ -269,7 +278,12 @@ def test_generate_gateways_context_raw_mode_missing_data(
     "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
 )
 def test_generate_gateways_context_serverless_missing_data(
-    remote_data, harness, mocker, mocked_resource_handler, mocked_gen_certs
+    remote_data,
+    harness,
+    mocker,
+    mocked_resource_handler,
+    mocked_gen_certs,
+    mocked_restart_controller_service,
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
     harness.set_model_name("test-model")
@@ -336,7 +350,11 @@ def test_generate_gateways_context_raw_mode_pass(
 
 
 def test_generate_gateways_context_serverless_mode_pass(
-    harness, mocker, mocked_resource_handler, mocked_gen_certs
+    harness,
+    mocker,
+    mocked_resource_handler,
+    mocked_gen_certs,
+    mocked_restart_controller_service,
 ):
     """Assert the gateway context is correct."""
     harness.set_model_name("test-model")

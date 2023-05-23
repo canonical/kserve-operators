@@ -269,12 +269,7 @@ class KServeControllerCharm(CharmBase):
         # The kserve-controller service must be restarted whenever the
         # configuration is changed, otherwise the service will remain
         # unaware of the changes.
-        try:
-            self.controller_container.restart(self._controller_container_name)
-        except APIError as err:
-            raise GenericCharmRuntimeError(
-                f"Failed to restart {self._controller_container_name} service"
-            ) from err
+        self._restart_controller_service()
 
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
@@ -471,6 +466,15 @@ subjectAltName=@alt_names"""
                 "/run/ssl.conf",
             ]
         )
+
+    def _restart_controller_service(self) -> None:
+        """Restart the kserve-controller service."""
+        try:
+            self.controller_container.restart(self._controller_container_name)
+        except APIError as err:
+            raise GenericCharmRuntimeError(
+                f"Failed to restart {self._controller_container_name} service"
+            ) from err
 
 
 if __name__ == "__main__":
