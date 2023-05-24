@@ -75,6 +75,14 @@ jobs:
         run: kubectl get all -A
         if: failure()
 
+      - name: Get inference servers
+        run: kubectl get inferenceservices -A
+        if: failure()
+
+      - name: Get events
+        run: kubectl get events -A
+        if: failure()
+
       - name: Describe deployments
         run: kubectl describe deployments -A
         if: failure()
