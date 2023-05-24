@@ -92,6 +92,8 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     )
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
+    inf_svc_name = inf_svc_object.metadata.name
+    rawdeployment_mode_namespace = "raw_namespace"
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -100,7 +102,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
         reraise=True,
     )
     def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=namespace)
+        lightkube_client.create(inf_svc_object, namespace=rawdeployment_mode_namespace)
 
     # Assert InferenceService state is Available
     @tenacity.retry(
@@ -110,7 +112,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     )
     def assert_inf_svc_state():
         inf_svc = lightkube_client.get(
-            inference_service_resource, "sklearn-iris", namespace=namespace
+            inference_service_resource, inf_svc_name, namespace=rawdeployment_mode_namespace
         )
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
@@ -124,7 +126,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     assert_inf_svc_state()
 
     # Remove the InferenceService deployed in RawDeployment mode
-    lightkube_client.delete(inference_service_resource, name="sklearn-iris", namespace=namespace)
+    lightkube_client.delete(inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace)
 
 
 async def test_deploy_knative_dependencies(ops_test: OpsTest):
@@ -189,6 +191,8 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     )
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
+    inf_svc_name = inf_svc_object.metadata.name
+    serverless_mode_namespace = "serverless_namespace"
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -197,7 +201,7 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
         reraise=True,
     )
     def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=namespace)
+        lightkube_client.create(inf_svc_object, namespace=serverless_mode_namespace)
 
     # Assert InferenceService state is Available
     @tenacity.retry(
@@ -207,7 +211,7 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     )
     def assert_inf_svc_state():
         inf_svc = lightkube_client.get(
-            inference_service_resource, "sklearn-iris", namespace=namespace
+            inference_service_resource, inf_svc_name, namespace=serverless_mode_namespace
         )
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
