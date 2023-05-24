@@ -94,7 +94,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     rawdeployment_mode_namespace = "raw_namespace"
 
     # Create RawDeployment namespace
-    lightkube.create(Namespace, name=rawdeployment_mode_namespace)
+    lightkube_client.create(Namespace, name=rawdeployment_mode_namespace)
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -195,7 +195,7 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     serverless_mode_namespace = "serverless_namespace"
 
     # Create Serverless namespace
-    lightkube.create(Namespace, name=serverless_mode_namespace)
+    lightkube_client.create(Namespace, name=serverless_mode_namespace)
 
     # Create InferenceService from example file
     @tenacity.retry(
