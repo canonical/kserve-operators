@@ -76,9 +76,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 def test_inference_service_raw_deployment(ops_test: OpsTest):
     """Validates that an InferenceService can be deployed."""
-    # Identify testing namespace (same as model)
-    namespace = ops_test.model_name
-
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
 
@@ -126,7 +123,9 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     assert_inf_svc_state()
 
     # Remove the InferenceService deployed in RawDeployment mode
-    lightkube_client.delete(inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace)
+    lightkube_client.delete(
+        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
+    )
 
 
 async def test_deploy_knative_dependencies(ops_test: OpsTest):
@@ -175,9 +174,6 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
 def test_inference_service_serverless_deployment(ops_test: OpsTest):
     """Validates that an InferenceService can be deployed."""
-    # Identify testing namespace (same as model)
-    namespace = ops_test.model_name
-
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
 
