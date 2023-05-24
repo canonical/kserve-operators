@@ -92,7 +92,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
-    rawdeployment_mode_namespace = "raw_namespace"
+    rawdeployment_mode_namespace = "raw-namespace"
 
     # Create RawDeployment namespace
     lightkube_client.create(Namespace(metadata=ObjectMeta(name=rawdeployment_mode_namespace)))
@@ -193,7 +193,7 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
-    serverless_mode_namespace = "serverless_namespace"
+    serverless_mode_namespace = "serverless-namespace"
 
     # Create Serverless namespace
     lightkube_client.create(Namespace(metadata=ObjectMeta(name=serverless_mode_namespace)))
