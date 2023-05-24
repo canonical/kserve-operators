@@ -265,12 +265,6 @@ class KServeControllerCharm(CharmBase):
         # The kserve-controller service must be restarted whenever the
         # configuration is changed, otherwise the service will remain
         # unaware of such changes.
-        # Because of the above, a check for container connection must be
-        # placed before actually attempting to restart the service
-        if not self.controller_container.can_connect():
-            self.unit.status = MaintenanceStatus("Waiting for kserve-controller to be reachable")
-            event.defer()
-            return
         self._restart_controller_service()
 
     def _on_remove(self, _):
@@ -483,7 +477,19 @@ subjectAltName=@alt_names"""
         )
 
     def _restart_controller_service(self) -> None:
-        """Restart the kserve-controller service."""
+        """Restart the kserve-controller service.
+
+        This helper allows restarting the kserve-controller service
+        from any state (running, not running).
+        Since this helper is not responsible for setting up the service,
+        it returns if the kserve-controller container is not reachable
+        or the kserve-controller service is not found.
+        """
+        # Check for container connection before attempting to restart the service
+        if not self.controller_container.can_connect():
+            log.info("Skipping the service restart, kserve-controller container is not reachable")
+            return
+
         # If the kserve-controller service is not running, do nothing
         try:
             self.controller_container.get_service(self._controller_container_name).is_running()

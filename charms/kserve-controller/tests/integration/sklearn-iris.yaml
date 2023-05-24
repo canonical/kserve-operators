@@ -1,7 +1,7 @@
 apiVersion: "serving.kserve.io/v1beta1"
 kind: "InferenceService"
 metadata:
-  name: "sklearn-iris"
+  generateName: "sklearn-iris-"
 spec:
   predictor:
     model:

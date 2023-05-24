@@ -123,7 +123,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     create_inf_svc()
     assert_inf_svc_state()
 
-    # Remove the old InferenceService
+    # Remove the InferenceService deployed in RawDeployment mode
     lightkube_client.delete(inference_service_resource, name="sklearn-iris", namespace=namespace)
 
 
