@@ -12,6 +12,7 @@ import lightkube.generic_resource
 import pytest
 import tenacity
 import yaml
+from lightkube.resources.core_v1 import Namespace
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,9 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
     rawdeployment_mode_namespace = "raw_namespace"
+
+    # Create RawDeployment namespace
+    lightkube.create(Namespace, name=rawdeployment_mode_namespace)
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -189,6 +193,9 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
     serverless_mode_namespace = "serverless_namespace"
+
+    # Create Serverless namespace
+    lightkube.create(Namespace, name=serverless_mode_namespace)
 
     # Create InferenceService from example file
     @tenacity.retry(
