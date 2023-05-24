@@ -12,6 +12,7 @@ import lightkube.generic_resource
 import pytest
 import tenacity
 import yaml
+from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Namespace
 from pytest_operator.plugin import OpsTest
 
@@ -94,7 +95,7 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     rawdeployment_mode_namespace = "raw_namespace"
 
     # Create RawDeployment namespace
-    lightkube_client.create(Namespace, name=rawdeployment_mode_namespace)
+    lightkube_client.create(Namespace(metadata=ObjectMeta(name=rawdeployment_mode_namespace)))
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -195,7 +196,7 @@ def test_inference_service_serverless_deployment(ops_test: OpsTest):
     serverless_mode_namespace = "serverless_namespace"
 
     # Create Serverless namespace
-    lightkube_client.create(Namespace, name=serverless_mode_namespace)
+    lightkube_client.create(Namespace(metadata=ObjectMeta(name=serverless_mode_namespace)))
 
     # Create InferenceService from example file
     @tenacity.retry(
