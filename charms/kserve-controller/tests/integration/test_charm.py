@@ -25,6 +25,13 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 
 
+@pytest.fixture()
+def cleanup_namespaces_after_execution(namespace):
+    """Removes the namespaces used for deploying inferenceservices."""
+    lightkube_client = lightkube.Client()
+    lightkube_client.delete(Namespace, name=namespace.param)
+
+
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms.
@@ -76,7 +83,8 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-def test_inference_service_raw_deployment(ops_test: OpsTest):
+@pytest.mark.parametrize("cleanup_namespaces_after_execution", ["raw-namespace"], indirect=True)
+def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, ops_test: OpsTest):
     """Validates that an InferenceService can be deployed."""
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
@@ -127,10 +135,11 @@ def test_inference_service_raw_deployment(ops_test: OpsTest):
     create_inf_svc()
     assert_inf_svc_state()
 
-    # Remove the InferenceService deployed in RawDeployment mode
-    lightkube_client.delete(
-        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
-    )
+
+#    # Remove the InferenceService deployed in RawDeployment mode
+#    lightkube_client.delete(
+#        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
+#    )
 
 
 async def test_deploy_knative_dependencies(ops_test: OpsTest):
@@ -177,7 +186,12 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     )
 
 
-def test_inference_service_serverless_deployment(ops_test: OpsTest):
+@pytest.mark.parametrize(
+    "cleanup_namespaces_after_execution", ["serverless-namespace"], indirect=True
+)
+def test_inference_service_serverless_deployment(
+    cleanup_namespaces_after_execution, ops_test: OpsTest
+):
     """Validates that an InferenceService can be deployed."""
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
