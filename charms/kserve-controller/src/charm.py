@@ -17,7 +17,7 @@ from base64 import b64encode
 from pathlib import Path
 from subprocess import check_call
 
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
@@ -29,8 +29,14 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import Layer
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    MaintenanceStatus,
+    ModelError,
+    WaitingStatus,
+)
+from ops.pebble import APIError, Layer
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
@@ -198,17 +204,7 @@ class KServeControllerCharm(CharmBase):
         """
         try:
             self.gen_certs(self.model.name, self.app.name)
-
-            self.controller_container.push(
-                "/tmp/k8s-webhook-server/serving-certs/tls.crt",
-                Path("/run/cert.pem").read_text(),
-                make_dirs=True,
-            )
-            self.controller_container.push(
-                "/tmp/k8s-webhook-server/serving-certs/tls.key",
-                Path("/run/server.key").read_text(),
-                make_dirs=True,
-            )
+            self._push_controller_certificates()
 
             update_layer(
                 self._controller_container_name,
@@ -265,6 +261,11 @@ class KServeControllerCharm(CharmBase):
 
     def _on_config_changed(self, event):
         self._on_install(event)
+
+        # The kserve-controller service must be restarted whenever the
+        # configuration is changed, otherwise the service will remain
+        # unaware of such changes.
+        self._restart_controller_service()
 
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
@@ -461,6 +462,47 @@ subjectAltName=@alt_names"""
                 "/run/ssl.conf",
             ]
         )
+
+    def _push_controller_certificates(self):
+        """Push certificates to the kserve-controller workload container."""
+        self.controller_container.push(
+            "/tmp/k8s-webhook-server/serving-certs/tls.crt",
+            Path("/run/cert.pem").read_text(),
+            make_dirs=True,
+        )
+        self.controller_container.push(
+            "/tmp/k8s-webhook-server/serving-certs/tls.key",
+            Path("/run/server.key").read_text(),
+            make_dirs=True,
+        )
+
+    def _restart_controller_service(self) -> None:
+        """Restart the kserve-controller service.
+
+        This helper allows restarting the kserve-controller service
+        from any state (running, not running).
+        Since this helper is not responsible for setting up the service,
+        it returns if the kserve-controller container is not reachable
+        or the kserve-controller service is not found.
+        """
+        # Check for container connection before attempting to restart the service
+        if not self.controller_container.can_connect():
+            log.info("Skipping the service restart, kserve-controller container is not reachable")
+            return
+
+        # If the kserve-controller service is not running, do nothing
+        try:
+            self.controller_container.get_service(self._controller_container_name).is_running()
+        except ModelError:
+            log.info("Service not found, nothing to restart.")
+            return
+
+        try:
+            self.controller_container.restart(self._controller_container_name)
+        except APIError as err:
+            raise GenericCharmRuntimeError(
+                f"Failed to restart {self._controller_container_name} service"
+            ) from err
 
 
 if __name__ == "__main__":
