@@ -443,9 +443,7 @@ def test_gen_certs_if_missing(cert_data_dict, should_certs_refresh, harness: Har
     assert mocked_gen_certs.called == should_certs_refresh
 
 
-@patch("charm.KServeControllerCharm.gen_certs")
-@patch("charm.KServeControllerCharm._push_controller_certificates")
-def test_restart_controller_service(_gen_certs, _push_controller_certificates, harness, mocker):
+def test_restart_controller_service(harness, mocker):
     """Checks the controller service is restarted correctly."""
     harness.begin()
 
@@ -465,4 +463,3 @@ def test_restart_controller_service(_gen_certs, _push_controller_certificates, h
     mocked_container_restart = mocker.patch.object(harness.charm.controller_container, "restart")
     harness.charm._restart_controller_service()
     mocked_container_restart.assert_called_once()
-
