@@ -14,8 +14,6 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 from base64 import b64encode
-from pathlib import Path
-from subprocess import check_call
 
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
@@ -28,31 +26,38 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 )
 from lightkube import ApiError
 from ops.charm import CharmBase
+from ops.framework import StoredState
 from ops.main import main
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
+    Container,
     MaintenanceStatus,
     ModelError,
     WaitingStatus,
 )
-from ops.pebble import APIError, Layer
+from ops.pebble import APIError, Layer, PathError, ProtocolError
+
+from certs import gen_certs
 
 # from lightkube_custom_resources.serving import ClusterServingRuntime_v1alpha1
 
 log = logging.getLogger(__name__)
 
+CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
+CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
-CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
 
 
 class KServeControllerCharm(CharmBase):
     """Charm the service."""
+
+    _stored = StoredState()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -88,6 +93,12 @@ class KServeControllerCharm(CharmBase):
         self._lightkube_field_manager = "lightkube"
         self._controller_container_name = "kserve-controller"
         self.controller_container = self.unit.get_container(self._controller_container_name)
+        self._controller_service_name = self.app.name
+        self._namespace = self.model.name
+        self._webhook_service_name = "kserve-webhook-server-service"
+
+        # Generate self-signed certificates and store them
+        self._gen_certs_if_missing()
 
         self._rbac_proxy_container_name = "kube-rbac-proxy"
         self.rbac_proxy_container = self.unit.get_container(self._rbac_proxy_container_name)
@@ -95,8 +106,7 @@ class KServeControllerCharm(CharmBase):
     @property
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
-        self.gen_certs(self.model.name, self.app.name)
-        ca_context = b64encode(Path("/run/ca.crt").read_text().encode("ascii"))
+        ca_context = b64encode(self._stored.ca.encode("ascii"))
         return {
             "app_name": self.app.name,
             "namespace": self.model.name,
@@ -180,7 +190,7 @@ class KServeControllerCharm(CharmBase):
                     self._rbac_proxy_container_name: {
                         "override": "replace",
                         "summary": "Kube Rbac Proxy",
-                        "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",
+                        "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",  # noqa E501
                         "startup": "enabled",
                     }
                 }
@@ -203,9 +213,11 @@ class KServeControllerCharm(CharmBase):
         Learn more about Pebble layers at https://github.com/canonical/pebble
         """
         try:
-            self.gen_certs(self.model.name, self.app.name)
-            self._push_controller_certificates()
-
+            self._upload_certs_to_container(
+                container=self.controller_container,
+                destination_path=CONTAINER_CERTS_DEST,
+                certs_store=self._stored,
+            )
             update_layer(
                 self._controller_container_name,
                 self.controller_container,
@@ -256,8 +268,7 @@ class KServeControllerCharm(CharmBase):
         except ApiError as api_err:
             log.error(api_err)
             raise
-        else:
-            self.model.unit.status = ActiveStatus()
+        self.model.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event):
         self._on_install(event)
@@ -307,6 +318,18 @@ class KServeControllerCharm(CharmBase):
         if self.model.config["deployment-mode"].lower() == "serverless":
             self.unit.status = BlockedStatus("Please relate to knative-serving:local-gateway")
         return
+
+    def _check_container_connection(self, container: Container) -> None:
+        """Check if connection can be made with container.
+
+        Args:
+            container: the named container in a unit to check.
+
+        Raises:
+            ErrorWithStatus if the connection cannot be made.
+        """
+        if not container.can_connect():
+            raise ErrorWithStatus("Pod startup is not complete", MaintenanceStatus)
 
     def _generate_gateways_context(self) -> dict:
         """Generates the ingress context based on certain rules.
@@ -363,118 +386,53 @@ class KServeControllerCharm(CharmBase):
 
         return gateways_context
 
-    def gen_certs(self, namespace, service_name):
-        """Generate certificates."""
-        if Path("/run/cert.pem").exists():
-            log.info("Found existing cert.pem, not generating new cert.")
+    def _gen_certs_if_missing(self) -> None:
+        """Generate certificates if they don't already exist in _stored."""
+        log.info("Generating certificates if missing.")
+        cert_attributes = ["cert", "ca", "key"]
+        # Generate new certs if any cert attribute is missing
+        for cert_attribute in cert_attributes:
+            try:
+                getattr(self._stored, cert_attribute)
+                log.info(f"Certificate {cert_attribute} already exists, skipping generation.")
+            except AttributeError:
+                self._gen_certs()
+                return
+
+    def _gen_certs(self):
+        """Refresh the certificates, overwriting all attributes if any attribute is missing."""
+        log.info("Generating certificates..")
+        certs = gen_certs(
+            service_name=self._controller_service_name,
+            namespace=self._namespace,
+            webhook_service=self._webhook_service_name,
+        )
+        for k, v in certs.items():
+            setattr(self._stored, k, v)
+
+    def _upload_certs_to_container(
+        self, container: Container, destination_path: str, certs_store: StoredState
+    ) -> None:
+        """Upload generated certs to container.
+
+        Args:
+            container (Container): the container object to push certs to.
+            destination_path (str): path in str format where certificates will
+                be stored in the container.
+            certs_store (StoredState): an object where the certificate contents are stored.
+        """
+        try:
+            self._check_container_connection(container)
+        except ErrorWithStatus as error:
+            self.model.unit.status = error.status
             return
 
-        Path("/run/ssl.conf").write_text(
-            f"""[ req ]
-default_bits = 2048
-prompt = no
-default_md = sha256
-req_extensions = req_ext
-distinguished_name = dn
-[ dn ]
-C = GB
-ST = Canonical
-L = Canonical
-O = Canonical
-OU = Canonical
-CN = 127.0.0.1
-[ req_ext ]
-subjectAltName = @alt_names
-[ alt_names ]
-DNS.1 = {service_name}
-DNS.2 = {service_name}.{namespace}
-DNS.3 = {service_name}.{namespace}.svc
-DNS.4 = {service_name}.{namespace}.svc.cluster
-DNS.5 = {service_name}.{namespace}.svc.cluster.local
-DNS.6 = kserve-webhook-server-service
-DNS.7 = kserve-webhook-server-service.{namespace}
-DNS.8 = kserve-webhook-server-service.{namespace}.svc
-DNS.9 = kserve-webhook-server-service.{namespace}.svc.cluster
-DNS.10 = kserve-webhook-server-service.{namespace}.svc.cluster.local
-IP.1 = 127.0.0.1
-[ v3_ext ]
-authorityKeyIdentifier=keyid,issuer:always
-basicConstraints=CA:FALSE
-keyUsage=keyEncipherment,dataEncipherment,digitalSignature
-extendedKeyUsage=serverAuth,clientAuth
-subjectAltName=@alt_names"""
-        )
-
-        check_call(["openssl", "genrsa", "-out", "/run/ca.key", "2048"])
-        check_call(["openssl", "genrsa", "-out", "/run/server.key", "2048"])
-        check_call(
-            [
-                "openssl",
-                "req",
-                "-x509",
-                "-new",
-                "-sha256",
-                "-nodes",
-                "-days",
-                "3650",
-                "-key",
-                "/run/ca.key",
-                "-subj",
-                "/CN=127.0.0.1",
-                "-out",
-                "/run/ca.crt",
-            ]
-        )
-        check_call(
-            [
-                "openssl",
-                "req",
-                "-new",
-                "-sha256",
-                "-key",
-                "/run/server.key",
-                "-out",
-                "/run/server.csr",
-                "-config",
-                "/run/ssl.conf",
-            ]
-        )
-        check_call(
-            [
-                "openssl",
-                "x509",
-                "-req",
-                "-sha256",
-                "-in",
-                "/run/server.csr",
-                "-CA",
-                "/run/ca.crt",
-                "-CAkey",
-                "/run/ca.key",
-                "-CAcreateserial",
-                "-out",
-                "/run/cert.pem",
-                "-days",
-                "365",
-                "-extensions",
-                "v3_ext",
-                "-extfile",
-                "/run/ssl.conf",
-            ]
-        )
-
-    def _push_controller_certificates(self):
-        """Push certificates to the kserve-controller workload container."""
-        self.controller_container.push(
-            "/tmp/k8s-webhook-server/serving-certs/tls.crt",
-            Path("/run/cert.pem").read_text(),
-            make_dirs=True,
-        )
-        self.controller_container.push(
-            "/tmp/k8s-webhook-server/serving-certs/tls.key",
-            Path("/run/server.key").read_text(),
-            make_dirs=True,
-        )
+        try:
+            container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
+            container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
+            container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
+        except (ProtocolError, PathError) as e:
+            raise GenericCharmRuntimeError("Failed to push certs to container") from e
 
     def _restart_controller_service(self) -> None:
         """Restart the kserve-controller service.
