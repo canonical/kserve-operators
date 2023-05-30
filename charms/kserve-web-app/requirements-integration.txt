@@ -229,7 +229,7 @@ typing-extensions==4.5.0
     # via typing-inspect
 typing-inspect==0.8.0
     # via juju
-urllib3[socks]==1.26.13
+urllib3[socks]==1.26.16
     # via
     #   kubernetes
     #   requests
