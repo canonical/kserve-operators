@@ -69,7 +69,7 @@ httpcore==0.17.0
     # via
     #   -r requirements.txt
     #   httpx
-httpx==0.24.0
+httpx==0.24.1
     # via
     #   -r requirements.txt
     #   lightkube
