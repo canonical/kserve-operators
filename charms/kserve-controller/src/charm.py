@@ -432,21 +432,7 @@ class KServeControllerCharm(CharmBase):
             container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
             container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
         except (ProtocolError, PathError) as e:
-            log.error(str(e))
-            self.unit.status = BlockedStatus(str(e))
-
-    def _push_controller_certificates(self):
-        """Push certificates to the kserve-controller workload container."""
-        self.controller_container.push(
-            "/tmp/k8s-webhook-server/serving-certs/tls.crt",
-            Path("/run/cert.pem").read_text(),
-            make_dirs=True,
-        )
-        self.controller_container.push(
-            "/tmp/k8s-webhook-server/serving-certs/tls.key",
-            Path("/run/server.key").read_text(),
-            make_dirs=True,
-        )
+            raise GenericCharmRuntimeError("Failed to push certs to container") from e
 
     def _restart_controller_service(self) -> None:
         """Restart the kserve-controller service.
