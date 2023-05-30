@@ -65,7 +65,7 @@ h11==0.14.0
     # via
     #   -r requirements.txt
     #   httpcore
-httpcore==0.17.0
+httpcore==0.17.2
     # via
     #   -r requirements.txt
     #   httpx
