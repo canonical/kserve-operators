@@ -4,7 +4,7 @@
 #
 #    pip-compile --resolver=backtracking requirements.in
 #
-ops==2.2.0
+ops==2.3.0
     # via -r requirements.in
 pyyaml==6.0
     # via ops

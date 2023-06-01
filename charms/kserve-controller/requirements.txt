@@ -38,7 +38,7 @@ lightkube-models==1.27.1.4
     #   lightkube
 markupsafe==2.1.2
     # via jinja2
-ops==2.2.0
+ops==2.3.0
     # via
     #   -r requirements.in
     #   charmed-kubeflow-chisme
@@ -48,7 +48,7 @@ pyyaml==6.0
     # via
     #   lightkube
     #   ops
-ruamel-yaml==0.17.29
+ruamel-yaml==0.17.31
     # via charmed-kubeflow-chisme
 ruamel-yaml-clib==0.2.7
     # via ruamel-yaml

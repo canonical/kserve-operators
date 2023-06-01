@@ -61,7 +61,7 @@ markupsafe==2.1.2
     # via
     #   -r requirements.txt
     #   jinja2
-ops==2.2.0
+ops==2.3.0
     # via
     #   -r requirements.txt
     #   charmed-kubeflow-chisme
@@ -84,7 +84,7 @@ pyyaml==6.0
     #   -r requirements.txt
     #   lightkube
     #   ops
-ruamel-yaml==0.17.29
+ruamel-yaml==0.17.31
     # via
     #   -r requirements.txt
     #   charmed-kubeflow-chisme

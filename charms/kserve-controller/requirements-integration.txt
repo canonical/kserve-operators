@@ -131,7 +131,7 @@ mypy-extensions==1.0.0
     # via typing-inspect
 oauthlib==3.2.2
     # via requests-oauthlib
-ops==2.2.0
+ops==2.3.0
     # via
     #   -r requirements.txt
     #   charmed-kubeflow-chisme
@@ -213,7 +213,7 @@ requests-oauthlib==1.3.1
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruamel-yaml==0.17.29
+ruamel-yaml==0.17.31
     # via
     #   -r requirements.txt
     #   charmed-kubeflow-chisme
