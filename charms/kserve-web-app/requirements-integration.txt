@@ -49,7 +49,7 @@ exceptiongroup==1.1.1
     #   trio-websocket
 executing==1.2.0
     # via stack-data
-google-auth==2.17.3
+google-auth==2.19.1
     # via kubernetes
 h11==0.14.0
     # via wsproto
