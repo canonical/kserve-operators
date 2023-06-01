@@ -260,7 +260,7 @@ typing-extensions==4.6.2
     #   typing-inspect
 typing-inspect==0.9.0
     # via juju
-urllib3==1.26.16
+urllib3==2.0.2
     # via
     #   google-auth
     #   kubernetes
