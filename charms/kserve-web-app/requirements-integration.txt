@@ -220,7 +220,7 @@ trio==0.22.0
     #   trio-websocket
 trio-websocket==0.10.2
     # via selenium
-typing-extensions==4.6.2
+typing-extensions==4.6.3
     # via
     #   ipython
     #   typing-inspect
