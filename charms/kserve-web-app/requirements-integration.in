@@ -1,4 +1,4 @@
-juju
+juju<3.0
 pytest-operator
 selenium
 selenium-wire
