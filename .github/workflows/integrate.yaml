@@ -1,31 +1,28 @@
 # reusable workflow triggered by other actions
-name: Continuous Integration
+name: CI
 
 on:
   workflow_call:
     secrets:
-      charmcraft-credentials:
+      CHARMCRAFT_CREDENTIALS:
         required: true
 
 jobs:
-
   lib-check:
     name: Check libraries
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Check libs
-        uses: canonical/charming-actions/check-libraries@2.2.3
-        with:
-          credentials: "${{ secrets.charmcraft-credentials }}"
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-          
+    strategy:
+      matrix:
+        charm:
+        - kserve-controller
+        - kserve-web-app
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
+    secrets: inherit
+    with:
+        charm-path: ./charms/${{ matrix.charm }}
+
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
@@ -38,7 +35,7 @@ jobs:
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
@@ -51,7 +48,7 @@ jobs:
 
   charm-integration:
     name: Individual Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
@@ -66,15 +63,24 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.25/stable
+          channel: 1.24/stable
           # Pinned until this bug is resolved: https://bugs.launchpad.net/juju/+bug/1992833
           bootstrap-options: "--agent-version=2.9.34"
+          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: latest/candidate
       - run: tox -e ${{ matrix.charm }}-integration
 
       # On failure, capture debugging resources
       - name: Get all
         run: kubectl get all -A
+        if: failure()
+
+      - name: Get inference servers
+        run: kubectl get inferenceservices -A
+        if: failure()
+
+      - name: Get events
+        run: kubectl get events -A
         if: failure()
 
       - name: Describe deployments
