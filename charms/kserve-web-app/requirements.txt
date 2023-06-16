@@ -8,5 +8,5 @@ ops==2.3.0
     # via -r requirements.in
 pyyaml==6.0
     # via ops
-websocket-client==1.5.2
+websocket-client==1.5.3
     # via ops
