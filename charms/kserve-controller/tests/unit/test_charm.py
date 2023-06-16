@@ -121,24 +121,6 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger.error.assert_called()
 
 
-def test_on_config_active(harness, mocked_resource_handler):
-    harness.begin()
-    harness.charm._cm_resource_handler = mocked_resource_handler
-    harness.charm.on.config_changed.emit()
-    mocked_resource_handler.apply.assert_called()
-    assert harness.charm.model.unit.status == ActiveStatus()
-
-
-def test_on_config_exception(harness, mocked_resource_handler, mocker):
-    mocked_logger = mocker.patch("charm.log")
-    harness.begin()
-    mocked_resource_handler.apply.side_effect = _FakeApiError()
-    harness.charm._cm_resource_handler = mocked_resource_handler
-    with pytest.raises(ApiError):
-        harness.charm.on.install.emit()
-    mocked_logger.error.assert_called()
-
-
 def test_on_kube_rbac_proxy_ready_active(harness, mocker):
     harness.begin()
 
