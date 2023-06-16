@@ -261,6 +261,11 @@ class KServeControllerCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
+
+            # The kserve-controller service must be restarted whenever the
+            # configuration is changed, otherwise the service will remain
+            # unaware of such changes.
+            self._restart_controller_service()
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
@@ -271,12 +276,8 @@ class KServeControllerCharm(CharmBase):
         self.model.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event):
+        """Handle the config changed event."""
         self._on_install(event)
-
-        # The kserve-controller service must be restarted whenever the
-        # configuration is changed, otherwise the service will remain
-        # unaware of such changes.
-        self._restart_controller_service()
 
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
