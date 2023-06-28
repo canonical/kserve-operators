@@ -14,7 +14,6 @@ jobs:
       matrix:
         charm:
         - kserve-controller
-        - kserve-web-app
     uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
     secrets: inherit
     with:
@@ -25,9 +24,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
-        # are merged. Not running web-app lint tests as the charm is still WIP.
-        charm: [controller, web-app]
+        charm: [controller]
     steps:
     - uses: actions/checkout@v3
     - run: sudo apt update && sudo apt install tox
@@ -38,8 +35,6 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
-        # are merged. Not running web-app lint tests as the charm is still WIP.
         charm: [controller]
     steps:
     - uses: actions/checkout@v3
@@ -51,9 +46,6 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        # TODO: add web-app once changes in canonical/kserve-operators#2 and #3
-        # are merged. Not running web-app individual integration tests as
-        # the charm is still WIP.
         charm: [controller]
     steps:
       - name: Checkout code
@@ -64,10 +56,9 @@ jobs:
         with:
           provider: microk8s
           channel: 1.24/stable
-          # Pinned until this bug is resolved: https://bugs.launchpad.net/juju/+bug/1992833
-          bootstrap-options: "--agent-version=2.9.34"
+          juju-channel: 2.9/stable
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
-          charmcraft-channel: latest/candidate
+
       - run: tox -e ${{ matrix.charm }}-integration
 
       # On failure, capture debugging resources
