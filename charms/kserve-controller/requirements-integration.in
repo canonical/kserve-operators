@@ -5,4 +5,3 @@ juju<3.0
 pytest-operator
 requests
 tenacity
--r requirements.txt
