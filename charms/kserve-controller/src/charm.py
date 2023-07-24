@@ -286,7 +286,7 @@ class KServeControllerCharm(CharmBase):
                 else:
                     log.warning(f"image_name {image_name} not in image list, ignoring.")
 
-        # This are special cases for k-serve comfigmap where they need to be split into image and version
+        # This are special cases comfigmap where they need to be split into image and version
         for image_name in [
             "configmap__explainers__alibi",
             "configmap__explainers__aix",
