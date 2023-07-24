@@ -14,7 +14,9 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 from base64 import b64encode
+from typing import Dict
 
+import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
@@ -46,12 +48,58 @@ log = logging.getLogger(__name__)
 
 CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
 CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
+DEFAULT_IMAGES = {
+    "configmap__agent": "kserve/agent:v0.10.0",
+    "configmap__batcher": "kserve/agent:v0.10.0",
+    "configmap__explainers__alibi": "kserve/alibi-explainer:latest",
+    "configmap__explainers__aix": "kserve/aix-explainer:latest",
+    "configmap__explainers__art": "kserve/art-explainer:latest",
+    "configmap__logger": "kserve/agent:v0.10.0",
+    "configmap__router": "kserve/router:v0.10.0",
+    "configmap__storageInitializer": "kserve/storage-initializer:v0.10.0",
+    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.10.0",
+    "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.0.0",
+    "serving_runtimes__paddleserver": "kserve/paddleserver:v0.10.0",
+    "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.10.0",
+    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.10.0",
+    "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
+    "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.7.0",
+    "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:21.09-py3",
+    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.10.0",
+}
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
+
+
+def parse_images_config(config: str) -> Dict:
+    """
+    Parse a YAML config-defined images list.
+
+    This function takes a YAML-formatted string 'config' containing a list of images
+    and returns a dictionaryrepresenting the images.
+
+    Args:
+        config (str): YAML-formatted string representing a list of images.
+
+    Returns:
+        Dict: A list of images.
+    """
+    error_message = (
+        f"Cannot parse a config-defined images list from config '{config}' - this"
+        "config input will be ignored."
+    )
+    if not config:
+        return []
+    try:
+        images = yaml.safe_load(config)
+    except yaml.YAMLError as err:
+        log.warning(f"{error_message}  Got error: {err}, while parsing the custom_image config.")
+        return []
+    return images
 
 
 class KServeControllerCharm(CharmBase):
@@ -61,6 +109,8 @@ class KServeControllerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.custom_images = parse_images_config(self.model.config["custom_images"])
+        self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
         self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="ingress-gateway")
         self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
 
@@ -144,7 +194,7 @@ class KServeControllerCharm(CharmBase):
             self._k8s_resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
                 template_files=K8S_RESOURCE_FILES,
-                context=self._context,
+                context={**self._context, **self.images_context},
                 logger=log,
             )
         return self._k8s_resource_handler
@@ -156,7 +206,7 @@ class KServeControllerCharm(CharmBase):
             self._cm_resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
                 template_files=CONFIG_FILES,
-                context=self._inference_service_context,
+                context={**self._inference_service_context, **self.images_context},
                 logger=log,
             )
         return self._cm_resource_handler
@@ -206,6 +256,46 @@ class KServeControllerCharm(CharmBase):
     def _local_gateway_info(self):
         """Returns the local gateway info."""
         return self._local_gateway_requirer.get_relation_data()
+
+    def get_images(
+        self, default_images: Dict[str, str], custom_images: Dict[str, str]
+    ) -> Dict[str, str]:
+        """
+        Combine default images with custom images.
+
+        This function takes two dictionaries, 'default_images' and 'custom_images',
+        representing the default set of images and the custom set of images respectively.
+        It combines the custom images into the default image list, overriding any matching
+        image names from the default list with the custom ones.
+
+        Args:
+            default_images (Dict[str, str]): A dictionary containing the default image names
+                as keys and their corresponding default image URIs as values.
+            custom_images (Dict[str, str]): A dictionary containing the custom image names
+                as keys and their corresponding custom image URIs as values.
+
+        Returns:
+            Dict[str, str]: A dictionary representing the combined images, where image names
+            from the custom_images override any matching image names from the default_images.
+        """
+        images = default_images
+        for image_name, custom_image in custom_images.items():
+            if custom_image:
+                if image_name in images:
+                    images[image_name] = custom_image
+                else:
+                    log.warning(f"image_name {image_name} not in image list, ignoring.")
+
+        # This are special cases for k-serve comfigmap where they need to be split into image and version
+        for image_name in [
+            "configmap__explainers__alibi",
+            "configmap__explainers__aix",
+            "configmap__explainers__art",
+        ]:
+            images[f"{image_name}__image"], images[f"{image_name}__version"] = images[
+                image_name
+            ].split(":")
+        return images
 
     def _on_kserve_controller_ready(self, event):
         """Define and start a workload using the Pebble API.

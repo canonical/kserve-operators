@@ -6,7 +6,9 @@
 #
 ops==2.3.0
     # via -r requirements.in
-pyyaml==6.0
-    # via ops
+pyyaml==6.0.1
+    # via
+    #   -r requirements.in
+    #   ops
 websocket-client==1.5.2
     # via ops

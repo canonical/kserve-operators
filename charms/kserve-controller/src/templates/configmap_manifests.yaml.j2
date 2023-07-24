@@ -2,7 +2,7 @@ apiVersion: v1
 data:
   agent: |-
     {
-        "image" : "kserve/agent:v0.10.0",
+        "image" : "{{ configmap__agent }}",
         "memoryRequest": "100Mi",
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
@@ -10,7 +10,7 @@ data:
     }
   batcher: |-
     {
-        "image" : "kserve/agent:v0.10.0",
+        "image" : "{{ configmap__batcher }}",
         "memoryRequest": "1Gi",
         "memoryLimit": "1Gi",
         "cpuRequest": "1",
@@ -40,16 +40,16 @@ data:
   explainers: |-
     {
         "alibi": {
-            "image" : "kserve/alibi-explainer",
-            "defaultImageVersion": "latest"
+            "image" : "{{ configmap__explainers__alibi__image }}",
+            "defaultImageVersion": "{{ configmap__explainers__alibi__version }}"
         },
         "aix": {
-            "image" : "kserve/aix-explainer",
-            "defaultImageVersion": "latest"
+            "image" : "{{ configmap__explainers__aix__image }}",
+            "defaultImageVersion": "{{ configmap__explainers__aix__version }}"
         },
         "art": {
-            "image" : "kserve/art-explainer",
-            "defaultImageVersion": "latest"
+            "image" : "{{ configmap__explainers__art__image }}",
+            "defaultImageVersion": "{{ configmap__explainers__art__version }}"
         }
     }
   ingress: |-
@@ -66,7 +66,7 @@ data:
     }
   logger: |-
     {
-        "image" : "kserve/agent:v0.10.0",
+        "image" : "{{ configmap__logger }}",
         "memoryRequest": "100Mi",
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
@@ -80,7 +80,7 @@ data:
     }
   router: |-
     {
-        "image" : "kserve/router:v0.10.0",
+        "image" : "{{ configmap__router }}",
         "memoryRequest": "100Mi",
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
@@ -88,7 +88,7 @@ data:
     }
   storageInitializer: |-
     {
-        "image" : "kserve/storage-initializer:v0.10.0",
+        "image" : "{{ configmap__storageInitializer }}",
         "memoryRequest": "100Mi",
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
