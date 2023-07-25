@@ -68,7 +68,7 @@ jobs:
           bootstrap-options: "--agent-version=2.9.34"
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: latest/candidate
-      - run: tox -e ${{ matrix.charm }}-integration
+      - run: tox -e ${{ matrix.charm }}-integration -- -vv -s
 
       # On failure, capture debugging resources
       - name: Get all
