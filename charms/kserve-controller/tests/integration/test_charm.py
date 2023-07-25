@@ -296,8 +296,8 @@ async def test_configmap_changes_with_config(
         }
     )
     await ops_test.model.wait_for_idle(
-            apps=["kserve-controller"], status="active", raise_on_blocked=True, timeout=300
-        )
+        apps=["kserve-controller"], status="active", raise_on_blocked=True, timeout=300
+    )
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
