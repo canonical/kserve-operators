@@ -14,7 +14,7 @@ import tenacity
 import yaml
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import Namespace
+from lightkube.resources.core_v1 import ConfigMap, Namespace
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,31 @@ KNATIVE_VERSION = "latest/edge"
 ISTIO_INGRESS_GATEWAY = "test-gateway"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
+CONFIGMAP_NAME = "inferenceservice-config"
+EXPECTED_CONFIGMAP = {
+    "agent": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
+    "batcher": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "1Gi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "1",\n    "cpuLimit": "1"\n}',
+    "credentials": '{\n   "gcs": {\n       "gcsCredentialFileName": "gcloud-application-credentials.json"\n   },\n   "s3": {\n       "s3AccessKeyIDName": "AWS_ACCESS_KEY_ID",\n       "s3SecretAccessKeyName": "AWS_SECRET_ACCESS_KEY",\n       "s3Endpoint": "",\n       "s3UseHttps": "",\n       "s3Region": "",\n       "s3VerifySSL": "",\n       "s3UseVirtualBucket": "",\n       "s3UseAnonymousCredential": "",\n       "s3CABundle": ""\n   }\n}',
+    "deploy": '{\n  "defaultDeploymentMode": "Serverless"\n}',
+    "explainers": '{\n    "alibi": {\n        "image" : "kserve/alibi-explainer",\n        "defaultImageVersion": "latest"\n    },\n    "aix": {\n        "image" : "kserve/aix-explainer",\n        "defaultImageVersion": "latest"\n    },\n    "art": {\n        "image" : "kserve/art-explainer",\n        "defaultImageVersion": "latest"\n    }\n}',
+    "ingress": '{\n  "ingressGateway" : "kubeflow/test-gateway",\n  "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",\n  "ingressDomain"  : "example.com",\n  "ingressClassName" : "istio",\n  "localGateway" : "kubeflow/knative-local-gateway",\n  "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",\n  "urlScheme": "http"\n}',
+    "logger": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "defaultUrl": "http://default-broker"\n}',
+    "metricsAggregator": '{\n  "enableMetricAggregation": "false",\n  "enablePrometheusScraping" : "false"\n}',
+    "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
+    "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
+}
+EXPECTED_CONFIGMAP_CHANGED = {
+    "agent": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
+    "batcher": '{\n    "image" : "custom:1.0",\n    "memoryRequest": "1Gi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "1",\n    "cpuLimit": "1"\n}',
+    "credentials": '{\n   "gcs": {\n       "gcsCredentialFileName": "gcloud-application-credentials.json"\n   },\n   "s3": {\n       "s3AccessKeyIDName": "AWS_ACCESS_KEY_ID",\n       "s3SecretAccessKeyName": "AWS_SECRET_ACCESS_KEY",\n       "s3Endpoint": "",\n       "s3UseHttps": "",\n       "s3Region": "",\n       "s3VerifySSL": "",\n       "s3UseVirtualBucket": "",\n       "s3UseAnonymousCredential": "",\n       "s3CABundle": ""\n   }\n}',
+    "deploy": '{\n  "defaultDeploymentMode": "Serverless"\n}',
+    "explainers": '{\n    "alibi": {\n        "image" : "custom",\n        "defaultImageVersion": "2.1"\n    },\n    "aix": {\n        "image" : "kserve/aix-explainer",\n        "defaultImageVersion": "latest"\n    },\n    "art": {\n        "image" : "kserve/art-explainer",\n        "defaultImageVersion": "latest"\n    }\n}',
+    "ingress": '{\n  "ingressGateway" : "kubeflow/test-gateway",\n  "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",\n  "ingressDomain"  : "example.com",\n  "ingressClassName" : "istio",\n  "localGateway" : "kubeflow/knative-local-gateway",\n  "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",\n  "urlScheme": "http"\n}',
+    "logger": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "defaultUrl": "http://default-broker"\n}',
+    "metricsAggregator": '{\n  "enableMetricAggregation": "false",\n  "enablePrometheusScraping" : "false"\n}',
+    "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
+    "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
+}
 
 
 @pytest.fixture
@@ -36,6 +61,12 @@ def cleanup_namespaces_after_execution(request):
     except ApiError:
         logger.warning(f"The {request.param} namespace could not be removed.")
         pass
+
+
+@pytest.fixture(scope="session")
+def lightkube_client() -> lightkube.Client:
+    client = lightkube.Client(field_manager="kserve")
+    return client
 
 
 @pytest.mark.abort_on_fail
@@ -247,3 +278,27 @@ def test_inference_service_serverless_deployment(
 
     create_inf_svc()
     assert_inf_svc_state()
+
+
+async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
+    inferenceservice_config = lightkube_client.get(
+        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+    )
+    assert inferenceservice_config.data == EXPECTED_CONFIGMAP
+
+
+async def test_configmap_changes_with_config(
+    lightkube_client: lightkube.Client, ops_test: OpsTest
+):
+    await ops_test.model.applications["kserve-controller"].set_config(
+        {
+            "custom_images": '{"configmap__batcher": "custom:1.0", "configmap__explainers__alibi": "custom:2.1"}'  # noqa: E501
+        }
+    )
+    await ops_test.model.wait_for_idle(
+            apps=["kserve-controller"], status="active", raise_on_blocked=True, timeout=300
+        )
+    inferenceservice_config = lightkube_client.get(
+        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+    )
+    assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
