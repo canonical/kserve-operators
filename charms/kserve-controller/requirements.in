@@ -2,3 +2,4 @@ charmed-kubeflow-chisme
 lightkube
 lightkube-models
 ops
+pyyaml==6.0.1
