@@ -1,7 +1,6 @@
-aiohttp
-jinja2
 juju==2.9.44
 pytest-operator
-requests
+selenium
+selenium-wire
 tenacity
 -r requirements.txt

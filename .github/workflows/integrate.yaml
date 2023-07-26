@@ -58,9 +58,10 @@ jobs:
           channel: 1.24/stable
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: latest/candidate
-      - run: tox -e ${{ matrix.charm }}-integration
+      - run: |
+          juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=true
+          tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
 
-      # On failure, capture debugging resources
       - name: Get all
         run: kubectl get all -A
         if: failure()
