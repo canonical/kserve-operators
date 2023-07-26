@@ -2,14 +2,14 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Library for sharing Istio Gateway(s) information
+"""Library for sharing Istio Gateway(s) information.
 
 This library offers a Python API for providing and requesting information about
 Istio Gateway(s) by wrapping the `gateway-info` relation endpoints.
 The default relation name is `gateway-info` and it's recommended to use that name,
 though if changed, you must ensure to pass the correct name when instantiating the
-provider and requirer classes, as well as in metadata.yaml.
- 
+provider and requirer classes, as well as in `metadata.yaml`.
+
 ## Getting Started
 
 ### Fetching the library with charmcraft
@@ -32,9 +32,10 @@ requires:
 ### Instantiate the GatewayRequirer class in charm.py
 
 ```python
+from ops.charm import CharmBase
 from charms.istio_pilot.v0.istio_gateway_info import GatewayRequirer, GatewayRelationError
 
-Class RequirerCharm(CharmBase):
+class RequirerCharm(CharmBase):
     def __init__(self, *args):
         self.gateway = GatewayRequirer(self)
         self.framework.observe(self.on.some_event_emitted, self.some_event_function)
@@ -44,7 +45,7 @@ Class RequirerCharm(CharmBase):
         try:
             gateway_data = self.gateway_relation.get_relation_data()
         except GatewayRelationError as error:
-            raise <your preferred exception> from error
+            "your error handler goes here"
 ```
 
 ## Using the library as provider
@@ -59,8 +60,10 @@ provides:
 ### Instantiate the GatewayProvider class in charm.py
 
 ```python
+from ops.charm import CharmBase
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider, GatewayRelationError
-class ProviderCharm(self):
+
+class ProviderCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         ...
         self.gateway_provider = GatewayProvider(self)
@@ -70,7 +73,7 @@ class ProviderCharm(self):
         try:
             self.gateway_provider.send_gateway_data(charm, gateway_name, gateway_namespace)
         except GatewayRelationError as error:
-            raise <your preferred exception with a message> from error
+            "your error handler goes here"
 ```
 
 Note that GatewayProvider.send_gateway_data() sends data to all related applications, and will
@@ -102,9 +105,9 @@ metadata:
 """
 
 import logging
+
 from ops.framework import Object
-from ops.model import Model, Relation
-from ops.charm import CharmBase
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "354103422e7a43e2870e4203fbb5a649"
@@ -114,7 +117,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 # Default relation and interface names. If changed, consistency must be kept
 # across the provider and requirer.
@@ -170,7 +173,7 @@ class GatewayRequirer(Object):
             GatewayRelationMissingError: if there is no related application
             ops.model.TooManyRelatedAppsError: if there is more than one related application
         """
-        # Raise if there is no related applicaton
+        # Raise if there is no related application
         if not relation:
             raise GatewayRelationMissingError()
 
@@ -233,8 +236,10 @@ class GatewayProvider(Object):
         self.provider_charm = provider_charm
         self.relation_name = relation_name
 
-    def send_gateway_relation_data(self, gateway_name: str, gateway_namespace: str, gateway_up: bool = True) -> None:
-        """Updates the relation data bag of any related applications with data from the localGateway.
+    def send_gateway_relation_data(
+        self, gateway_name: str, gateway_namespace: str, gateway_up: bool = True
+    ) -> None:
+        """Updates the relation data bag with data from the local gateway.
 
         This method will complete successfully even if there are no related applications.
 
