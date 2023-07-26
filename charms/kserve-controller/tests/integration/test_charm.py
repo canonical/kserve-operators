@@ -285,7 +285,7 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
     Test whether the configmap is created with the expected data.
 
     Args:
-        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes resources.
+        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
     inferenceservice_config = lightkube_client.get(
@@ -301,7 +301,7 @@ async def test_configmap_changes_with_config(
     Test whether the configmap changes successfully with custom configurations.
 
     Args:
-        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes resources.
+        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
     await ops_test.model.applications["kserve-controller"].set_config(
