@@ -1,4 +1,6 @@
+charmed-kubeflow-chisme
 coverage
+lightkube
 ops
 pytest
 pytest-mock
