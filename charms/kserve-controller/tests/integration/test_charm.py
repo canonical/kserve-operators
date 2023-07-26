@@ -302,3 +302,11 @@ async def test_configmap_changes_with_config(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
     assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
+
+
+async def test_blocked_on_invalid_config(ops_test: OpsTest):
+    await ops_test.model.applications["kserve-controller"].set_config({"custom_images": "{"})
+    await ops_test.model.wait_for_idle(
+        apps=["kserve-controller"], status="blocked", raise_on_blocked=False, timeout=300
+    )
+    assert ops_test.model.applications["kserve-controller"].units[0].workload_status == "blocked"

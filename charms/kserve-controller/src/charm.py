@@ -98,7 +98,7 @@ def parse_images_config(config: str) -> Dict:
         images = yaml.safe_load(config)
     except yaml.YAMLError as err:
         log.warning(f"{error_message}  Got error: {err}, while parsing the custom_image config.")
-        return []
+        raise ErrorWithStatus(error_message, BlockedStatus)
     return images
 
 
@@ -109,8 +109,8 @@ class KServeControllerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.custom_images = parse_images_config(self.model.config["custom_images"])
-        self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
+        self.custom_images = []
+        self.images_context = {}
         self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="ingress-gateway")
         self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
 
@@ -348,6 +348,8 @@ class KServeControllerCharm(CharmBase):
 
     def _on_install(self, event):
         try:
+            self.custom_images = parse_images_config(self.model.config["custom_images"])
+            self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
@@ -369,7 +371,14 @@ class KServeControllerCharm(CharmBase):
         """Handle the config changed event."""
         self._on_install(event)
 
-    def _on_remove(self, _):
+    def _on_remove(self, event):
+        try:
+            self.custom_images = parse_images_config(self.model.config["custom_images"])
+            self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
+        except ErrorWithStatus as err:
+            self.model.unit.status = err.status
+            log.error(f"Failed to handle {event} with error: {err}")
+            return
         self.unit.status = MaintenanceStatus("Removing k8s resources")
         k8s_resources_manifests = self.k8s_resource_handler.render_manifests()
         cm_resources_manifests = self.cm_resource_handler.render_manifests()
