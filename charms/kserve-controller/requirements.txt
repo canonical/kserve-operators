@@ -44,8 +44,9 @@ ops==2.3.0
     #   charmed-kubeflow-chisme
 ordered-set==4.1.0
     # via deepdiff
-pyyaml==6.0
+pyyaml==6.0.1
     # via
+    #   -r requirements.in
     #   lightkube
     #   ops
 ruamel-yaml==0.17.31
