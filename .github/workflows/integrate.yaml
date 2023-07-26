@@ -72,12 +72,6 @@ jobs:
           juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=true
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
 
-      # On failure, capture debugging resources
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 60
-        if: failure()
-
       - name: Get all
         run: kubectl get all -A
         if: failure()
