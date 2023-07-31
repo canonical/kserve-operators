@@ -4,11 +4,11 @@
 #
 #    pip-compile requirements.in
 #
-ops==2.3.0
+ops==2.4.1
     # via -r requirements.in
 pyyaml==6.0.1
     # via
     #   -r requirements.in
     #   ops
-websocket-client==1.5.2
+websocket-client==1.6.1
     # via ops
