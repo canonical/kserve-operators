@@ -1,6 +1,0 @@
-juju==2.9.44
-pytest-operator
-selenium
-selenium-wire
-tenacity
--r requirements.txt
