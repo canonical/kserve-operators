@@ -24,12 +24,8 @@ fi
 # Convert output to JSON string format
 # { charm_paths: [...] }
 
-# Porting fix: https://github.com/canonical/kserve-operators/commit/1263f31763286dc3155f354d19de6d7f9f1472a8
-# which was done on `main` as part of https://github.com/canonical/kserve-operators/pull/141
-CHARM_PATHS_LIST=["./charms/kserve-controller"]
+CHARM_PATHS_LIST=$(echo "$CHARM_PATHS" | jq -c --slurp --raw-input 'split("\n")[:-1]')
 
-# FIXME: kserve-web-app is not ready to be built and published, the publish job for
-# that charm is expected to fail. It can be ignored until the charm is not WIP.
-echo "Found CHARM_PATHS_LIST: $CHARM_PATHS_LIST (Only publishing kserve-controller)"
+echo "Found CHARM_PATHS_LIST: $CHARM_PATHS_LIST"
 
 echo "::set-output name=CHARM_PATHS_LIST::$CHARM_PATHS_LIST"
