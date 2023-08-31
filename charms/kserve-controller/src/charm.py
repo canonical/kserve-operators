@@ -294,7 +294,7 @@ class KServeControllerCharm(CharmBase):
         ]:
             images[f"{image_name}__image"], images[f"{image_name}__version"] = images[
                 image_name
-            ].split(":")
+            ].rsplit(":", 1)
         return images
 
     def _on_kserve_controller_ready(self, event):
