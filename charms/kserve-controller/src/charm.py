@@ -12,6 +12,7 @@ develop a new k8s charm using the Operator Framework:
     https://discourse.charmhub.io/t/4208
 """
 
+import json
 import logging
 from base64 import b64encode
 from typing import Dict
@@ -48,25 +49,10 @@ log = logging.getLogger(__name__)
 
 CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
 CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
-DEFAULT_IMAGES = {
-    "configmap__agent": "kserve/agent:v0.10.0",
-    "configmap__batcher": "kserve/agent:v0.10.0",
-    "configmap__explainers__alibi": "kserve/alibi-explainer:latest",
-    "configmap__explainers__aix": "kserve/aix-explainer:latest",
-    "configmap__explainers__art": "kserve/art-explainer:latest",
-    "configmap__logger": "kserve/agent:v0.10.0",
-    "configmap__router": "kserve/router:v0.10.0",
-    "configmap__storageInitializer": "kserve/storage-initializer:v0.10.0",
-    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.10.0",
-    "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.0.0",
-    "serving_runtimes__paddleserver": "kserve/paddleserver:v0.10.0",
-    "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.10.0",
-    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.10.0",
-    "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
-    "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.7.0",
-    "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:21.09-py3",
-    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.10.0",
-}
+DEFAULT_IMAGES_FILE = "src/default-custom-images.json"
+with open(DEFAULT_IMAGES_FILE, "r") as json_file:
+    DEFAULT_IMAGES = json.load(json_file)
+
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
     "src/templates/auth_manifests.yaml.j2",
