@@ -2,6 +2,8 @@ aiohttp
 jinja2
 # Pinning to <4.0 due to compatibility with the 3.1 controller version
 juju<4.0
+lightkube
+lightkube-models
 pytest-operator
 requests
 tenacity
