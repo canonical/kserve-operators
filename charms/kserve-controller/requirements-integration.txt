@@ -46,7 +46,7 @@ frozenlist==1.4.0
     # via
     #   aiohttp
     #   aiosignal
-google-auth==2.22.0
+google-auth==2.23.0
     # via kubernetes
 hvac==1.2.1
     # via juju
@@ -163,7 +163,6 @@ rsa==4.9
 six==1.16.0
     # via
     #   asttokens
-    #   google-auth
     #   kubernetes
     #   macaroonbakery
     #   paramiko
