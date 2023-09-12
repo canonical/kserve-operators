@@ -260,4 +260,3 @@ def test_inference_service_serverless_deployment(
 
     create_inf_svc()
     assert_inf_svc_state()
-
