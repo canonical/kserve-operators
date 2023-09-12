@@ -26,8 +26,6 @@ fi
 
 CHARM_PATHS_LIST=$(echo "$CHARM_PATHS" | jq -c --slurp --raw-input 'split("\n")[:-1]')
 
-# FIXME: kserve-web-app is not ready to be built and published, the publish job for
-# that charm is expected to fail. It can be ignored until the charm is not WIP.
-echo "Found CHARM_PATHS_LIST: $CHARM_PATHS_LIST (Only publishing kserve-controller)"
+echo "Found CHARM_PATHS_LIST: $CHARM_PATHS_LIST"
 
 echo "::set-output name=CHARM_PATHS_LIST::$CHARM_PATHS_LIST"
