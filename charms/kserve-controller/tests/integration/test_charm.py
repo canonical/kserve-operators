@@ -204,7 +204,7 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         ["knative-operator", "knative-serving"],
         raise_on_blocked=False,
         status="active",
-        timeout=90 * 10,
+        timeout=60 * 20,
     )
 
     # Relate kserve-controller and knative-serving
