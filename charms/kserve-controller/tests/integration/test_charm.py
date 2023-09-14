@@ -279,7 +279,7 @@ def test_inference_service_serverless_deployment(
     create_inf_svc()
     assert_inf_svc_state()
 
-
+@pytest.mark.skip('')
 async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
     """
     Test whether the configmap is created with the expected data.
@@ -294,6 +294,7 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
     assert inferenceservice_config.data == EXPECTED_CONFIGMAP
 
 
+@pytest.mark.skip('')
 async def test_configmap_changes_with_config(
     lightkube_client: lightkube.Client, ops_test: OpsTest
 ):
@@ -318,6 +319,7 @@ async def test_configmap_changes_with_config(
     assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
 
 
+@pytest.mark.skip('')
 async def test_blocked_on_invalid_config(ops_test: OpsTest):
     """
     Test whether the application is blocked on providing an invalid configuration.

@@ -63,6 +63,23 @@ jobs:
           juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=true
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
 
+      - name: Save relevant debug artifacts
+        if: always()
+        run: |
+          mkdir ~/kfp-operators-debug-logs
+          juju debug-log --replay | tee ~/kfp-operators-debug-logs/juju-debug-log.log
+          juju status | tee ~/kfp-operators-debug-logs/juju-status.log
+          bash -c "cp ~/.local/state/charmcraft/log/* ~/kfp-operators-debug-logs/"
+          sg microk8s -c "microk8s.kubectl describe deployments -A | tee ~/kfp-operators-debug-logs/deployments.log"
+          sg microk8s -c "microk8s.kubectl describe pods -A | tee ~/kfp-operators-debug-logs/pods.log"
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: kfp-operators-debug-logs
+          path: ~/kfp-operators-debug-logs
+
       - name: Get all
         run: kubectl get all -A
         if: failure()
@@ -90,3 +107,6 @@ jobs:
       - name: Get application logs
         run: kubectl logs -n testing --tail 1000 -ljuju-app=${{ matrix.charm }}
         if: failure()
+
+
+
