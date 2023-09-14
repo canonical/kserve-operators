@@ -69,9 +69,8 @@ jobs:
           mkdir ~/kfp-operators-debug-logs
           juju debug-log --replay | tee ~/kfp-operators-debug-logs/juju-debug-log.log
           juju status | tee ~/kfp-operators-debug-logs/juju-status.log
-          bash -c "cp ~/.local/state/charmcraft/log/* ~/kfp-operators-debug-logs/"
-          sg microk8s -c "microk8s.kubectl describe deployments -A | tee ~/kfp-operators-debug-logs/deployments.log"
-          sg microk8s -c "microk8s.kubectl describe pods -A | tee ~/kfp-operators-debug-logs/pods.log"
+          microk8s.kubectl describe pods -A | tee ~/kfp-operators-debug-logs/pods.log
+          microk8s.kubectl get configmaps -A | tee ~/kfp-operators-debug-logs/cm.log
 
       - name: Upload debug artifacts
         if: always()
@@ -107,6 +106,3 @@ jobs:
       - name: Get application logs
         run: kubectl logs -n testing --tail 1000 -ljuju-app=${{ matrix.charm }}
         if: failure()
-
-
-
