@@ -166,7 +166,6 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
     create_inf_svc()
     assert_inf_svc_state()
 
-
     # Remove the InferenceService deployed in RawDeployment mode
     lightkube_client.delete(
         inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
@@ -278,6 +277,7 @@ def test_inference_service_serverless_deployment(
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
             if condition.get("status") == "False":
+                logger.info(f"{inf_svc_name} is not ready {str(condition)}")
                 status_overall = False
                 break
             status_overall = True
