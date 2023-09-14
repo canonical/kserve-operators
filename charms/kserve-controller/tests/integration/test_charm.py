@@ -314,7 +314,7 @@ def test_inference_service_serverless_deployment(
     create_inf_svc()
     assert_inf_svc_state()
 
-    # Remove the InferenceService deployed in RawDeployment mode
+    # Remove the InferenceService deployed in ServerlessDeployment mode
     lightkube_client.delete(
         inference_service_resource, name=inf_svc_name, namespace=serverless_mode_namespace
     )
