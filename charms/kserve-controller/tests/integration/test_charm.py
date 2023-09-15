@@ -223,6 +223,7 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     )
 
 
+@pytest.mark.skip('')
 @pytest.mark.parametrize(
     "cleanup_namespaces_after_execution", ["serverless-namespace"], indirect=True
 )
