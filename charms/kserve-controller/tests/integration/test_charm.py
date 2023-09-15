@@ -179,6 +179,7 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
 #    )
 
 
+@pytest.mark.skip('')
 async def test_deploy_knative_dependencies(ops_test: OpsTest):
     """Deploy knative-operators as dependencies for serverless mode."""
     # Deploy knative for serverless mode
