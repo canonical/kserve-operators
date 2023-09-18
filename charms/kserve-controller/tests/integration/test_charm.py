@@ -4,6 +4,7 @@
 
 
 import logging
+import time
 from pathlib import Path
 
 import lightkube
@@ -206,6 +207,8 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         status="active",
         timeout=60 * 20,
     )
+
+    time.sleep(120)
 
     # Relate kserve-controller and knative-serving
     await ops_test.model.add_relation("knative-serving", "kserve-controller")
