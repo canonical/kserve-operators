@@ -59,8 +59,6 @@ jobs:
           juju-channel: 3.1/stable
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: latest/candidate
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
       - run: |
           juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=true
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
@@ -80,6 +78,9 @@ jobs:
         with:
           name: kfp-operators-debug-logs
           path: ~/kfp-operators-debug-logs
+
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
 
       - name: Get all
         run: kubectl get all -A
