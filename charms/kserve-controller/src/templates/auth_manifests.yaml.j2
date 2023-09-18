@@ -37,7 +37,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   labels:
     app: {{ app_name }}
     app.kubernetes.io/name: {{ app_name }}
@@ -243,6 +242,27 @@ rules:
   - serving.kserve.io
   resources:
   - clusterservingruntimes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - serving.kserve.io
+  resources:
+  - inferencegraphs
+  - inferencegraphs/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.kserve.io
+  resources:
+  - inferencegraphs/status
   verbs:
   - get
   - patch

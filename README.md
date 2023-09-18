@@ -206,23 +206,22 @@ KServe controller comes with a set of preconfigured images that are used in Kser
 
 ```json
 {
-    "configmap__agent": "kserve/agent:v0.10.0",
-    "configmap__batcher": "kserve/agent:v0.10.0",
+    "configmap__agent": "kserve/agent:v0.11.0",
+    "configmap__batcher": "kserve/agent:v0.11.0",
     "configmap__explainers__alibi": "kserve/alibi-explainer:latest",
-    "configmap__explainers__aix": "kserve/aix-explainer:latest",
     "configmap__explainers__art": "kserve/art-explainer:latest",
-    "configmap__logger": "kserve/agent:v0.10.0",
-    "configmap__router": "kserve/router:v0.10.0",
-    "configmap__storageInitializer": "kserve/storage-initializer:v0.10.0",
-    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.10.0",
-    "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.0.0",
-    "serving_runtimes__paddleserver": "kserve/paddleserver:v0.10.0",
-    "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.10.0",
-    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.10.0",
+    "configmap__logger": "kserve/agent:v0.11.0",
+    "configmap__router": "kserve/router:v0.11.0",
+    "configmap__storageInitializer": "kserve/storage-initializer:v0.11.0",
+    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.11.0",
+    "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.3.2",
+    "serving_runtimes__paddleserver": "kserve/paddleserver:v0.11.0",
+    "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.11.0",
+    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.11.0",
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
-    "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.7.0",
-    "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:21.09-py3",
-    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.10.0",
+    "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.8.0",
+    "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
+    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.11.0",
 }
 ```
 

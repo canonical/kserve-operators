@@ -13,6 +13,7 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
+  creationTimestamp: null
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -69,6 +70,7 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  creationTimestamp: null
   name: inferencegraph.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -96,6 +98,7 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  creationTimestamp: null
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -123,6 +126,7 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  creationTimestamp: null
   name: trainedmodel.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
