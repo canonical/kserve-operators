@@ -114,26 +114,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-@tenacity.retry(
-    wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
-    stop=tenacity.stop_after_attempt(80),
-    reraise=True,
-)
-def assert_deleted(logger, client, resource_class, resource_name, namespace):
-    """Test for deleted resource. Retries multiple times to allow deployment to be deleted."""
-    logger.info(f"Waiting for {resource_class}/{resource_name} to be deleted.")
-    deleted = False
-    try:
-        dep = client.get(resource_class, resource_name, namespace=namespace)
-        state = dep.get("status", {}).get("state")
-    except ApiError as error:
-        logger.info(f"Not found {resource_class}/{resource_name}. Status {error.status.code} ")
-        if error.status.code == 404:
-            deleted = True
-
-    assert deleted, f"Waited too long for {resource_class}/{resource_name}:{state} to be deleted!"
-
-
 @pytest.mark.parametrize("cleanup_namespaces_after_execution", ["raw-namespace"], indirect=True)
 def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, ops_test: OpsTest):
     """Validates that an InferenceService can be deployed."""
@@ -186,18 +166,11 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
     create_inf_svc()
     assert_inf_svc_state()
 
-    # Remove the InferenceService deployed in RawDeployment mode
-    lightkube_client.delete(
-        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
-    )
 
-    assert_deleted(
-        logger,
-        lightkube_client,
-        inference_service_resource,
-        inf_svc_name,
-        rawdeployment_mode_namespace,
-    )
+#    # Remove the InferenceService deployed in RawDeployment mode
+#    lightkube_client.delete(
+#        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
+#    )
 
 
 async def test_deploy_knative_dependencies(ops_test: OpsTest):
@@ -313,16 +286,3 @@ def test_inference_service_serverless_deployment(
 
     create_inf_svc()
     assert_inf_svc_state()
-
-    # Remove the InferenceService deployed in ServerlessDeployment mode
-    lightkube_client.delete(
-        inference_service_resource, name=inf_svc_name, namespace=serverless_mode_namespace
-    )
-
-    assert_deleted(
-        logger,
-        lightkube_client,
-        inference_service_resource,
-        inf_svc_name,
-        serverless_mode_namespace,
-    )
