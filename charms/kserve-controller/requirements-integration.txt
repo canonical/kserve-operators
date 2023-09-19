@@ -8,9 +8,11 @@ aiohttp==3.8.5
     # via -r requirements-integration.in
 aiosignal==1.3.1
     # via aiohttp
-asttokens==2.2.1
+anyio==4.0.0
+    # via httpcore
+asttokens==2.4.0
     # via stack-data
-async-timeout==4.0.2
+async-timeout==4.0.3
     # via aiohttp
 attrs==23.1.0
     # via aiohttp
@@ -22,6 +24,8 @@ cachetools==5.3.1
     # via google-auth
 certifi==2023.7.22
     # via
+    #   httpcore
+    #   httpx
     #   kubernetes
     #   requests
 cffi==1.15.1
@@ -32,24 +36,36 @@ charset-normalizer==3.2.0
     # via
     #   aiohttp
     #   requests
-cryptography==41.0.2
+cryptography==41.0.3
     # via paramiko
 decorator==5.1.1
     # via
     #   ipdb
     #   ipython
-exceptiongroup==1.1.2
-    # via pytest
+exceptiongroup==1.1.3
+    # via
+    #   anyio
+    #   pytest
 executing==1.2.0
     # via stack-data
 frozenlist==1.4.0
     # via
     #   aiohttp
     #   aiosignal
-google-auth==2.22.0
+google-auth==2.23.0
     # via kubernetes
+h11==0.14.0
+    # via httpcore
+httpcore==0.18.0
+    # via httpx
+httpx==0.25.0
+    # via lightkube
+hvac==1.2.1
+    # via juju
 idna==3.4
     # via
+    #   anyio
+    #   httpx
     #   requests
     #   yarl
 iniconfig==2.0.0
@@ -64,18 +80,18 @@ jinja2==3.1.2
     # via
     #   -r requirements-integration.in
     #   pytest-operator
-juju==2.9.44.0
+juju==3.2.2
     # via
     #   -r requirements-integration.in
     #   pytest-operator
-jujubundlelib==0.5.7
-    # via theblues
 kubernetes==27.2.0
     # via juju
+lightkube==0.14.0
+    # via -r requirements-integration.in
+lightkube-models==1.28.1.4
+    # via lightkube
 macaroonbakery==1.3.1
-    # via
-    #   juju
-    #   theblues
+    # via juju
 markupsafe==2.1.3
     # via jinja2
 matplotlib-inline==0.1.6
@@ -100,7 +116,7 @@ pexpect==4.8.0
     # via ipython
 pickleshare==0.7.5
     # via ipython
-pluggy==1.2.0
+pluggy==1.3.0
     # via pytest
 prompt-toolkit==3.0.39
     # via ipython
@@ -119,8 +135,10 @@ pyasn1-modules==0.3.0
     # via google-auth
 pycparser==2.21
     # via cffi
-pygments==2.15.1
+pygments==2.16.1
     # via ipython
+pyhcl==0.4.5
+    # via hvac
 pymacaroons==0.13.0
     # via macaroonbakery
 pynacl==1.5.0
@@ -132,31 +150,31 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pytest==7.4.0
+pytest==7.4.2
     # via
     #   pytest-asyncio
     #   pytest-operator
 pytest-asyncio==0.21.1
     # via pytest-operator
-pytest-operator==0.28.0
+pytest-operator==0.29.0
     # via -r requirements-integration.in
 python-dateutil==2.8.2
     # via kubernetes
-pytz==2023.3
+pytz==2023.3.post1
     # via pyrfc3339
 pyyaml==6.0.1
     # via
     #   juju
-    #   jujubundlelib
     #   kubernetes
+    #   lightkube
     #   pytest-operator
 requests==2.31.0
     # via
     #   -r requirements-integration.in
+    #   hvac
     #   kubernetes
     #   macaroonbakery
     #   requests-oauthlib
-    #   theblues
 requests-oauthlib==1.3.1
     # via kubernetes
 rsa==4.9
@@ -164,18 +182,20 @@ rsa==4.9
 six==1.16.0
     # via
     #   asttokens
-    #   google-auth
     #   kubernetes
     #   macaroonbakery
     #   paramiko
     #   pymacaroons
     #   python-dateutil
+sniffio==1.3.0
+    # via
+    #   anyio
+    #   httpcore
+    #   httpx
 stack-data==0.6.2
     # via ipython
-tenacity==8.2.2
+tenacity==8.2.3
     # via -r requirements-integration.in
-theblues==0.5.2
-    # via juju
 tomli==2.0.1
     # via
     #   ipdb
@@ -199,9 +219,9 @@ urllib3==1.26.16
     #   requests
 wcwidth==0.2.6
     # via prompt-toolkit
-websocket-client==1.6.1
+websocket-client==1.6.3
     # via kubernetes
-websockets==7.0
+websockets==8.1
     # via juju
 yarl==1.9.2
     # via aiohttp
