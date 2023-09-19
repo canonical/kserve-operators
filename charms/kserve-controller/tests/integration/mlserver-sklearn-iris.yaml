@@ -11,7 +11,7 @@ spec:
       runtime: kserve-mlserver
       resources:
         limits:
-          cpu: 250m
+          cpu: 1
           memory: 500Mi
         requests:
           cpu: 100m
