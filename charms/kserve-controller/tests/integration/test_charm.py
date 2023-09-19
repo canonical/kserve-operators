@@ -50,6 +50,7 @@ EXPECTED_CONFIGMAP_CHANGED = {
     "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
 }
 
+
 @tenacity.retry(
     wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
     stop=tenacity.stop_after_attempt(80),
@@ -83,7 +84,7 @@ def cleanup_namespaces_after_execution(request):
             Namespace,
             request.param,
             request.param,
-       )
+        )
     except ApiError:
         logger.warning(f"The {request.param} namespace could not be removed.")
         pass
