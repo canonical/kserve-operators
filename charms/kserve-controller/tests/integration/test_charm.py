@@ -286,3 +286,8 @@ def test_inference_service_serverless_deployment(
 
     create_inf_svc()
     assert_inf_svc_state()
+
+    lightkube_client.delete(
+        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
+    )
+
