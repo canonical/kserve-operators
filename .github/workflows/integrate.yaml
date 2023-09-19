@@ -62,7 +62,8 @@ jobs:
       - run: |
           juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=true
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
-
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
       - name: Save relevant debug artifacts
         if: always()
         run: |
@@ -79,8 +80,6 @@ jobs:
           name: kfp-operators-debug-logs
           path: ~/kfp-operators-debug-logs
 
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
 
       - name: Get all
         run: kubectl get all -A
