@@ -50,6 +50,25 @@ EXPECTED_CONFIGMAP_CHANGED = {
     "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
 }
 
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
+    stop=tenacity.stop_after_attempt(80),
+    reraise=True,
+)
+def assert_deleted(logger, client, resource_class, resource_name, namespace):
+    """Test for deleted resource. Retries multiple times to allow deployment to be deleted."""
+    logger.info(f"Waiting for {resource_class}/{resource_name} to be deleted.")
+    deleted = False
+    try:
+        dep = client.get(resource_class, resource_name, namespace=namespace)
+        state = dep.get("status", {}).get("state")
+    except ApiError as error:
+        logger.info(f"Not found {resource_class}/{resource_name}. Status {error.status.code} ")
+        if error.status.code == 404:
+            deleted = True
+
+    assert deleted, f"Waited too long for {resource_class}/{resource_name}:{state} to be deleted!"
+
 
 @pytest.fixture
 def cleanup_namespaces_after_execution(request):
@@ -58,6 +77,13 @@ def cleanup_namespaces_after_execution(request):
     try:
         lightkube_client = lightkube.Client()
         lightkube_client.delete(Namespace, name=request.param)
+        assert_deleted(
+            logger,
+            lightkube_client,
+            Namespace,
+            request.param,
+            request.param,
+       )
     except ApiError:
         logger.warning(f"The {request.param} namespace could not be removed.")
         pass
