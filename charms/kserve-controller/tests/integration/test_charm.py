@@ -184,12 +184,23 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     # Deploy knative for serverless mode
     namespace = ops_test.model_name
 
-    # Deploy knative-operators
+    # Deploy knative-operator
     await ops_test.model.deploy(
         "knative-operator",
         channel=KNATIVE_VERSION,
         trust=True,
     )
+
+    # Wait for idle knative-operator before deploying knative-serving
+    # due to issue https://github.com/canonical/knative-operators/issues/156
+    await ops_test.model.wait_for_idle(
+        ["knative-operator"],
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+    )
+
+    # Deploy knative-serving
     await ops_test.model.deploy(
         "knative-serving",
         channel=KNATIVE_VERSION,
@@ -201,10 +212,10 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         trust=True,
     )
     await ops_test.model.wait_for_idle(
-        ["knative-operator", "knative-serving"],
+        ["knative-serving"],
         raise_on_blocked=False,
         status="active",
-        timeout=60 * 20,
+        timeout=90 * 10,
     )
 
     # Relate kserve-controller and knative-serving
