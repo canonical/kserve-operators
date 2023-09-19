@@ -216,7 +216,6 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         timeout=60 * 20,
     )
 
-
     # Relate kserve-controller and knative-serving
     await ops_test.model.add_relation("knative-serving", "kserve-controller")
 
