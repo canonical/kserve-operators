@@ -51,6 +51,26 @@ EXPECTED_CONFIGMAP_CHANGED = {
 }
 
 
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
+    stop=tenacity.stop_after_attempt(80),
+    reraise=True,
+)
+def assert_deleted(logger, client, resource_class, resource_name, namespace):
+    """Test for deleted resource. Retries multiple times to allow deployment to be deleted."""
+    logger.info(f"Waiting for {resource_class}/{resource_name} to be deleted.")
+    deleted = False
+    try:
+        dep = client.get(resource_class, resource_name, namespace=namespace)
+        state = dep.get("status", {}).get("state")
+    except ApiError as error:
+        logger.info(f"Not found {resource_class}/{resource_name}. Status {error.status.code} ")
+        if error.status.code == 404:
+            deleted = True
+
+    assert deleted, f"Waited too long for {resource_class}/{resource_name}:{state} to be deleted!"
+
+
 @pytest.fixture
 def cleanup_namespaces_after_execution(request):
     """Removes the namespaces used for deploying inferenceservices."""
@@ -58,6 +78,13 @@ def cleanup_namespaces_after_execution(request):
     try:
         lightkube_client = lightkube.Client()
         lightkube_client.delete(Namespace, name=request.param)
+        assert_deleted(
+            logger,
+            lightkube_client,
+            Namespace,
+            request.param,
+            request.param,
+        )
     except ApiError:
         logger.warning(f"The {request.param} namespace could not be removed.")
         pass
@@ -218,10 +245,23 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
 
 @pytest.mark.parametrize(
-    "cleanup_namespaces_after_execution", ["serverless-namespace"], indirect=True
+    "cleanup_namespaces_after_execution, namespace, inference_service_yaml",
+    [
+        (
+            "serverless-namespace",
+            "serverless-namespace",
+            "./tests/integration/sklearn-iris.yaml",
+        ),
+        (
+            "serverless-mlserver-runtime",
+            "serverless-mlserver-runtime",
+            "./tests/integration/mlserver-sklearn-iris.yaml",
+        ),
+    ],
+    indirect=["cleanup_namespaces_after_execution"],
 )
 def test_inference_service_serverless_deployment(
-    cleanup_namespaces_after_execution, ops_test: OpsTest
+    cleanup_namespaces_after_execution, namespace, inference_service_yaml, ops_test: OpsTest
 ):
     """Validates that an InferenceService can be deployed."""
     # Instantiate a lightkube client
@@ -235,10 +275,10 @@ def test_inference_service_serverless_deployment(
         plural="inferenceservices",
         verbs=None,
     )
-    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
+    inf_svc_yaml = yaml.safe_load(Path(inference_service_yaml).read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
-    serverless_mode_namespace = "serverless-namespace"
+    serverless_mode_namespace = namespace
 
     # Create Serverless namespace
     lightkube_client.create(Namespace(metadata=ObjectMeta(name=serverless_mode_namespace)))
@@ -254,8 +294,8 @@ def test_inference_service_serverless_deployment(
 
     # Assert InferenceService state is Available
     @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_attempt(30),
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=30),
+        stop=tenacity.stop_after_attempt(60),
         reraise=True,
     )
     def assert_inf_svc_state():
@@ -265,6 +305,7 @@ def test_inference_service_serverless_deployment(
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
             if condition.get("status") == "False":
+                logger.info(f"{inf_svc_name} is not ready {str(condition)}")
                 status_overall = False
                 break
             status_overall = True
