@@ -1,0 +1,91 @@
+agent: |-
+  {
+      "image" : "kserve/agent:v0.11.0",
+      "memoryRequest": "100Mi",
+      "memoryLimit": "1Gi",
+      "cpuRequest": "100m",
+      "cpuLimit": "1"
+  }
+batcher: |-
+  {
+      "image" : "kserve/agent:v0.11.0",
+      "memoryRequest": "1Gi",
+      "memoryLimit": "1Gi",
+      "cpuRequest": "1",
+      "cpuLimit": "1"
+  }
+credentials: |-
+  {
+     "storageSpecSecretName": "storage-config",
+     "storageSecretNameAnnotation": "serving.kserve.io/storageSecretName",
+     "gcs": {
+         "gcsCredentialFileName": "gcloud-application-credentials.json"
+     },
+     "s3": {
+         "s3AccessKeyIDName": "AWS_ACCESS_KEY_ID",
+         "s3SecretAccessKeyName": "AWS_SECRET_ACCESS_KEY",
+         "s3Endpoint": "",
+         "s3UseHttps": "",
+         "s3Region": "",
+         "s3VerifySSL": "",
+         "s3UseVirtualBucket": "",
+         "s3UseAnonymousCredential": "",
+         "s3CABundle": ""
+     }
+  }
+deploy: |-
+  {
+    "defaultDeploymentMode": "Serverless"
+  }
+explainers: |-
+  {
+      "alibi": {
+          "image" : "kserve/alibi-explainer",
+          "defaultImageVersion": "latest"
+      },
+      "art": {
+          "image" : "kserve/art-explainer",
+          "defaultImageVersion": "latest"
+      }
+  }
+ingress: |-
+  {
+    "ingressGateway" : "kubeflow/test-gateway",
+    "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",
+    "ingressDomain"  : "example.com",
+    "ingressClassName" : "istio",
+    "localGateway" : "knative-serving/knative-local-gateway",
+    "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",
+    "urlScheme": "http"
+  }
+logger: |-
+  {
+      "image" : "kserve/agent:v0.11.0",
+      "memoryRequest": "100Mi",
+      "memoryLimit": "1Gi",
+      "cpuRequest": "100m",
+      "cpuLimit": "1",
+      "defaultUrl": "http://default-broker"
+  }
+metricsAggregator: |-
+  {
+    "enableMetricAggregation": "false",
+    "enablePrometheusScraping" : "false"
+  }
+router: |-
+  {
+      "image" : "kserve/router:v0.11.0",
+      "memoryRequest": "100Mi",
+      "memoryLimit": "1Gi",
+      "cpuRequest": "100m",
+      "cpuLimit": "1"
+  }
+storageInitializer: |-
+  {
+      "image" : "kserve/storage-initializer:v0.11.0",
+      "memoryRequest": "100Mi",
+      "memoryLimit": "1Gi",
+      "cpuRequest": "100m",
+      "cpuLimit": "1",
+      "enableDirectPvcVolumeMount": false
+  }

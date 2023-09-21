@@ -18,6 +18,8 @@ data:
     }
   credentials: |-
     {
+       "storageSpecSecretName": "storage-config",
+       "storageSecretNameAnnotation": "serving.kserve.io/storageSecretName",
        "gcs": {
            "gcsCredentialFileName": "gcloud-application-credentials.json"
        },
@@ -42,10 +44,6 @@ data:
         "alibi": {
             "image" : "{{ configmap__explainers__alibi__image }}",
             "defaultImageVersion": "{{ configmap__explainers__alibi__version }}"
-        },
-        "aix": {
-            "image" : "{{ configmap__explainers__aix__image }}",
-            "defaultImageVersion": "{{ configmap__explainers__aix__version }}"
         },
         "art": {
             "image" : "{{ configmap__explainers__art__image }}",
@@ -93,7 +91,7 @@ data:
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
         "cpuLimit": "1",
-        "storageSpecSecretName": "storage-config"
+        "enableDirectPvcVolumeMount": false
     }
 kind: ConfigMap
 metadata:
