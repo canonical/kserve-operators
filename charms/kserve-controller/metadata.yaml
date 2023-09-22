@@ -6,6 +6,7 @@
 name: kserve-controller
 description: |
   KServe Controller.
+docs: https://discourse.charmhub.io/t/11939
 summary: |
   KServe Controller.
 containers:
