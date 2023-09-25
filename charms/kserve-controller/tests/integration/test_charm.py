@@ -86,7 +86,13 @@ async def test_build_and_deploy(ops_test: OpsTest):
         ],
         "kube-rbac-proxy-image": METADATA["resources"]["kube-rbac-proxy-image"]["upstream-source"],
     }
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME, trust=True)
+    await ops_test.model.deploy(
+        charm,
+        resources=resources,
+        config={"deployment-mode": "rawdeployment"},
+        application_name=APP_NAME,
+        trust=True,
+    )
     await ops_test.model.add_relation("istio-pilot", "kserve-controller")
 
     # issuing dummy update_status just to trigger an event
