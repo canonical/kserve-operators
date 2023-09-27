@@ -77,8 +77,8 @@ pytest==7.4.0
     # via
     #   -r ./charms/kserve-controller/requirements-unit.in
     #   pytest-mock
-pytest-mock==3.10.0
-    # via -r requirements-unit.in
+pytest-mock==3.11.1
+    # via -r ./charms/kserve-controller/requirements-unit.in
 pyyaml==6.0.1
     # via
     #   -r ./charms/kserve-controller/requirements.txt
