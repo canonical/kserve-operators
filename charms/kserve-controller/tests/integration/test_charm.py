@@ -14,7 +14,7 @@ import tenacity
 import yaml
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import Namespace
+from lightkube.resources.core_v1 import ConfigMap, Namespace
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,12 @@ def cleanup_namespaces_after_execution(request):
     except ApiError:
         logger.warning(f"The {request.param} namespace could not be removed.")
         pass
+
+
+@pytest.fixture(scope="session")
+def lightkube_client() -> lightkube.Client:
+    client = lightkube.Client(field_manager="kserve")
+    return client
 
 
 @pytest.mark.abort_on_fail
@@ -313,3 +319,55 @@ def test_inference_service_serverless_deployment(
 
     create_inf_svc()
     assert_inf_svc_state()
+
+
+async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
+    """
+    Test whether the configmap is created with the expected data.
+
+    Args:
+        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    inferenceservice_config = lightkube_client.get(
+        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+    )
+    assert inferenceservice_config.data == EXPECTED_CONFIGMAP
+
+
+async def test_configmap_changes_with_config(
+    lightkube_client: lightkube.Client, ops_test: OpsTest
+):
+    """
+    Test whether the configmap changes successfully with custom configurations.
+
+    Args:
+        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    await ops_test.model.applications["kserve-controller"].set_config(
+        {
+            "custom_images": '{"configmap__batcher": "custom:1.0", "configmap__explainers__alibi": "custom:2.1"}'  # noqa: E501
+        }
+    )
+    await ops_test.model.wait_for_idle(
+        apps=["kserve-controller"], status="active", raise_on_blocked=True, timeout=300
+    )
+    inferenceservice_config = lightkube_client.get(
+        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+    )
+    assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
+
+
+async def test_blocked_on_invalid_config(ops_test: OpsTest):
+    """
+    Test whether the application is blocked on providing an invalid configuration.
+
+    Args:
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    await ops_test.model.applications["kserve-controller"].set_config({"custom_images": "{"})
+    await ops_test.model.wait_for_idle(
+        apps=["kserve-controller"], status="blocked", raise_on_blocked=False, timeout=300
+    )
+    assert ops_test.model.applications["kserve-controller"].units[0].workload_status == "blocked"

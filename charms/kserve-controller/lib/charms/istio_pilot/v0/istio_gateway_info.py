@@ -170,7 +170,7 @@ class GatewayRequirer(Object):
             GatewayRelationMissingError: if there is no related application
             ops.model.TooManyRelatedAppsError: if there is more than one related application
         """
-        # Raise if there is no related applicaton
+        # Raise if there is no related application
         if not relation:
             raise GatewayRelationMissingError()
 

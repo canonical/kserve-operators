@@ -13,3 +13,27 @@ options:
     type: int
     default: 9443
     description: Listening port
+  custom_images:
+    type: string
+    default: | 
+      configmap__agent : ''
+      configmap__batcher : ''
+      configmap__explainers__alibi : ''
+      configmap__explainers__aix : ''
+      configmap__explainers__art : ''
+      configmap__logger : ''
+      configmap__router : ''
+      configmap__storageInitializer : ''
+      serving_runtimes__lgbserver : ''
+      serving_runtimes__kserve_mlserver : ''
+      serving_runtimes__paddleserver : ''
+      serving_runtimes__pmmlserver : ''
+      serving_runtimes__sklearnserver : ''
+      serving_runtimes__tensorflow_serving : ''
+      serving_runtimes__torchserve : ''
+      serving_runtimes__tritonserver : ''
+      serving_runtimes__xgbserver : ''
+    description: >
+      YAML or JSON formatted input defining images to use in Katib
+      For usage details, see https://github.com/canonical/kserve-operators.
+
