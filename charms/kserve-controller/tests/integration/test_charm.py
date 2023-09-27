@@ -31,7 +31,7 @@ EXPECTED_CONFIGMAP = {
     "credentials": '{\n   "gcs": {\n       "gcsCredentialFileName": "gcloud-application-credentials.json"\n   },\n   "s3": {\n       "s3AccessKeyIDName": "AWS_ACCESS_KEY_ID",\n       "s3SecretAccessKeyName": "AWS_SECRET_ACCESS_KEY",\n       "s3Endpoint": "",\n       "s3UseHttps": "",\n       "s3Region": "",\n       "s3VerifySSL": "",\n       "s3UseVirtualBucket": "",\n       "s3UseAnonymousCredential": "",\n       "s3CABundle": ""\n   }\n}',
     "deploy": '{\n  "defaultDeploymentMode": "Serverless"\n}',
     "explainers": '{\n    "alibi": {\n        "image" : "kserve/alibi-explainer",\n        "defaultImageVersion": "latest"\n    },\n    "aix": {\n        "image" : "kserve/aix-explainer",\n        "defaultImageVersion": "latest"\n    },\n    "art": {\n        "image" : "kserve/art-explainer",\n        "defaultImageVersion": "latest"\n    }\n}',
-    "ingress": '{\n  "ingressGateway" : "kubeflow/test-gateway",\n  "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",\n  "ingressDomain"  : "example.com",\n  "ingressClassName" : "istio",\n  "localGateway" : "kubeflow/knative-local-gateway",\n  "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",\n  "urlScheme": "http"\n}',
+    "ingress": '{\n  "ingressGateway" : "knative-serving/knative-local-gateway",\n  "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",\n  "ingressDomain"  : "example.com",\n  "ingressClassName" : "istio",\n  "localGateway" : "kubeflow/knative-local-gateway",\n  "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",\n  "urlScheme": "http"\n}',
     "logger": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "defaultUrl": "http://default-broker"\n}',
     "metricsAggregator": '{\n  "enableMetricAggregation": "false",\n  "enablePrometheusScraping" : "false"\n}',
     "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
@@ -43,12 +43,32 @@ EXPECTED_CONFIGMAP_CHANGED = {
     "credentials": '{\n   "gcs": {\n       "gcsCredentialFileName": "gcloud-application-credentials.json"\n   },\n   "s3": {\n       "s3AccessKeyIDName": "AWS_ACCESS_KEY_ID",\n       "s3SecretAccessKeyName": "AWS_SECRET_ACCESS_KEY",\n       "s3Endpoint": "",\n       "s3UseHttps": "",\n       "s3Region": "",\n       "s3VerifySSL": "",\n       "s3UseVirtualBucket": "",\n       "s3UseAnonymousCredential": "",\n       "s3CABundle": ""\n   }\n}',
     "deploy": '{\n  "defaultDeploymentMode": "Serverless"\n}',
     "explainers": '{\n    "alibi": {\n        "image" : "custom",\n        "defaultImageVersion": "2.1"\n    },\n    "aix": {\n        "image" : "kserve/aix-explainer",\n        "defaultImageVersion": "latest"\n    },\n    "art": {\n        "image" : "kserve/art-explainer",\n        "defaultImageVersion": "latest"\n    }\n}',
-    "ingress": '{\n  "ingressGateway" : "kubeflow/test-gateway",\n  "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",\n  "ingressDomain"  : "example.com",\n  "ingressClassName" : "istio",\n  "localGateway" : "kubeflow/knative-local-gateway",\n  "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",\n  "urlScheme": "http"\n}',
+    "ingress": '{\n  "ingressGateway" : "knative-serving/knative-local-gateway",\n  "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",\n  "ingressDomain"  : "example.com",\n  "ingressClassName" : "istio",\n  "localGateway" : "kubeflow/knative-local-gateway",\n  "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",\n  "urlScheme": "http"\n}',
     "logger": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "defaultUrl": "http://default-broker"\n}',
     "metricsAggregator": '{\n  "enableMetricAggregation": "false",\n  "enablePrometheusScraping" : "false"\n}',
     "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
     "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
 }
+
+
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
+    stop=tenacity.stop_after_attempt(80),
+    reraise=True,
+)
+def assert_deleted(logger, client, resource_class, resource_name, namespace):
+    """Test for deleted resource. Retries multiple times to allow deployment to be deleted."""
+    logger.info(f"Waiting for {resource_class}/{resource_name} to be deleted.")
+    deleted = False
+    try:
+        dep = client.get(resource_class, resource_name, namespace=namespace)
+        state = dep.get("status", {}).get("state")
+    except ApiError as error:
+        logger.info(f"Not found {resource_class}/{resource_name}. Status {error.status.code} ")
+        if error.status.code == 404:
+            deleted = True
+
+    assert deleted, f"Waited too long for {resource_class}/{resource_name}:{state} to be deleted!"
 
 
 @pytest.fixture
