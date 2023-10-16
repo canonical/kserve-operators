@@ -57,7 +57,8 @@ juju add-model dev
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
 # Deploy the charm
 juju deploy ./kserve-controller_ubuntu-20.04-amd64.charm \
-    --resource oci-image=$(yq '.resources."kserve-controller-image"."upstream-source"' metadata.yaml)
+    --resource kserve-controller-image=$(yq '.resources."kserve-controller-image"."upstream-source"' metadata.yaml) \
+    --resource kube-rbac-proxy-image=$(yq '.resources."kube-rbac-proxy-image"."upstream-source"' metadata.yaml)
 ```
 
 ## Canonical Contributor Agreement
