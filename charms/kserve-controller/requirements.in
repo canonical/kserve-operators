@@ -3,3 +3,4 @@ lightkube
 lightkube-models
 ops
 pyyaml==6.0.1
+serialized-data-interface
