@@ -81,6 +81,7 @@ SECRETS_FILES = [
 SERVICE_ACCOUNTS_FILES = [
     "src/service-accounts/kserve-mlflow-minio-svc-account.yaml.j2",
 ]
+NO_MINIO_RELATION_DATA = {}
 
 
 def parse_images_config(config: str) -> Dict:
@@ -452,12 +453,11 @@ class KServeControllerCharm(CharmBase):
 
     def send_object_storage_manifests(self):
         """Send object storage related manifests in case the object storage relation exists"""
-        default_return = {}
         interfaces = self._get_interfaces()
-        object_storage_data = self._get_object_storage(interfaces, default_return)
+        object_storage_data = self._get_object_storage(interfaces, NO_MINIO_RELATION_DATA)
 
-        # Relation is not present, return
-        if object_storage_data == default_return:
+        # Relation is not present
+        if object_storage_data == NO_MINIO_RELATION_DATA:
             return
 
         secrets_context = {
