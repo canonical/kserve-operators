@@ -462,7 +462,7 @@ class KServeControllerCharm(CharmBase):
 
         secrets_context = {
             "secret_name": f"{self.app.name}-s3",
-            "s3_endpoint": f"http://{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
+            "s3_endpoint": f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
             "s3_usehttps": S3_USEHTTPS,
             "s3_region": S3_REGION,
             "s3_useanoncredential": S3_USEANONCREDENTIALS,
