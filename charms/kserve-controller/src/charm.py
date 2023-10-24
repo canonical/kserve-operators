@@ -15,6 +15,7 @@ develop a new k8s charm using the Operator Framework:
 import json
 import logging
 from base64 import b64encode
+from pathlib import Path
 from typing import Dict
 
 import yaml
@@ -27,6 +28,8 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRelationMissingError,
     GatewayRequirer,
 )
+from jinja2 import Template
+from jsonschema import ValidationError
 from lightkube import ApiError
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -40,6 +43,13 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import APIError, Layer, PathError, ProtocolError
+from serialized_data_interface import (
+    NoCompatibleVersions,
+    NoVersionsListed,
+    SerializedDataInterface,
+    get_interfaces,
+)
+from serialized_data_interface.errors import RelationDataError
 
 from certs import gen_certs
 
@@ -59,6 +69,19 @@ K8S_RESOURCE_FILES = [
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
 ]
+
+# Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
+S3_USEANONCREDENTIALS = "false"
+S3_REGION = "us-east-1"
+S3_USEHTTPS = "0"
+
+SECRETS_FILES = [
+    "src/secrets/kserve-mlflow-minio-secret.yaml.j2",
+]
+SERVICE_ACCOUNTS_FILES = [
+    "src/service-accounts/kserve-mlflow-minio-svc-account.yaml.j2",
+]
+NO_MINIO_RELATION_DATA = {}
 
 
 def parse_images_config(config: str) -> Dict:
@@ -122,6 +145,8 @@ class KServeControllerCharm(CharmBase):
         self.framework.observe(
             self.on["local-gateway"].relation_broken, self._on_local_gateway_relation_broken
         )
+        for rel in ["object-storage", "secrets", "service-accounts"]:
+            self.framework.observe(self.on[rel].relation_changed, self._on_install)
 
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
@@ -243,6 +268,101 @@ class KServeControllerCharm(CharmBase):
         """Returns the local gateway info."""
         return self._local_gateway_requirer.get_relation_data()
 
+    def _get_interfaces(self):
+        # Remove this abstraction when SDI adds .status attribute to NoVersionsListed,
+        # NoCompatibleVersionsListed:
+        # https://github.com/canonical/serialized-data-interface/issues/26
+        try:
+            interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus((err), WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(str(err), BlockedStatus)
+        except RelationDataError as err:
+            raise ErrorWithStatus(str(err), BlockedStatus)
+        return interfaces
+
+    def _validate_sdi_interface(self, interfaces: dict, relation_name: str, default_return=None):
+        """Validates data received from SerializedDataInterface, returning the data if valid.
+
+        Optionally can return a default_return value when no relation is established
+
+        Raises:
+            ErrorWithStatus(..., Blocked) when no relation established (unless default_return set)
+            ErrorWithStatus(..., Blocked) if interface is not using SDI
+            ErrorWithStatus(..., Blocked) if data in interface fails schema check
+            ErrorWithStatus(..., Waiting) if we have a relation established but no data passed
+
+        Params:
+            interfaces:
+
+        Returns:
+              (dict) interface data
+        """
+        # If nothing is related to this relation, return a default value or raise an error
+        if relation_name not in interfaces or interfaces[relation_name] is None:
+            return default_return
+
+        relations = interfaces[relation_name]
+        if not isinstance(relations, SerializedDataInterface):
+            raise ErrorWithStatus(
+                f"Unexpected error with {relation_name} relation data - data not as expected",
+                BlockedStatus,
+            )
+
+        # Get and validate data from the relation
+        try:
+            # relations is a dict of {(ops.model.Relation, ops.model.Application): data}
+            unpacked_relation_data = relations.get_data()
+        except ValidationError as val_error:
+            # Validation in .get_data() ensures if data is populated, it matches the schema and is
+            # not incomplete
+            self.logger.error(val_error)
+            raise ErrorWithStatus(
+                f"Found incomplete/incorrect relation data for {relation_name}. See logs",
+                BlockedStatus,
+            )
+
+        # Check if we have an established relation with no data exchanged
+        if len(unpacked_relation_data) == 0:
+            raise ErrorWithStatus(f"Waiting for {relation_name} relation data", WaitingStatus)
+
+        # Unpack data (we care only about the first element)
+        data_dict = list(unpacked_relation_data.values())[0]
+
+        # Catch if empty data dict is received (JSONSchema ValidationError above does not raise
+        # when this happens)
+        # Remove once addressed in:
+        # https://github.com/canonical/serialized-data-interface/issues/28
+        if len(data_dict) == 0:
+            raise ErrorWithStatus(
+                f"Found empty relation data for {relation_name}",
+                BlockedStatus,
+            )
+
+        return data_dict
+
+    def _get_object_storage(self, interfaces, default_return):
+        """Retrieve object-storage relation data."""
+        relation_name = "object-storage"
+        return self._validate_sdi_interface(interfaces, relation_name, default_return)
+
+    def _send_manifests(self, interfaces, context, manifest_files, relation):
+        """Send manifests from folder to desired relation."""
+        if relation in interfaces and interfaces[relation]:
+            manifests = self._create_manifests(manifest_files, context)
+            interfaces[relation].send_data({relation: manifests})
+
+    def _create_manifests(self, manifest_files, context):
+        """Create manifests string for given folder and context."""
+        manifests = []
+        for file in manifest_files:
+            template = Template(Path(file).read_text())
+            rendered_template = template.render(**context)
+            manifest = yaml.safe_load(rendered_template)
+            manifests.append(manifest)
+        return json.dumps(manifests)
+
     def get_images(
         self, default_images: Dict[str, str], custom_images: Dict[str, str]
     ) -> Dict[str, str]:
@@ -331,6 +451,35 @@ class KServeControllerCharm(CharmBase):
         # TODO determine status checking if controller is also up
         self.unit.status = ActiveStatus()
 
+    def send_object_storage_manifests(self):
+        """Send object storage related manifests in case the object storage relation exists"""
+        interfaces = self._get_interfaces()
+        object_storage_data = self._get_object_storage(interfaces, NO_MINIO_RELATION_DATA)
+
+        # Relation is not present
+        if object_storage_data == NO_MINIO_RELATION_DATA:
+            return
+
+        secrets_context = {
+            "secret_name": f"{self.app.name}-s3",
+            "s3_endpoint": f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
+            "s3_usehttps": S3_USEHTTPS,
+            "s3_region": S3_REGION,
+            "s3_useanoncredential": S3_USEANONCREDENTIALS,
+            "s3_access_key": object_storage_data["access-key"],
+            "s3_secret_access_key": object_storage_data["secret-key"],
+        }
+
+        service_accounts_context = {
+            "svc_account_name": f"{self.app.name}-s3",
+            "secret_name": f"{self.app.name}-s3",
+        }
+
+        self._send_manifests(interfaces, secrets_context, SECRETS_FILES, "secrets")
+        self._send_manifests(
+            interfaces, service_accounts_context, SERVICE_ACCOUNTS_FILES, "service-accounts"
+        )
+
     def _on_install(self, event):
         try:
             self.custom_images = parse_images_config(self.model.config["custom_images"])
@@ -338,6 +487,7 @@ class KServeControllerCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
+            self.send_object_storage_manifests()
 
             # The kserve-controller service must be restarted whenever the
             # configuration is changed, otherwise the service will remain

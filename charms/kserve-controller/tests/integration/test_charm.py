@@ -3,7 +3,9 @@
 # See LICENSE file for licensing details.
 
 
+import base64
 import logging
+import time
 from pathlib import Path
 
 import lightkube
@@ -12,13 +14,27 @@ import lightkube.generic_resource
 import pytest
 import tenacity
 import yaml
+from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import ConfigMap, Namespace
+from lightkube.resources.core_v1 import ConfigMap, Namespace, Secret, ServiceAccount
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
+MANIFESTS_SUFFIX = "-s3"
+METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METACONTROLLER_CHARM_NAME = "metacontroller-operator"
+OBJECT_STORAGE_CHARM_NAME = "minio"
+OBJECT_STORAGE_CONFIG = {
+    "access-key": "minio",
+    "secret-key": "minio123",
+    "port": "9000",
+}
+RESOURCE_DISPATCHER_CHARM_NAME = "resource-dispatcher"
+CHARM_NAME = METADATA["name"]
+NAMESPACE_FILE = "./tests/integration/namespace.yaml"
+TESTING_LABELS = ["user.kubeflow.org/enabled"]
 ISTIO_VERSION = "1.16/stable"
 KNATIVE_VERSION = "latest/edge"
 ISTIO_INGRESS_GATEWAY = "test-gateway"
@@ -29,6 +45,62 @@ EXPECTED_CONFIGMAP = yaml.safe_load(Path("./tests/integration/config-map-data.ya
 EXPECTED_CONFIGMAP_CHANGED = yaml.safe_load(
     Path("./tests/integration/config-map-data-changed.yaml").read_text()
 )
+PODDEFAULTS_CRD_TEMPLATE = "./tests/integration/crds/poddefaults.yaml"
+
+PodDefault = lightkube.generic_resource.create_namespaced_resource(
+    "kubeflow.org", "v1alpha1", "PodDefault", "poddefaults"
+)
+
+
+def deploy_k8s_resources(template_files: str):
+    """Deploy k8s resources from template files."""
+    lightkube_client = lightkube.Client(field_manager=CHARM_NAME)
+    k8s_resource_handler = KubernetesResourceHandler(
+        field_manager=CHARM_NAME, template_files=template_files, context={}
+    )
+    lightkube.generic_resource.load_in_cluster_generic_resources(lightkube_client)
+    k8s_resource_handler.apply()
+
+
+def delete_all_from_yaml(yaml_text: str, lightkube_client: lightkube.Client = None):
+    """Deletes all k8s resources listed in a YAML file via lightkube.
+
+    Args:
+        yaml_file (str or Path): Either a string filename or a string of valid YAML.  Will attempt
+                                 to open a filename at this path, failing back to interpreting the
+                                 string directly as YAML.
+        lightkube_client: Instantiated lightkube client or None
+    """
+
+    if lightkube_client is None:
+        lightkube_client = lightkube.Client()
+
+    for obj in lightkube.codecs.load_all_yaml(yaml_text):
+        lightkube_client.delete(type(obj), obj.metadata.name)
+
+
+def _safe_load_file_to_text(filename: str) -> str:
+    """Returns the contents of filename if it is an existing file, else it returns filename."""
+    try:
+        text = Path(filename).read_text()
+    except FileNotFoundError:
+        text = filename
+    return text
+
+
+@pytest.fixture(scope="session")
+def namespace(lightkube_client: lightkube.Client):
+    """Create user namespace with testing label"""
+    yaml_text = _safe_load_file_to_text(NAMESPACE_FILE)
+    yaml_rendered = yaml.safe_load(yaml_text)
+    for label in TESTING_LABELS:
+        yaml_rendered["metadata"]["labels"][label] = "true"
+    obj = lightkube.codecs.from_dict(yaml_rendered)
+    lightkube_client.apply(obj)
+
+    yield obj.metadata.name
+
+    delete_all_from_yaml(yaml_text, lightkube_client)
 
 
 @pytest.fixture
@@ -313,6 +385,94 @@ async def test_configmap_changes_with_config(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
     assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
+
+
+async def test_relate_to_object_store(ops_test: OpsTest):
+    """Test if the charm can relate to minio and stay in Active state"""
+    await ops_test.model.deploy(
+        OBJECT_STORAGE_CHARM_NAME, channel="ckf-1.7/stable", config=OBJECT_STORAGE_CONFIG
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[OBJECT_STORAGE_CHARM_NAME],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=600,
+    )
+    await ops_test.model.relate(OBJECT_STORAGE_CHARM_NAME, CHARM_NAME)
+    await ops_test.model.wait_for_idle(
+        apps=[CHARM_NAME],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=600,
+    )
+    assert ops_test.model.applications[CHARM_NAME].units[0].workload_status == "active"
+
+
+async def test_deploy_resource_dispatcher(ops_test: OpsTest):
+    """
+    Test if the charm can relate to resource dispatcher and stay in Active state
+
+    We need to deploy Metacontroller and poddefaults CRD (for Resource dispatcher).
+    """
+    deploy_k8s_resources([PODDEFAULTS_CRD_TEMPLATE])
+    await ops_test.model.deploy(
+        entity_url=METACONTROLLER_CHARM_NAME,
+        channel="latest/edge",
+        trust=True,
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[METACONTROLLER_CHARM_NAME],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=120,
+    )
+    await ops_test.model.deploy(RESOURCE_DISPATCHER_CHARM_NAME, channel="latest/edge", trust=True)
+    await ops_test.model.wait_for_idle(
+        apps=[CHARM_NAME],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=120,
+        idle_period=60,
+    )
+
+    await ops_test.model.relate(
+        f"{CHARM_NAME}:service-accounts", f"{RESOURCE_DISPATCHER_CHARM_NAME}:service-accounts"
+    )
+    await ops_test.model.relate(
+        f"{CHARM_NAME}:secrets", f"{RESOURCE_DISPATCHER_CHARM_NAME}:secrets"
+    )
+
+    await ops_test.model.wait_for_idle(
+        apps=[RESOURCE_DISPATCHER_CHARM_NAME, CHARM_NAME],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=1200,
+    )
+    assert ops_test.model.applications[CHARM_NAME].units[0].workload_status == "active"
+
+
+async def test_new_user_namespace_has_manifests(
+    ops_test: OpsTest, lightkube_client: lightkube.Client, namespace: str
+):
+    """Create user namespace with correct label and check manifests."""
+    time.sleep(30)  # sync can take up to 10 seconds for reconciliation loop to trigger
+    manifests_name = f"{CHARM_NAME}{MANIFESTS_SUFFIX}"
+    secret = lightkube_client.get(Secret, manifests_name, namespace=namespace)
+    service_account = lightkube_client.get(ServiceAccount, manifests_name, namespace=namespace)
+    assert secret.data == {
+        "AWS_ACCESS_KEY_ID": base64.b64encode(
+            OBJECT_STORAGE_CONFIG["access-key"].encode("utf-8")
+        ).decode("utf-8"),
+        "AWS_SECRET_ACCESS_KEY": base64.b64encode(
+            OBJECT_STORAGE_CONFIG["secret-key"].encode("utf-8")
+        ).decode("utf-8"),
+    }
+    assert service_account.secrets[0].name == manifests_name
 
 
 async def test_blocked_on_invalid_config(ops_test: OpsTest):

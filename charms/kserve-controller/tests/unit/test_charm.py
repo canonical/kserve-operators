@@ -11,6 +11,7 @@ from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
+from serialized_data_interface import SerializedDataInterface
 
 from charm import KServeControllerCharm
 
@@ -27,6 +28,9 @@ RBAC_PROXY_EXPECTED_LAYER = {
         }
     }
 }
+
+SECRETS_TEST_FILES = ["tests/test_data/secret.yaml.j2"]
+SERVICE_ACCOUNTS_TEST_FILES = ["tests/test_data/service-account-yaml.j2"]
 
 
 class _FakeErrorWithStatus(ErrorWithStatus):
@@ -463,3 +467,72 @@ def test_restart_controller_service(harness, mocker):
     mocked_container_restart = mocker.patch.object(harness.charm.controller_container, "restart")
     harness.charm._restart_controller_service()
     mocked_container_restart.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "context,test_file,expected",
+    [
+        (
+            {
+                "secret_name": "test",
+                "s3_endpoint": "test",
+                "s3_usehttps": "test",
+                "s3_region": "test",
+                "s3_useanoncredential": "test",
+                "s3_access_key": "test",
+                "s3_secret_access_key": "test",
+            },
+            SECRETS_TEST_FILES,
+            '[{"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "test", "annotations": {"serving.kserve.io/s3-endpoint": "test", "serving.kserve.io/s3-usehttps": "test", "serving.kserve.io/s3-region": "test", "serving.kserve.io/s3-useanoncredential": "test"}}, "type": "Opaque", "stringData": {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}}]',  # noqa: E501
+        ),
+        (
+            {
+                "svc_account_name": "test",
+                "secret_name": "test",
+            },
+            SERVICE_ACCOUNTS_TEST_FILES,
+            '[{"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "test"}, "secrets": [{"name": "test"}]}]',
+        ),
+    ],
+)
+def test_create_manifests(context, test_file, expected, harness: Harness):
+    """Tests manifests are properly created from context data"""
+    harness.begin()
+    manifests = harness.charm._create_manifests(test_file, context)
+    assert manifests == expected
+
+
+@pytest.mark.parametrize(
+    "interface,relation_name", [(MagicMock(), "secrets"), (MagicMock(), "service-accounts")]
+)
+@patch("charm.KServeControllerCharm._create_manifests")
+def test_send_manifests(create_manifests: MagicMock, interface, relation_name, harness: Harness):
+    """Tests manifests are properly sent"""
+    tmp_manifests = "[]"
+    create_manifests.return_value = tmp_manifests
+    interfaces = {relation_name: interface}
+    harness.begin()
+    harness.charm._send_manifests(interfaces, {}, "", relation_name)
+    interface.send_data.assert_called_with({relation_name: tmp_manifests})
+
+
+def test_validate_sdi_interface_default_return(harness: Harness):
+    """Test default value is returned on missing interface"""
+    interfaces = {}
+    default_value = {}
+    relation_name = "test_relation"
+    harness.begin()
+    result = harness.charm._validate_sdi_interface(interfaces, relation_name, default_value)
+    assert result == default_value
+
+
+def test_validate_sdi_interface_success(harness: Harness):
+    """Test data bag is extracted correctly from relation"""
+    expected_data = {"access-key": "test"}
+    storage_object = MagicMock(spec=SerializedDataInterface)
+    storage_object.get_data.return_value = {"data": expected_data}
+    relation_name = "object-storage"
+    interfaces = {relation_name: storage_object}
+    harness.begin()
+    result = harness.charm._validate_sdi_interface(interfaces, relation_name, "")
+    assert result == expected_data

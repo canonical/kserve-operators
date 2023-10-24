@@ -24,9 +24,63 @@ resources:
     description: OCI image for kube rbac proxy
     upstream-source: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
 requires:
+  object-storage:
+    interface: object-storage
+    schema:
+      v1:
+        provides:
+          type: object
+          properties:
+            access-key:
+              type: string
+            namespace:
+              type:
+              - string
+              - 'null'
+            port:
+              type: number
+            secret-key:
+              type: string
+            secure:
+              type: boolean
+            service:
+              type: string
+          required:
+          - access-key
+          - port
+          - secret-key
+          - secure
+          - service
+    versions: [v1]
+    __schema_source: https://raw.githubusercontent.com/canonical/operator-schemas/master/object-storage.yaml
   ingress-gateway:
     interface: istio-gateway-info
     limit: 1
   local-gateway:
     interface: serving-local-gateway
     limit: 1
+provides:
+  secrets:
+    interface: secrets
+    schema:
+      v1:
+        provides:
+          type: object
+          properties:
+            secrets:
+              type: string
+        required:
+        - secrets
+    versions: [v1]
+  service-accounts:
+    interface: service-accounts
+    schema:
+      v1:
+        provides:
+          type: object
+          properties:
+            service-accounts:
+              type: string
+        required:
+        - service-accounts
+    versions: [v1]
