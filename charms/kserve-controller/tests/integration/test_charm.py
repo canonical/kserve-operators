@@ -147,9 +147,14 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-@pytest.mark.parametrize("inference_file", ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmmml-server.yaml"])
+@pytest.mark.parametrize(
+    "inference_file",
+    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmmml-server.yaml"],
+)
 @pytest.mark.parametrize("cleanup_namespaces_after_execution", ["raw-namespace"], indirect=True)
-def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, inference_file, ops_test: OpsTest):
+def test_inference_service_raw_deployment(
+    cleanup_namespaces_after_execution, inference_file, ops_test: OpsTest
+):
     """Validates that an InferenceService can be deployed."""
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
@@ -166,7 +171,7 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, in
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
     rawdeployment_mode_namespace = "raw-namespace"
-    
+
     # Create namespace
     @tenacity.retry(
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
