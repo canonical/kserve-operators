@@ -149,7 +149,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 @pytest.mark.parametrize(
     "inference_file",
-    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmmml-server.yaml"],
+    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
 )
 @pytest.mark.parametrize("cleanup_namespaces_after_execution", ["raw-namespace"], indirect=True)
 def test_inference_service_raw_deployment(
