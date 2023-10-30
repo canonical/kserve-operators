@@ -98,9 +98,10 @@ metadata:
 spec:
   containers:
   - args:
+    - --args 
+    - pmml-server
     - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
-    - --http_port=8080
     image: {{ serving_runtimes__pmmlserver }}
     name: kserve-container
     resources:

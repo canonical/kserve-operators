@@ -178,8 +178,14 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.parametrize(
+    "inference_file",
+    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
+)
 @pytest.mark.parametrize("cleanup_namespaces_after_execution", ["raw-namespace"], indirect=True)
-def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, ops_test: OpsTest):
+def test_inference_service_raw_deployment(
+    cleanup_namespaces_after_execution, inference_file, ops_test: OpsTest
+):
     """Validates that an InferenceService can be deployed."""
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
@@ -192,13 +198,20 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
         plural="inferenceservices",
         verbs=None,
     )
-    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
+    inf_svc_yaml = yaml.safe_load(Path(inference_file).read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
     rawdeployment_mode_namespace = "raw-namespace"
 
-    # Create RawDeployment namespace
-    lightkube_client.create(Namespace(metadata=ObjectMeta(name=rawdeployment_mode_namespace)))
+    # Create namespace
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(30),
+        reraise=True,
+    )
+    def create_namespace(rawdeployment_mode_namespace):
+        # Create RawDeployment namespace
+        lightkube_client.create(Namespace(metadata=ObjectMeta(name=rawdeployment_mode_namespace)))
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -227,9 +240,9 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
             status_overall = True
         assert status_overall is True
 
+    create_namespace(rawdeployment_mode_namespace)
     create_inf_svc()
     assert_inf_svc_state()
-
 
 #    # Remove the InferenceService deployed in RawDeployment mode
 #    lightkube_client.delete(
