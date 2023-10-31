@@ -49,6 +49,7 @@ EXPECTED_CONFIGMAP_CHANGED = {
     "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
     "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
 }
+TESTING_NAMESPACE_NAME = "raw-deployment"
 
 
 @tenacity.retry(
@@ -147,12 +148,32 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-@pytest.mark.parametrize("cleanup_namespaces_after_execution", ["raw-namespace"], indirect=True)
-def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, ops_test: OpsTest):
-    """Validates that an InferenceService can be deployed."""
-    # Instantiate a lightkube client
-    lightkube_client = lightkube.Client()
+@pytest.fixture(scope="function")
+def inference_namespace(lightkube_client: lightkube.Client):
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(60),
+        reraise=True,
+    )
+    def create_namespace():
+        lightkube_client.create(Namespace(metadata=ObjectMeta(name=TESTING_NAMESPACE_NAME)))
 
+    create_namespace()
+    yield TESTING_NAMESPACE_NAME
+    lightkube_client.delete(Namespace, name=TESTING_NAMESPACE_NAME)
+
+
+@pytest.mark.parametrize(
+    "inference_file",
+    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
+)
+def test_inference_service_raw_deployment(
+    inference_namespace: str,
+    lightkube_client: lightkube.Client,
+    inference_file,
+    ops_test: OpsTest,
+):
+    """Validates that an InferenceService can be deployed."""
     # Read InferenceService example and create namespaced resource
     inference_service_resource = lightkube.generic_resource.create_namespaced_resource(
         group="serving.kserve.io",
@@ -161,13 +182,9 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
         plural="inferenceservices",
         verbs=None,
     )
-    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
+    inf_svc_yaml = yaml.safe_load(Path(inference_file).read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
-    rawdeployment_mode_namespace = "raw-namespace"
-
-    # Create RawDeployment namespace
-    lightkube_client.create(Namespace(metadata=ObjectMeta(name=rawdeployment_mode_namespace)))
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -176,7 +193,7 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
         reraise=True,
     )
     def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=rawdeployment_mode_namespace)
+        lightkube_client.create(inf_svc_object, namespace=inference_namespace)
 
     # Assert InferenceService state is Available
     @tenacity.retry(
@@ -186,7 +203,7 @@ def test_inference_service_raw_deployment(cleanup_namespaces_after_execution, op
     )
     def assert_inf_svc_state():
         inf_svc = lightkube_client.get(
-            inference_service_resource, inf_svc_name, namespace=rawdeployment_mode_namespace
+            inference_service_resource, inf_svc_name, namespace=inference_namespace
         )
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
