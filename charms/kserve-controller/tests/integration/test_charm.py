@@ -159,7 +159,7 @@ def inference_namespace(lightkube_client: lightkube.Client):
         lightkube_client.create(Namespace(metadata=ObjectMeta(name=TESTING_NAMESPACE_NAME)))
 
     create_namespace()
-    yield
+    yield TESTING_NAMESPACE_NAME
     lightkube_client.delete(Namespace, name=TESTING_NAMESPACE_NAME)
 
 
@@ -168,7 +168,10 @@ def inference_namespace(lightkube_client: lightkube.Client):
     ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
 )
 def test_inference_service_raw_deployment(
-    inference_namespace: None, lightkube_client: lightkube.Client, inference_file, ops_test: OpsTest
+    inference_namespace: str,
+    lightkube_client: lightkube.Client,
+    inference_file,
+    ops_test: OpsTest,
 ):
     """Validates that an InferenceService can be deployed."""
     # Read InferenceService example and create namespaced resource
@@ -190,7 +193,7 @@ def test_inference_service_raw_deployment(
         reraise=True,
     )
     def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=TESTING_NAMESPACE_NAME)
+        lightkube_client.create(inf_svc_object, namespace=inference_namespace)
 
     # Assert InferenceService state is Available
     @tenacity.retry(
@@ -200,7 +203,7 @@ def test_inference_service_raw_deployment(
     )
     def assert_inf_svc_state():
         inf_svc = lightkube_client.get(
-            inference_service_resource, inf_svc_name, namespace=TESTING_NAMESPACE_NAME
+            inference_service_resource, inf_svc_name, namespace=inference_namespace
         )
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
