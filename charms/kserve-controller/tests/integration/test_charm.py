@@ -180,7 +180,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 
 @pytest.fixture()
-def namespace(lightkube_client: lightkube.Client):
+def test_namespace(lightkube_client: lightkube.Client):
     @tenacity.retry(
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
         stop=tenacity.stop_after_delay(30),
@@ -199,7 +199,7 @@ def namespace(lightkube_client: lightkube.Client):
     ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
 )
 def test_inference_service_raw_deployment(
-    namespace: None, lightkube_client: lightkube.Client, inference_file, ops_test: OpsTest
+    test_namespace: None, lightkube_client: lightkube.Client, inference_file, ops_test: OpsTest
 ):
     """Validates that an InferenceService can be deployed."""
     # Read InferenceService example and create namespaced resource
