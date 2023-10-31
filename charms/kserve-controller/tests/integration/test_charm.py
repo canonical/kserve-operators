@@ -178,6 +178,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         )
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
+
 @pytest.fixture()
 def namespace(lightkube_client: lightkube.Client):
     @tenacity.retry(
@@ -189,7 +190,7 @@ def namespace(lightkube_client: lightkube.Client):
         lightkube_client.create(Namespace(metadata=ObjectMeta(name=TESTING_NAMESPACE_NAME)))
 
     create_namespace()
-    yield 
+    yield
     lightkube_client.delete(Namespace, name=TESTING_NAMESPACE_NAME)
 
 
