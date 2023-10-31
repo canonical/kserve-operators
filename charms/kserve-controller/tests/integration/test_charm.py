@@ -148,11 +148,11 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def test_namespace(lightkube_client: lightkube.Client):
     @tenacity.retry(
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_delay(30),
+        stop=tenacity.stop_after_delay(60),
         reraise=True,
     )
     def create_namespace():
