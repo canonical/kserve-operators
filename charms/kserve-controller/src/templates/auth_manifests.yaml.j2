@@ -8,6 +8,15 @@ metadata:
   namespace: {{ namespace }}
 rules:
 - apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+- apiGroups:
   - ""
   resources:
   - configmaps
@@ -249,6 +258,18 @@ rules:
 - apiGroups:
   - serving.kserve.io
   resources:
+  - clusterstoragecontainers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.kserve.io
+  resources:
   - inferencegraphs
   - inferencegraphs/finalizers
   verbs:
@@ -363,6 +384,7 @@ metadata:
     app.kubernetes.io/name: {{ app_name }}
     rbac.authorization.kubeflow.org/aggregate-to-kubeflow-admin: "true"
   name: kubeflow-kserve-admin
+rules: []
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
