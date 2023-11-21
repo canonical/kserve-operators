@@ -8,6 +8,15 @@ metadata:
   namespace: {{ namespace }}
 rules:
 - apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+- apiGroups:
   - ""
   resources:
   - configmaps
@@ -246,6 +255,18 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - serving.kserve.io
+  resources:
+  - clusterstoragecontainers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - serving.kserve.io
   resources:

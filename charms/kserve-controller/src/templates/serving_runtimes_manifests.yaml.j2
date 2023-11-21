@@ -3,6 +3,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-lgbserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - args:
     - --model_name= {{ '{{.Name}}' }}
@@ -20,9 +23,11 @@ spec:
         memory: 2Gi
   protocolVersions:
   - v1
+  - v2
   supportedModelFormats:
   - autoSelect: true
     name: lightgbm
+    priority: 1
     version: "3"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -30,6 +35,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-mlserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - env:
     - name: MLSERVER_MODEL_IMPLEMENTATION
@@ -54,15 +62,23 @@ spec:
   supportedModelFormats:
   - autoSelect: true
     name: sklearn
+    priority: 1
     version: "0"
   - autoSelect: true
+    name: sklearn
+    priority: 2
+    version: "1"
+  - autoSelect: true
     name: xgboost
+    priority: 2
     version: "1"
   - autoSelect: true
     name: lightgbm
+    priority: 2
     version: "3"
   - autoSelect: true
     name: mlflow
+    priority: 1
     version: "1"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -70,6 +86,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-paddleserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - args:
     - --model_name= {{ '{{.Name}}' }}
@@ -86,9 +105,11 @@ spec:
         memory: 2Gi
   protocolVersions:
   - v1
+  - v2
   supportedModelFormats:
   - autoSelect: true
     name: paddle
+    priority: 1
     version: "2"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -96,12 +117,14 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-pmmlserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - args:
-    - --args 
-    - pmml-server
     - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
+    - --http_port=8080
     image: {{ serving_runtimes__pmmlserver }}
     name: kserve-container
     resources:
@@ -113,12 +136,15 @@ spec:
         memory: 2Gi
   protocolVersions:
   - v1
+  - v2
   supportedModelFormats:
   - autoSelect: true
     name: pmml
+    priority: 1
     version: "3"
   - autoSelect: true
     name: pmml
+    priority: 1
     version: "4"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -126,6 +152,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-sklearnserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - args:
     - --model_name={{ '{{.Name}}' }}
@@ -142,9 +171,11 @@ spec:
         memory: 2Gi
   protocolVersions:
   - v1
+  - v2
   supportedModelFormats:
   - autoSelect: true
     name: sklearn
+    priority: 1
     version: "1"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -152,6 +183,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-tensorflow-serving
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - args:
     - --model_name={{ '{{.Name}}' }}
@@ -176,9 +210,11 @@ spec:
   supportedModelFormats:
   - autoSelect: true
     name: tensorflow
+    priority: 2
     version: "1"
   - autoSelect: true
     name: tensorflow
+    priority: 2
     version: "2"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -186,6 +222,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-torchserve
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8082"
   containers:
   - args:
     - torchserve
@@ -211,6 +250,7 @@ spec:
   supportedModelFormats:
   - autoSelect: true
     name: pytorch
+    priority: 2
     version: "1"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -218,6 +258,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-tritonserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8002"
   containers:
   - args:
     - tritonserver
@@ -241,20 +284,25 @@ spec:
   supportedModelFormats:
   - autoSelect: true
     name: tensorrt
+    priority: 1
     version: "8"
   - autoSelect: true
     name: tensorflow
+    priority: 1
     version: "1"
   - autoSelect: true
     name: tensorflow
+    priority: 1
     version: "2"
   - autoSelect: true
     name: onnx
+    priority: 1
     version: "1"
   - name: pytorch
     version: "1"
   - autoSelect: true
     name: triton
+    priority: 1
     version: "2"
 ---
 apiVersion: serving.kserve.io/v1alpha1
@@ -262,6 +310,9 @@ kind: ClusterServingRuntime
 metadata:
   name: kserve-xgbserver
 spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
   containers:
   - args:
     - --model_name={{ '{{.Name}}' }}
@@ -279,7 +330,9 @@ spec:
         memory: 2Gi
   protocolVersions:
   - v1
+  - v2
   supportedModelFormats:
   - autoSelect: true
     name: xgboost
+    priority: 1
     version: "1"
