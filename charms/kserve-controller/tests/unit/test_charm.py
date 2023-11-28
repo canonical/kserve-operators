@@ -83,26 +83,22 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
 
 def test_events(harness, mocked_resource_handler, mocker):
     harness.begin()
-    on_install = mocker.patch("charm.KServeControllerCharm._on_install")
+    on_event = mocker.patch("charm.KServeControllerCharm._on_event")
     on_remove = mocker.patch("charm.KServeControllerCharm._on_remove")
-    on_kserve_controller_pebble_ready = mocker.patch(
-        "charm.KServeControllerCharm._on_kserve_controller_ready"
-    )
-    on_kube_rbac_proxy_ready = mocker.patch(
-        "charm.KServeControllerCharm._on_kube_rbac_proxy_ready"
-    )
 
     harness.charm.on.install.emit()
-    on_install.assert_called_once()
+    on_event.assert_called_once()
 
     harness.charm.on.remove.emit()
     on_remove.assert_called_once()
 
+    on_event.reset_mock()
     harness.charm.on.kserve_controller_pebble_ready.emit("kserve-controller")
-    on_kserve_controller_pebble_ready.assert_called_once()
+    on_event.assert_called_once()
 
+    on_event.reset_mock()
     harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
-    on_kube_rbac_proxy_ready.assert_called_once()
+    on_event.assert_called_once()
 
 
 def test_on_install_active(harness, mocked_resource_handler):
@@ -125,12 +121,27 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger.error.assert_called()
 
 
-def test_on_kube_rbac_proxy_ready_active(harness, mocker):
+def test_on_kube_rbac_proxy_ready_active(harness, mocked_resource_handler, mocker):
     harness.begin()
-
     # Check initial plan is empty
     initial_plan = harness.get_container_pebble_plan("kube-rbac-proxy")
     assert initial_plan.to_yaml() == "{}\n"
+
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
 
     # Check layer gets created
     harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
@@ -145,7 +156,7 @@ def test_on_kube_rbac_proxy_ready_active(harness, mocker):
     assert harness.model.unit.status == ActiveStatus()
 
 
-def test_on_kube_rbac_proxy_ready_exception_blocked(harness, mocker):
+def test_on_kube_rbac_proxy_ready_exception_blocked(harness, mocked_resource_handler, mocker):
     harness.begin()
 
     mocked_update_layer = mocker.patch("charm.update_layer")
@@ -157,7 +168,7 @@ def test_on_kube_rbac_proxy_ready_exception_blocked(harness, mocker):
     mocked_logger.info.assert_not_called()
 
 
-def test_on_kube_rbac_proxy_ready_exception_other(harness, mocker):
+def test_on_kube_rbac_proxy_ready_exception_other(harness, mocked_resource_handler, mocker):
     harness.begin()
 
     mocked_update_layer = mocker.patch("charm.update_layer")
@@ -166,11 +177,10 @@ def test_on_kube_rbac_proxy_ready_exception_other(harness, mocker):
 
     harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
 
-    mocked_logger.info.assert_called_once()
-    mocked_logger.error.assert_not_called()
+    mocked_logger.error.assert_called_once()
 
 
-def test_on_kserve_controller_ready_active(harness, mocker):
+def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, mocker):
     harness.begin()
 
     # Check initial plan is empty
@@ -447,7 +457,7 @@ def test_gen_certs_if_missing(cert_data_dict, should_certs_refresh, harness: Har
     assert mocked_gen_certs.called == should_certs_refresh
 
 
-def test_restart_controller_service(harness, mocker):
+def test_restart_controller_service(harness, mocked_resource_handler, mocker):
     """Checks the controller service is restarted correctly."""
     harness.begin()
 
@@ -461,6 +471,22 @@ def test_restart_controller_service(harness, mocker):
         harness.charm._controller_container_name
     )
     assert controller_service is None
+
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
 
     # Simulate what happens after the pebble ready event
     harness.container_pebble_ready(harness.charm._controller_container_name)

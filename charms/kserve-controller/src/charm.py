@@ -123,30 +123,27 @@ class KServeControllerCharm(CharmBase):
         self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="ingress-gateway")
         self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
 
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.remove, self._on_remove)
-        self.framework.observe(
-            self.on.kserve_controller_pebble_ready, self._on_kserve_controller_ready
-        )
-        self.framework.observe(
-            self.on.kube_rbac_proxy_pebble_ready, self._on_kube_rbac_proxy_ready
-        )
-        self.framework.observe(
-            self.on["ingress-gateway"].relation_changed, self._on_ingress_gateway_relation_changed
-        )
         # Observe if relation is removed by juju remove-application or juju remove-relation
         self.framework.observe(
             self.on["ingress-gateway"].relation_broken, self._on_ingress_gateway_relation_broken
         )
         self.framework.observe(
-            self.on["local-gateway"].relation_changed, self._on_local_gateway_relation_changed
-        )
-        self.framework.observe(
             self.on["local-gateway"].relation_broken, self._on_local_gateway_relation_broken
         )
+
+        for event in [
+            self.on.install,
+            self.on.config_changed,
+            self.on.kserve_controller_pebble_ready,
+            self.on.kube_rbac_proxy_pebble_ready,
+            self.on["local-gateway"].relation_changed,
+            self.on["ingress-gateway"].relation_changed,
+        ]:
+            self.framework.observe(event, self._on_event)
+
         for rel in ["object-storage", "secrets", "service-accounts"]:
-            self.framework.observe(self.on[rel].relation_changed, self._on_install)
+            self.framework.observe(self.on[rel].relation_changed, self._on_event)
 
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
@@ -402,55 +399,6 @@ class KServeControllerCharm(CharmBase):
             ].rsplit(":", 1)
         return images
 
-    def _on_kserve_controller_ready(self, event):
-        """Define and start a workload using the Pebble API.
-
-        Learn more about Pebble layers at https://github.com/canonical/pebble
-        """
-        try:
-            self._upload_certs_to_container(
-                container=self.controller_container,
-                destination_path=CONTAINER_CERTS_DEST,
-                certs_store=self._stored,
-            )
-            update_layer(
-                self._controller_container_name,
-                self.controller_container,
-                self._controller_pebble_layer,
-                log,
-            )
-        except ErrorWithStatus as e:
-            self.model.unit.status = e.status
-            if isinstance(e.status, BlockedStatus):
-                log.error(str(e.msg))
-            else:
-                log.info(str(e.msg))
-
-        # TODO determine status checking if rbac proxy is also up
-        self.unit.status = ActiveStatus()
-
-    def _on_kube_rbac_proxy_ready(self, event):
-        """Define and start a workload using the Pebble API.
-
-        Learn more about Pebble layers at https://github.com/canonical/pebble
-        """
-        try:
-            update_layer(
-                self._rbac_proxy_container_name,
-                self.rbac_proxy_container,
-                self._rbac_proxy_pebble_layer,
-                log,
-            )
-        except ErrorWithStatus as e:
-            self.model.unit.status = e.status
-            if isinstance(e.status, BlockedStatus):
-                log.error(str(e.msg))
-            else:
-                log.info(str(e.msg))
-
-        # TODO determine status checking if controller is also up
-        self.unit.status = ActiveStatus()
-
     def send_object_storage_manifests(self):
         """Send object storage related manifests in case the object storage relation exists"""
         interfaces = self._get_interfaces()
@@ -480,7 +428,7 @@ class KServeControllerCharm(CharmBase):
             interfaces, service_accounts_context, SERVICE_ACCOUNTS_FILES, "service-accounts"
         )
 
-    def _on_install(self, event):
+    def _on_event(self, event):
         try:
             self.custom_images = parse_images_config(self.model.config["custom_images"])
             self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
@@ -488,6 +436,25 @@ class KServeControllerCharm(CharmBase):
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
             self.send_object_storage_manifests()
+            self._upload_certs_to_container(
+                container=self.controller_container,
+                destination_path=CONTAINER_CERTS_DEST,
+                certs_store=self._stored,
+            )
+            # update kserve-controller layer
+            update_layer(
+                self._controller_container_name,
+                self.controller_container,
+                self._controller_pebble_layer,
+                log,
+            )
+            # update kube-rbac-proxy layer
+            update_layer(
+                self._rbac_proxy_container_name,
+                self.rbac_proxy_container,
+                self._rbac_proxy_pebble_layer,
+                log,
+            )
 
             # The kserve-controller service must be restarted whenever the
             # configuration is changed, otherwise the service will remain
@@ -504,7 +471,7 @@ class KServeControllerCharm(CharmBase):
 
     def _on_config_changed(self, event):
         """Handle the config changed event."""
-        self._on_install(event)
+        self._on_event(event)
 
     def _on_remove(self, event):
         try:
@@ -531,16 +498,6 @@ class KServeControllerCharm(CharmBase):
             log.warning(f"Failed to delete resources, with error: {e}")
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
-
-    def _on_ingress_gateway_relation_changed(self, event) -> None:
-        """Handle the ingress-gateway relation changed event."""
-        # Just call the event handler that applies manifest files
-        self._on_install(event)
-
-    def _on_local_gateway_relation_changed(self, event) -> None:
-        """Handle the local-gateway relation changed event."""
-        # Just call the event handler that applies manifest files
-        self._on_install(event)
 
     def _on_ingress_gateway_relation_broken(self, _) -> None:
         """Handle the ingress-gateway relation broken event."""
