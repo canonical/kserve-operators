@@ -193,6 +193,25 @@ def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, moc
     # assert harness.get_container_pebble_plan("kserve-controller")._services != {}
 
 
+def test_on_kserve_controller_ready_no_relation_blocked(harness, mocked_resource_handler, mocker):
+    """Tests that charm goes to blocked when it has no relation to knative-serving."""
+    harness.begin()
+
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+
+    assert harness.model.unit.status == BlockedStatus(
+        "Please relate to knative-serving:local-gateway"
+    )
+
+
 def test_on_remove_success(harness, mocker, mocked_resource_handler):
     mocked_delete_many = mocker.patch("charm.delete_many")
     harness.begin()
