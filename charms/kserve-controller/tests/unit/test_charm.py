@@ -29,6 +29,18 @@ RBAC_PROXY_EXPECTED_LAYER = {
     }
 }
 
+KSERVE_CONTROLLER_EXPECTED_LAYER = {
+    "services": {
+        "kserve-controller": {
+            "command": "/manager --metrics-addr=:8080",
+            "environment": {"POD_NAMESPACE": None, "SECRET_NAME": "kserve-webhook-server-cert"},
+            "override": "replace",
+            "startup": "enabled",
+            "summary": "KServe Controller",
+        }
+    }
+}
+
 SECRETS_TEST_FILES = ["tests/test_data/secret.yaml.j2"]
 SERVICE_ACCOUNTS_TEST_FILES = ["tests/test_data/service-account-yaml.j2"]
 
@@ -187,10 +199,35 @@ def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, moc
     initial_plan = harness.get_container_pebble_plan("kserve-controller")
     assert initial_plan.to_yaml() == "{}\n"
 
-    # FIXME: missing mocked ops.model.Container.push
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
+
     # Check layer gets created
-    # harness.charm.on.kserve_controller_pebble_ready.emit("kserve-controller")
-    # assert harness.get_container_pebble_plan("kserve-controller")._services != {}
+    harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kserve-controller-ready")
+    assert harness.get_container_pebble_plan("kserve-controller")._services != {}
+
+    updated_plan = harness.get_container_pebble_plan("kserve-controller").to_dict()
+    assert KSERVE_CONTROLLER_EXPECTED_LAYER == updated_plan
+
+    service = harness.model.unit.get_container("kserve-controller").get_service(
+        "kserve-controller"
+    )
+    assert service.is_running() is True
+
+    assert harness.model.unit.status == ActiveStatus()
 
 
 def test_on_kserve_controller_ready_no_relation_blocked(harness, mocked_resource_handler, mocker):
