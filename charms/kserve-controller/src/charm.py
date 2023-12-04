@@ -464,10 +464,6 @@ class KServeControllerCharm(CharmBase):
             raise
         self.model.unit.status = ActiveStatus()
 
-    def _on_config_changed(self, event):
-        """Handle the config changed event."""
-        self._on_event(event)
-
     def _on_remove(self, event):
         try:
             self.custom_images = parse_images_config(self.model.config["custom_images"])
