@@ -132,13 +132,13 @@ class KServeControllerCharm(CharmBase):
             self.on.kube_rbac_proxy_pebble_ready,
             self.on["local-gateway"].relation_changed,
             self.on["ingress-gateway"].relation_changed,
+            self.on["object-storage"].relation_changed,
+            self.on["secrets"].relation_changed,
+            self.on["service-accounts"].relation_changed,
             self.on["ingress-gateway"].relation_broken,
             self.on["local-gateway"].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
-
-        for rel in ["object-storage", "secrets", "service-accounts"]:
-            self.framework.observe(self.on[rel].relation_changed, self._on_event)
 
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
