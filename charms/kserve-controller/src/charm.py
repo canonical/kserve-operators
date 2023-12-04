@@ -124,13 +124,6 @@ class KServeControllerCharm(CharmBase):
         self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
 
         self.framework.observe(self.on.remove, self._on_remove)
-        # Observe if relation is removed by juju remove-application or juju remove-relation
-        self.framework.observe(
-            self.on["ingress-gateway"].relation_broken, self._on_ingress_gateway_relation_broken
-        )
-        self.framework.observe(
-            self.on["local-gateway"].relation_broken, self._on_local_gateway_relation_broken
-        )
 
         for event in [
             self.on.install,
@@ -139,6 +132,8 @@ class KServeControllerCharm(CharmBase):
             self.on.kube_rbac_proxy_pebble_ready,
             self.on["local-gateway"].relation_changed,
             self.on["ingress-gateway"].relation_changed,
+            self.on["ingress-gateway"].relation_broken,
+            self.on["local-gateway"].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
 
@@ -498,18 +493,6 @@ class KServeControllerCharm(CharmBase):
             log.warning(f"Failed to delete resources, with error: {e}")
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
-
-    def _on_ingress_gateway_relation_broken(self, _) -> None:
-        """Handle the ingress-gateway relation broken event."""
-        # Ingress is always needed, so immediately go into BlockedStatus
-        self.unit.status = BlockedStatus("Please relate to istio-pilot:gateway-info")
-        return
-
-    def _on_local_gateway_relation_broken(self, _) -> None:
-        """Handle the local-gateway relation broken event."""
-        if self.model.config["deployment-mode"].lower() == "serverless":
-            self.unit.status = BlockedStatus("Please relate to knative-serving:local-gateway")
-        return
 
     def _check_container_connection(self, container: Container) -> None:
         """Check if connection can be made with container.
