@@ -181,6 +181,7 @@ def lightkube_client() -> lightkube.Client:
     return client
 
 
+@pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms.
