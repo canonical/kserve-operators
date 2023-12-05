@@ -1,4 +1,8 @@
 ## KServe Operators - a component of the Charmed Kubeflow distribution from Canonical
+[![CharmHub Badge](https://charmhub.io/kubeflow/badge.svg)](https://charmhub.io/kubeflow)
+[![On Pull Request](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_pull_request.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_pull_request.yaml)
+[![On Push](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_push.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_push.yaml)
+[![Release Charm to track](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/release.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/release.yaml)
 
 This repository hosts the Kubernetes Python Operators for KServe
 (see [CharmHub](https://charmhub.io/?q=dex-auth)).
@@ -231,7 +235,7 @@ These images can be overridden in the charm configuration under custom_images in
 juju config kserve-controller custom_images='{"configmap__agent": "custom:1.0", "serving_runtimes__lgbserver": "cuustom:2.1"}'
 ```
 
-These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2. 
+These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2.
 
 ### Bugs and feature requests
 If you find a bug in our operator or want to request a specific feature, please file a bug here:
