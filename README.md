@@ -213,7 +213,7 @@ KServe controller comes with a set of preconfigured images that are used in Kser
     "configmap__explainers__art": "kserve/art-explainer:latest",
     "configmap__logger": "kserve/agent:v0.10.0",
     "configmap__router": "kserve/router:v0.10.0",
-    "configmap__storageInitializer": "kserve/storage-initializer:v0.10.0",
+    "configmap__storageInitializer": "charmedkubeflow/storage-initializer:0.10.0-252057c",
     "serving_runtimes__lgbserver": "kserve/lgbserver:v0.10.0",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.0.0",
     "serving_runtimes__paddleserver": "kserve/paddleserver:v0.10.0",

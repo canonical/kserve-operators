@@ -35,7 +35,7 @@ EXPECTED_CONFIGMAP = {
     "logger": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "defaultUrl": "http://default-broker"\n}',
     "metricsAggregator": '{\n  "enableMetricAggregation": "false",\n  "enablePrometheusScraping" : "false"\n}',
     "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
-    "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
+    "storageInitializer": '{\n    "image" : "charmedkubeflow/storage-initializer:0.10.0-252057c",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
 }
 EXPECTED_CONFIGMAP_CHANGED = {
     "agent": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
@@ -47,7 +47,7 @@ EXPECTED_CONFIGMAP_CHANGED = {
     "logger": '{\n    "image" : "kserve/agent:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "defaultUrl": "http://default-broker"\n}',
     "metricsAggregator": '{\n  "enableMetricAggregation": "false",\n  "enablePrometheusScraping" : "false"\n}',
     "router": '{\n    "image" : "kserve/router:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1"\n}',
-    "storageInitializer": '{\n    "image" : "kserve/storage-initializer:v0.10.0",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
+    "storageInitializer": '{\n    "image" : "charmedkubeflow/storage-initializer:0.10.0-252057c",\n    "memoryRequest": "100Mi",\n    "memoryLimit": "1Gi",\n    "cpuRequest": "100m",\n    "cpuLimit": "1",\n    "storageSpecSecretName": "storage-config"\n}',
 }
 TESTING_NAMESPACE_NAME = "raw-deployment"
 
