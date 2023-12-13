@@ -202,7 +202,7 @@ Please see the [official docs site](https://charmed-kubeflow.io/docs) for comple
 
 ## Setting Custom Images for Kserve controller
 
-KServe controller comes with a set of preconfigured images that are used in Kserve workloads. The list of default images used in the charm can be found in [default-custom-images.json](https://github.com/canonical/kserve-operators/blob/track/0.10/charms/kserve-controller/src/default-custom-images.json).
+KServe controller comes with a set of preconfigured images that are used in Kserve workloads. The list of default images used in the charm can be found in [default-custom-images.json](charms/kserve-controller/src/default-custom-images.json).
 
 
 These images can be overridden in the charm configuration under custom_images in the charms/kserve-controller/config.yaml file. Whenever you leave the custom_images field empty in the config, the default images will be used (listed above). You can specify your own images with the config by filling one or multiple entries. The config accepts either YAML or JSON entries. For example.
