@@ -2,7 +2,7 @@
     "configmap__agent": "kserve/agent:v0.10.0",
     "configmap__batcher": "kserve/agent:v0.10.0",
     "configmap__explainers__alibi": "kserve/alibi-explainer:latest",
-    "configmap__explainers__aix": "kserve/aix-explainer:latest",
+    "configmap__explainers__aix": "ubuntu:22.04",
     "configmap__explainers__art": "kserve/art-explainer:latest",
     "configmap__logger": "kserve/agent:v0.10.0",
     "configmap__router": "kserve/router:v0.10.0",

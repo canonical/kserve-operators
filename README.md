@@ -211,7 +211,7 @@ These images can be overridden in the charm configuration under custom_images in
 juju config kserve-controller custom_images='{"configmap__agent": "custom:1.0", "serving_runtimes__lgbserver": "cuustom:2.1"}'
 ```
 
-These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2. 
+These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2.
 
 ### Bugs and feature requests
 If you find a bug in our operator or want to request a specific feature, please file a bug here:
