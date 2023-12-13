@@ -202,29 +202,9 @@ Please see the [official docs site](https://charmed-kubeflow.io/docs) for comple
 
 ## Setting Custom Images for Kserve controller
 
-KServe controller comes with a set of preconfigured images that are used in Kserve workloads. This is the list of default images used in charm.
-
-```json
-{
-    "configmap__agent": "kserve/agent:v0.10.0",
-    "configmap__batcher": "kserve/agent:v0.10.0",
-    "configmap__explainers__alibi": "kserve/alibi-explainer:latest",
-    "configmap__explainers__aix": "kserve/aix-explainer:latest",
-    "configmap__explainers__art": "kserve/art-explainer:latest",
-    "configmap__logger": "kserve/agent:v0.10.0",
-    "configmap__router": "kserve/router:v0.10.0",
-    "configmap__storageInitializer": "kserve/storage-initializer:v0.10.0",
-    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.10.0",
-    "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.0.0",
-    "serving_runtimes__paddleserver": "kserve/paddleserver:v0.10.0",
-    "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.10.0",
-    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.10.0",
-    "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
-    "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.7.0",
-    "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:21.09-py3",
-    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.10.0",
-}
-```
+KServe controller comes with a set of preconfigured images that are used in Kserve workloads.
+The list of default images used in charm can be found in:
+[default-custom-images.json](charms/kserve-controller/src/default-custom-images.json)
 
 These images can be overridden in the charm configuration under custom_images in the charms/kserve-controller/config.yaml file. Whenever you leave the custom_images field empty in the config, the default images will be used (listed above). You can specify your own images with the config by filling one or multiple entries. The config accepts either YAML or JSON entries. For example.
 
@@ -232,7 +212,7 @@ These images can be overridden in the charm configuration under custom_images in
 juju config kserve-controller custom_images='{"configmap__agent": "custom:1.0", "serving_runtimes__lgbserver": "cuustom:2.1"}'
 ```
 
-These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2. 
+These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2.
 
 ### Bugs and feature requests
 If you find a bug in our operator or want to request a specific feature, please file a bug here:
