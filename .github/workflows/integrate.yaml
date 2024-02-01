@@ -60,7 +60,7 @@ jobs:
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: latest/candidate
       - run: |
-          juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=true
+          juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=false
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
 
       - name: Get all

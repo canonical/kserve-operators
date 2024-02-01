@@ -59,28 +59,7 @@ requires:
   local-gateway:
     interface: serving-local-gateway
     limit: 1
-provides:
   secrets:
-    interface: secrets
-    schema:
-      v1:
-        provides:
-          type: object
-          properties:
-            secrets:
-              type: string
-        required:
-        - secrets
-    versions: [v1]
+    interface: kubernetes_manifest
   service-accounts:
-    interface: service-accounts
-    schema:
-      v1:
-        provides:
-          type: object
-          properties:
-            service-accounts:
-              type: string
-        required:
-        - service-accounts
-    versions: [v1]
+    interface: kubernetes_manifest

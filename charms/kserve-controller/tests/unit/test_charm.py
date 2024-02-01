@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import ops.testing
 import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
+from charms.resource_dispatcher.v0.kubernetes_manifests import KubernetesManifest
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
@@ -565,7 +566,11 @@ def test_restart_controller_service(harness, mocked_resource_handler, mocker):
                 "s3_secret_access_key": "test",
             },
             SECRETS_TEST_FILES,
-            '[{"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "test", "annotations": {"serving.kserve.io/s3-endpoint": "test", "serving.kserve.io/s3-usehttps": "test", "serving.kserve.io/s3-region": "test", "serving.kserve.io/s3-useanoncredential": "test"}}, "type": "Opaque", "stringData": {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}}]',  # noqa: E501
+            [
+                KubernetesManifest(
+                    manifest_content='apiVersion: v1\nkind: Secret\nmetadata:\n  name: test\n  annotations:\n     serving.kserve.io/s3-endpoint: "test"\n     serving.kserve.io/s3-usehttps: "test"\n     serving.kserve.io/s3-region: "test"\n     serving.kserve.io/s3-useanoncredential: "test"\ntype: Opaque\nstringData: # use `stringData` for raw credential string or `data` for base64 encoded string\n  AWS_ACCESS_KEY_ID: test\n  AWS_SECRET_ACCESS_KEY: test'
+                )
+            ],
         ),
         (
             {
@@ -573,7 +578,11 @@ def test_restart_controller_service(harness, mocked_resource_handler, mocker):
                 "secret_name": "test",
             },
             SERVICE_ACCOUNTS_TEST_FILES,
-            '[{"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "test"}, "secrets": [{"name": "test"}]}]',
+            [
+                KubernetesManifest(
+                    manifest_content="apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: test\nsecrets:\n- name: test"
+                )
+            ],
         ),
     ],
 )
@@ -582,20 +591,6 @@ def test_create_manifests(context, test_file, expected, harness: Harness):
     harness.begin()
     manifests = harness.charm._create_manifests(test_file, context)
     assert manifests == expected
-
-
-@pytest.mark.parametrize(
-    "interface,relation_name", [(MagicMock(), "secrets"), (MagicMock(), "service-accounts")]
-)
-@patch("charm.KServeControllerCharm._create_manifests")
-def test_send_manifests(create_manifests: MagicMock, interface, relation_name, harness: Harness):
-    """Tests manifests are properly sent"""
-    tmp_manifests = "[]"
-    create_manifests.return_value = tmp_manifests
-    interfaces = {relation_name: interface}
-    harness.begin()
-    harness.charm._send_manifests(interfaces, {}, "", relation_name)
-    interface.send_data.assert_called_with({relation_name: tmp_manifests})
 
 
 def test_validate_sdi_interface_default_return(harness: Harness):
