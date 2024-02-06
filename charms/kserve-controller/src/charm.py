@@ -410,6 +410,13 @@ class KServeControllerCharm(CharmBase):
             ].rsplit(":", 1)
         return images
 
+    def _send_manifests(
+        self, context, manifest_files, relation_requirer: KubernetesManifestRequirerWrapper
+    ):
+        """Render manifests and send to the desired relation."""
+        manifests = self._create_manifests(manifest_files, context)
+        relation_requirer.send_data(manifests)
+
     def send_object_storage_manifests(self):
         """Send object storage related manifests in case the object storage relation exists"""
         interfaces = self._get_interfaces()
@@ -434,13 +441,12 @@ class KServeControllerCharm(CharmBase):
             "secret_name": f"{self.app.name}-s3",
         }
 
-        secrets_manifests = self._create_manifests(SECRETS_FILES, secrets_context)
-        service_accounts_manifests = self._create_manifests(
-            SERVICE_ACCOUNTS_FILES, service_accounts_context
+        self._send_manifests(secrets_context, SECRETS_FILES, self.secrets_manifests_wrapper)
+        self._send_manifests(
+            service_accounts_context,
+            SERVICE_ACCOUNTS_FILES,
+            self.service_accounts_manifests_wrapper,
         )
-
-        self.secrets_manifests_wrapper.send_data(secrets_manifests)
-        self.service_accounts_manifests_wrapper.send_data(service_accounts_manifests)
 
     def _on_event(self, event):
         try:

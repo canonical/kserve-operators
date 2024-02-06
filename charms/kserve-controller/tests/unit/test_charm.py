@@ -8,13 +8,13 @@ from unittest.mock import MagicMock, patch
 import ops.testing
 import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
-from charms.resource_dispatcher.v0.kubernetes_manifests import KubernetesManifest
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
 
 from charm import KServeControllerCharm
+from tests.test_data.manifests import MANIFESTS_TEST_DATA
 
 # enable simulation of container networking
 ops.testing.SIMULATE_CAN_CONNECT = True
@@ -41,9 +41,6 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
         }
     }
 }
-
-SECRETS_TEST_FILES = ["tests/test_data/secret.yaml.j2"]
-SERVICE_ACCOUNTS_TEST_FILES = ["tests/test_data/service-account-yaml.j2"]
 
 
 class _FakeErrorWithStatus(ErrorWithStatus):
@@ -553,38 +550,8 @@ def test_restart_controller_service(harness, mocked_resource_handler, mocker):
 
 
 @pytest.mark.parametrize(
-    "context,test_file,expected",
-    [
-        (
-            {
-                "secret_name": "test",
-                "s3_endpoint": "test",
-                "s3_usehttps": "test",
-                "s3_region": "test",
-                "s3_useanoncredential": "test",
-                "s3_access_key": "test",
-                "s3_secret_access_key": "test",
-            },
-            SECRETS_TEST_FILES,
-            [
-                KubernetesManifest(
-                    manifest_content='apiVersion: v1\nkind: Secret\nmetadata:\n  name: test\n  annotations:\n     serving.kserve.io/s3-endpoint: "test"\n     serving.kserve.io/s3-usehttps: "test"\n     serving.kserve.io/s3-region: "test"\n     serving.kserve.io/s3-useanoncredential: "test"\ntype: Opaque\nstringData: # use `stringData` for raw credential string or `data` for base64 encoded string\n  AWS_ACCESS_KEY_ID: test\n  AWS_SECRET_ACCESS_KEY: test'
-                )
-            ],
-        ),
-        (
-            {
-                "svc_account_name": "test",
-                "secret_name": "test",
-            },
-            SERVICE_ACCOUNTS_TEST_FILES,
-            [
-                KubernetesManifest(
-                    manifest_content="apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: test\nsecrets:\n- name: test"
-                )
-            ],
-        ),
-    ],
+    "context, test_file, expected",
+    MANIFESTS_TEST_DATA,
 )
 def test_create_manifests(context, test_file, expected, harness: Harness):
     """Tests manifests are properly created from context data"""
