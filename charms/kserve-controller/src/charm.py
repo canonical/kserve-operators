@@ -28,6 +28,10 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRelationMissingError,
     GatewayRequirer,
 )
+from charms.resource_dispatcher.v0.kubernetes_manifests import (
+    KubernetesManifest,
+    KubernetesManifestRequirerWrapper,
+)
 from jinja2 import Template
 from jsonschema import ValidationError
 from lightkube import ApiError
@@ -143,6 +147,8 @@ class KServeControllerCharm(CharmBase):
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
         self._cm_resource_handler = None
+        self._secrets_manifests_wrapper = None
+        self._service_accounts_manifests_wrapper = None
         self._lightkube_field_manager = "lightkube"
         self._controller_container_name = "kserve-controller"
         self.controller_container = self.unit.get_container(self._controller_container_name)
@@ -260,6 +266,22 @@ class KServeControllerCharm(CharmBase):
         """Returns the local gateway info."""
         return self._local_gateway_requirer.get_relation_data()
 
+    @property
+    def secrets_manifests_wrapper(self):
+        if not self._secrets_manifests_wrapper:
+            self._secrets_manifests_wrapper = KubernetesManifestRequirerWrapper(
+                charm=self, relation_name="secrets"
+            )
+        return self._secrets_manifests_wrapper
+
+    @property
+    def service_accounts_manifests_wrapper(self):
+        if not self._service_accounts_manifests_wrapper:
+            self._service_accounts_manifests_wrapper = KubernetesManifestRequirerWrapper(
+                charm=self, relation_name="service-accounts"
+            )
+        return self._service_accounts_manifests_wrapper
+
     def _get_interfaces(self):
         # Remove this abstraction when SDI adds .status attribute to NoVersionsListed,
         # NoCompatibleVersionsListed:
@@ -339,21 +361,15 @@ class KServeControllerCharm(CharmBase):
         relation_name = "object-storage"
         return self._validate_sdi_interface(interfaces, relation_name, default_return)
 
-    def _send_manifests(self, interfaces, context, manifest_files, relation):
-        """Send manifests from folder to desired relation."""
-        if relation in interfaces and interfaces[relation]:
-            manifests = self._create_manifests(manifest_files, context)
-            interfaces[relation].send_data({relation: manifests})
-
     def _create_manifests(self, manifest_files, context):
         """Create manifests string for given folder and context."""
         manifests = []
         for file in manifest_files:
             template = Template(Path(file).read_text())
             rendered_template = template.render(**context)
-            manifest = yaml.safe_load(rendered_template)
+            manifest = KubernetesManifest(rendered_template)
             manifests.append(manifest)
-        return json.dumps(manifests)
+        return manifests
 
     def get_images(
         self, default_images: Dict[str, str], custom_images: Dict[str, str]
@@ -394,6 +410,13 @@ class KServeControllerCharm(CharmBase):
             ].rsplit(":", 1)
         return images
 
+    def _send_manifests(
+        self, context, manifest_files, relation_requirer: KubernetesManifestRequirerWrapper
+    ):
+        """Render manifests and send to the desired relation."""
+        manifests = self._create_manifests(manifest_files, context)
+        relation_requirer.send_data(manifests)
+
     def send_object_storage_manifests(self):
         """Send object storage related manifests in case the object storage relation exists"""
         interfaces = self._get_interfaces()
@@ -418,9 +441,11 @@ class KServeControllerCharm(CharmBase):
             "secret_name": f"{self.app.name}-s3",
         }
 
-        self._send_manifests(interfaces, secrets_context, SECRETS_FILES, "secrets")
+        self._send_manifests(secrets_context, SECRETS_FILES, self.secrets_manifests_wrapper)
         self._send_manifests(
-            interfaces, service_accounts_context, SERVICE_ACCOUNTS_FILES, "service-accounts"
+            service_accounts_context,
+            SERVICE_ACCOUNTS_FILES,
+            self.service_accounts_manifests_wrapper,
         )
 
     def _on_event(self, event):

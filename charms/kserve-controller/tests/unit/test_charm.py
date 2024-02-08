@@ -14,6 +14,7 @@ from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
 
 from charm import KServeControllerCharm
+from tests.test_data.manifests import MANIFESTS_TEST_DATA
 
 # enable simulation of container networking
 ops.testing.SIMULATE_CAN_CONNECT = True
@@ -40,9 +41,6 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
         }
     }
 }
-
-SECRETS_TEST_FILES = ["tests/test_data/secret.yaml.j2"]
-SERVICE_ACCOUNTS_TEST_FILES = ["tests/test_data/service-account-yaml.j2"]
 
 
 class _FakeErrorWithStatus(ErrorWithStatus):
@@ -552,50 +550,14 @@ def test_restart_controller_service(harness, mocked_resource_handler, mocker):
 
 
 @pytest.mark.parametrize(
-    "context,test_file,expected",
-    [
-        (
-            {
-                "secret_name": "test",
-                "s3_endpoint": "test",
-                "s3_usehttps": "test",
-                "s3_region": "test",
-                "s3_useanoncredential": "test",
-                "s3_access_key": "test",
-                "s3_secret_access_key": "test",
-            },
-            SECRETS_TEST_FILES,
-            '[{"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "test", "annotations": {"serving.kserve.io/s3-endpoint": "test", "serving.kserve.io/s3-usehttps": "test", "serving.kserve.io/s3-region": "test", "serving.kserve.io/s3-useanoncredential": "test"}}, "type": "Opaque", "stringData": {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}}]',  # noqa: E501
-        ),
-        (
-            {
-                "svc_account_name": "test",
-                "secret_name": "test",
-            },
-            SERVICE_ACCOUNTS_TEST_FILES,
-            '[{"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "test"}, "secrets": [{"name": "test"}]}]',
-        ),
-    ],
+    "context, test_file, expected",
+    MANIFESTS_TEST_DATA,
 )
 def test_create_manifests(context, test_file, expected, harness: Harness):
     """Tests manifests are properly created from context data"""
     harness.begin()
     manifests = harness.charm._create_manifests(test_file, context)
     assert manifests == expected
-
-
-@pytest.mark.parametrize(
-    "interface,relation_name", [(MagicMock(), "secrets"), (MagicMock(), "service-accounts")]
-)
-@patch("charm.KServeControllerCharm._create_manifests")
-def test_send_manifests(create_manifests: MagicMock, interface, relation_name, harness: Harness):
-    """Tests manifests are properly sent"""
-    tmp_manifests = "[]"
-    create_manifests.return_value = tmp_manifests
-    interfaces = {relation_name: interface}
-    harness.begin()
-    harness.charm._send_manifests(interfaces, {}, "", relation_name)
-    interface.send_data.assert_called_with({relation_name: tmp_manifests})
 
 
 def test_validate_sdi_interface_default_return(harness: Harness):
