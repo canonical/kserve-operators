@@ -1,8 +1,8 @@
 ## KServe Operators - a component of the Charmed Kubeflow distribution from Canonical
 [![CharmHub Badge](https://charmhub.io/kubeflow/badge.svg)](https://charmhub.io/kubeflow)
-[![On Pull Request](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_pull_request.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_pull_request.yaml)
-[![On Push](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_push.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_push.yaml)
-[![Release Charm to track](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/release.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/release.yaml)
+[![On Pull Request](https://github.com/canonical/kserve-operators/actions/workflows/on_pull_request.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_pull_request.yaml)
+[![On Push](https://github.com/canonical/kserve-operators/actions/workflows/on_push.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_push.yaml)
+[![Release Charm to track](https://github.com/canonical/kserve-operators/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/release.yaml)
 
 This repository hosts the Kubernetes Python Operators for KServe
 (see [CharmHub](https://charmhub.io/?q=dex-auth)).
