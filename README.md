@@ -206,7 +206,27 @@ Please see the [official docs site](https://charmed-kubeflow.io/docs) for comple
 
 ## Setting Custom Images for Kserve controller
 
-KServe controller comes with a set of preconfigured images that are used in Kserve workloads: see [default-custom-images.json](charms/kserve-controller/src/default-custom-images.json) for details.  
+KServe controller comes with a set of preconfigured images that are used in Kserve workloads. This is the list of default images used in charm.
+
+```json
+{
+    "configmap__agent": "kserve/agent:v0.11.1",
+    "configmap__batcher": "kserve/agent:v0.11.1",
+    "configmap__explainers__alibi": "kserve/alibi-explainer:latest",
+    "configmap__explainers__art": "kserve/art-explainer:latest",
+    "configmap__logger": "kserve/agent:v0.11.1",
+    "configmap__router": "kserve/router:v0.11.1",
+    "configmap__storageInitializer": "kserve/storage-initializer:v0.11.1",
+    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.11.1",
+    "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.3.2",
+    "serving_runtimes__paddleserver": "kserve/paddleserver:v0.11.1",
+    "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.11.1",
+    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.11.1",
+    "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
+    "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.8.2",
+    "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
+    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.11.1",
+}
 
 These images can be overridden in the charm configuration under custom_images in the charms/kserve-controller/config.yaml file. Whenever you leave the custom_images field empty in the config, the default images will be used (listed above). You can specify your own images with the config by filling one or multiple entries. The config accepts either YAML or JSON entries. For example.
 
