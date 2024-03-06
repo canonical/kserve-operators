@@ -1,0 +1,18 @@
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "paddle-resnet50"
+  namespace: test-ns
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: paddle
+      storageUri: "gs://kfserving-examples/models/paddle/resnet"
+      resources:
+        limits:
+          cpu: 1
+          memory: 500Mi
+        requests:
+          cpu: 100m
+          memory: 250Mi

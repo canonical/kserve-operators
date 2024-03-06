@@ -3,3 +3,4 @@
 *.tox
 build/
 .vscode
+.python-version
