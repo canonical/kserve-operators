@@ -227,6 +227,7 @@ KServe controller comes with a set of preconfigured images that are used in Kser
     "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
     "serving_runtimes__xgbserver": "kserve/xgbserver:v0.11.1",
 }
+```
 
 These images can be overridden in the charm configuration under custom_images in the charms/kserve-controller/config.yaml file. Whenever you leave the custom_images field empty in the config, the default images will be used (listed above). You can specify your own images with the config by filling one or multiple entries. The config accepts either YAML or JSON entries. For example.
 
