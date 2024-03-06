@@ -82,7 +82,7 @@ router: |-
   }
 storageInitializer: |-
   {
-      "image" : "kserve/storage-initializer:v0.11.1",
+      "image" : "charmedkubeflow/storage-initializer:0.11.2-1bda55b",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
