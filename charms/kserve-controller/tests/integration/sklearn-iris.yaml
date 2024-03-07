@@ -1,12 +1,14 @@
 apiVersion: "serving.kserve.io/v1beta1"
 kind: "InferenceService"
 metadata:
-  name: "sklearn-iris"
+  name: "sklearn-v2-iris"
 spec:
   predictor:
     model:
       modelFormat:
         name: sklearn
+      protocolVersion: v2
+      runtime: kserve-sklearnserver
       storageUri: "gs://kfserving-examples/models/sklearn/1.0/model"
       resources:
         limits:
