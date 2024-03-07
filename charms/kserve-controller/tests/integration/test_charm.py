@@ -197,7 +197,11 @@ def test_namespace(lightkube_client: lightkube.Client):
 
 @pytest.mark.parametrize(
     "inference_file",
-    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
+    [
+        "./tests/integration/sklearn-iris.yaml",
+        "./tests/integration/pmml-server.yaml",
+        "./tests/integration/paddleserver-resnet.yaml",
+    ],
 )
 def test_inference_service_raw_deployment(
     test_namespace: None, lightkube_client: lightkube.Client, inference_file, ops_test: OpsTest
