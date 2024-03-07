@@ -6,7 +6,7 @@
     "configmap__logger": "kserve/agent:v0.11.1",
     "configmap__router": "kserve/router:v0.11.1",
     "configmap__storageInitializer": "charmedkubeflow/storage-initializer:0.11.2-1bda55b",
-    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.11.1",
+    "serving_runtimes__lgbserver": "charmedkubeflow/lgbserver:0.11.2-1b3817e",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.3.2",
     "serving_runtimes__paddleserver": "charmedkubeflow/paddleserver:0.11.2-ee9909a",
     "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.11.1",
