@@ -17,7 +17,13 @@ import yaml
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import ConfigMap, Namespace, Secret, ServiceAccount
+from lightkube.resources.core_v1 import (
+    ConfigMap,
+    Namespace,
+    Pod,
+    Secret,
+    ServiceAccount,
+)
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -51,6 +57,7 @@ PodDefault = lightkube.generic_resource.create_namespaced_resource(
     "kubeflow.org", "v1alpha1", "PodDefault", "poddefaults"
 )
 TESTING_NAMESPACE_NAME = "raw-deployment"
+KSERVE_WORKLOAD_CONTAINER = "kserve-container"
 
 
 def deploy_k8s_resources(template_files: str):
@@ -87,6 +94,44 @@ def _safe_load_file_to_text(filename: str) -> str:
     except FileNotFoundError:
         text = filename
     return text
+
+
+def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: int = 50):
+    """Prints the logs for kserve serving container in the Pod backing an InferenceService.
+
+    Args:
+        lightkube_client: Client to connect to kubernetes
+        inf_svc: An InferenceService generic resource
+        tail_lines: Integer number of lines to print when printing pod logs for debugging
+    """
+    logger.info(
+        f"Printing logs for InferenceService {inf_svc.metadata.name} in namespace {inf_svc.metadata.namespace}"
+    )
+    pods = list(
+        lightkube_client.list(
+            Pod,
+            labels={"serving.kserve.io/inferenceservice": inf_svc.metadata.name},
+            namespace=inf_svc.metadata.namespace,
+        )
+    )
+    if len(pods) > 0:
+        printed_logs = False
+        pod = pods[0]
+        try:
+            for line in lightkube_client.log(
+                name=pod.metadata.name,
+                namespace=pod.metadata.namespace,
+                container=KSERVE_WORKLOAD_CONTAINER,
+                tail_lines=tail_lines,
+            ):
+                printed_logs = True
+                logger.info(line.strip())
+            if not printed_logs:
+                logger.info("No logs found - the pod might still be starting up")
+        except ApiError:
+            logger.info("Failed to retrieve logs - the pod might still be starting up")
+    else:
+        logger.info("No Pods found - the pod might not be launched yet")
 
 
 @pytest.fixture(scope="session")
@@ -196,7 +241,13 @@ def test_namespace(lightkube_client: lightkube.Client):
 
 @pytest.mark.parametrize(
     "inference_file",
-    ["./tests/integration/sklearn-iris.yaml", "./tests/integration/pmml-server.yaml"],
+    [
+        "./tests/integration/sklearn-iris.yaml",
+        "./tests/integration/lgbserver.yaml",
+        "./tests/integration/pmml-server.yaml",
+        "./tests/integration/paddleserver-resnet.yaml",
+        "./tests/integration/xgbserver.yaml",
+    ],
 )
 def test_inference_service_raw_deployment(
     test_namespace: None, lightkube_client: lightkube.Client, inference_file, ops_test: OpsTest
@@ -234,11 +285,18 @@ def test_inference_service_raw_deployment(
             inference_service_resource, inf_svc_name, namespace=TESTING_NAMESPACE_NAME
         )
         conditions = inf_svc.get("status", {}).get("conditions")
+        logger.info(
+            f"INFO: Inspecting InferenceService {inf_svc.metadata.name} in namespace {inf_svc.metadata.namespace}"
+        )
+
         for condition in conditions:
-            if condition.get("status") == "False":
+            if condition.get("status") in ["False", "Unknown"]:
+                logger.info(f"Inference service is not ready according to condition: {condition}")
                 status_overall = False
+                print_inf_svc_logs(lightkube_client=lightkube_client, inf_svc=inf_svc)
                 break
             status_overall = True
+            logger.info("Service is ready")
         assert status_overall is True
 
     create_inf_svc()

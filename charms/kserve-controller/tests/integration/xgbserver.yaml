@@ -1,15 +1,15 @@
 apiVersion: "serving.kserve.io/v1beta1"
 kind: "InferenceService"
 metadata:
-  name: "sklearn-v2-iris"
+  name: "xgboost-v2-iris"
 spec:
   predictor:
     model:
       modelFormat:
-        name: sklearn
+        name: xgboost
       protocolVersion: v2
-      runtime: kserve-sklearnserver
-      storageUri: "gs://kfserving-examples/models/sklearn/1.0/model"
+      runtime: kserve-xgbserver
+      storageUri: "gs://kfserving-examples/models/xgboost/iris"
       resources:
         limits:
           cpu: 1

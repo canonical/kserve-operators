@@ -1,15 +1,13 @@
 apiVersion: "serving.kserve.io/v1beta1"
 kind: "InferenceService"
 metadata:
-  name: "sklearn-v2-iris"
+  name: "paddle-resnet50"
 spec:
   predictor:
     model:
       modelFormat:
-        name: sklearn
-      protocolVersion: v2
-      runtime: kserve-sklearnserver
-      storageUri: "gs://kfserving-examples/models/sklearn/1.0/model"
+        name: paddle
+      storageUri: "gs://kfserving-examples/models/paddle/resnet"
       resources:
         limits:
           cpu: 1
