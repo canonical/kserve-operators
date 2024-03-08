@@ -247,6 +247,7 @@ def test_namespace(lightkube_client: lightkube.Client):
         "./tests/integration/lgbserver.yaml",
         "./tests/integration/pmml-server.yaml",
         "./tests/integration/paddleserver-resnet.yaml",
+        "./tests/integration/xgbserver.yaml",
     ],
 )
 def test_inference_service_raw_deployment(
