@@ -1,0 +1,17 @@
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "lightgbm-iris"
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: lightgbm
+      storageUri: "gs://kfserving-examples/models/lightgbm/iris"
+      resources:
+        limits:
+          cpu: 1
+          memory: 500Mi
+        requests:
+          cpu: 100m
+          memory: 250Mi

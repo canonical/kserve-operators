@@ -244,6 +244,7 @@ def test_namespace(lightkube_client: lightkube.Client):
     "inference_file",
     [
         "./tests/integration/sklearn-iris.yaml",
+        "./tests/integration/lgbserver.yaml",
         "./tests/integration/pmml-server.yaml",
         "./tests/integration/paddleserver-resnet.yaml",
     ],
