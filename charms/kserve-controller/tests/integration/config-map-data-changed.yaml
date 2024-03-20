@@ -1,6 +1,6 @@
 agent: |-
   {
-      "image" : "kserve/agent:v0.11.1",
+      "image" : "charmedkubeflow/kserve-agent:0.11.2-f6cb212",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -60,7 +60,7 @@ ingress: |-
   }
 logger: |-
   {
-      "image" : "kserve/agent:v0.11.1",
+      "image" : "charmedkubeflow/kserve-agent:0.11.2-f6cb212",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
