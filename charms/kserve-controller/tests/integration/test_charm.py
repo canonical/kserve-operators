@@ -26,59 +26,19 @@ from lightkube.resources.core_v1 import (
 )
 from pytest_operator.plugin import OpsTest
 
+from . import constants
+
 logger = logging.getLogger(__name__)
-
-MANIFESTS_SUFFIX = "-s3"
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-METACONTROLLER = "metacontroller-operator"
-METACONTROLLER_CHANNEL = "3.0/stable"
-METACONTROLLER_TRUST = True
-MINIO = "minio"
-MINIO_CHANNEL = "ckf-1.8/stable"
-MINIO_CONFIG = {
-    "access-key": "minio",
-    "secret-key": "minio123",
-    "port": "9000",
-}
-RESOURCE_DISPATCHER = "resource-dispatcher"
-RESOURCE_DISPATCHER_CHANNEL = "1.0/stable"
-RESOURCE_DISPATCHER_TRUST = True
-ISTIO_CHANNEL = "1.17/stable"
-ISTIO_PILOT = "istio-pilot"
-ISTIO_PILOT_TRUST = True
-ISTIO_GATEWAY = "istio-gateway"
-ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
-ISTIO_GATEWAY_TRUST = True
-KNATIVE_CHANNEL = "1.10/stable"
-KNATIVE_OPERATOR = "knative-operator"
-KNATIVE_OPERATOR_TRUST = True
-KNATIVE_SERVING = "knative-serving"
-KNATIVE_SERVING_TRUST = True
-CHARM_NAME = METADATA["name"]
-NAMESPACE_FILE = "./tests/integration/namespace.yaml"
-TESTING_LABELS = ["user.kubeflow.org/enabled"]
-ISTIO_INGRESS_GATEWAY = "test-gateway"
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-APP_NAME = METADATA["name"]
-CONFIGMAP_NAME = "inferenceservice-config"
-EXPECTED_CONFIGMAP = yaml.safe_load(Path("./tests/integration/config-map-data.yaml").read_text())
-EXPECTED_CONFIGMAP_CHANGED = yaml.safe_load(
-    Path("./tests/integration/config-map-data-changed.yaml").read_text()
-)
-PODDEFAULTS_CRD_TEMPLATE = "./tests/integration/crds/poddefaults.yaml"
-
 PodDefault = lightkube.generic_resource.create_namespaced_resource(
     "kubeflow.org", "v1alpha1", "PodDefault", "poddefaults"
 )
-TESTING_NAMESPACE_NAME = "raw-deployment"
-KSERVE_WORKLOAD_CONTAINER = "kserve-container"
 
 
 def deploy_k8s_resources(template_files: str):
     """Deploy k8s resources from template files."""
-    lightkube_client = lightkube.Client(field_manager=CHARM_NAME)
+    lightkube_client = lightkube.Client(field_manager=constants.CHARM_NAME)
     k8s_resource_handler = KubernetesResourceHandler(
-        field_manager=CHARM_NAME, template_files=template_files, context={}
+        field_manager=constants.CHARM_NAME, template_files=template_files, context={}
     )
     lightkube.generic_resource.load_in_cluster_generic_resources(lightkube_client)
     k8s_resource_handler.apply()
@@ -135,7 +95,7 @@ def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: 
             for line in lightkube_client.log(
                 name=pod.metadata.name,
                 namespace=pod.metadata.namespace,
-                container=KSERVE_WORKLOAD_CONTAINER,
+                container=constants.KSERVE_WORKLOAD_CONTAINER,
                 tail_lines=tail_lines,
             ):
                 printed_logs = True
@@ -151,9 +111,9 @@ def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: 
 @pytest.fixture(scope="session")
 def namespace(lightkube_client: lightkube.Client):
     """Create user namespace with testing label"""
-    yaml_text = _safe_load_file_to_text(NAMESPACE_FILE)
+    yaml_text = _safe_load_file_to_text(constants.NAMESPACE_FILE)
     yaml_rendered = yaml.safe_load(yaml_text)
-    for label in TESTING_LABELS:
+    for label in constants.TESTING_LABELS:
         yaml_rendered["metadata"]["labels"][label] = "true"
     obj = lightkube.codecs.from_dict(yaml_rendered)
     lightkube_client.apply(obj)
@@ -189,22 +149,22 @@ async def test_build_and_deploy(ops_test: OpsTest):
     """
     # Deploy istio-operators for ingress configuration
     await ops_test.model.deploy(
-        ISTIO_PILOT,
-        channel=ISTIO_CHANNEL,
-        config={"default-gateway": ISTIO_INGRESS_GATEWAY},
-        trust=ISTIO_PILOT_TRUST,
+        constants.ISTIO_PILOT,
+        channel=constants.ISTIO_CHANNEL,
+        config={"default-gateway": constants.ISTIO_INGRESS_GATEWAY},
+        trust=constants.ISTIO_PILOT_TRUST,
     )
 
     await ops_test.model.deploy(
-        ISTIO_GATEWAY,
-        application_name=ISTIO_GATEWAY_APP_NAME,
-        channel=ISTIO_CHANNEL,
+        constants.ISTIO_GATEWAY,
+        application_name=constants.ISTIO_GATEWAY_APP_NAME,
+        channel=constants.ISTIO_CHANNEL,
         config={"kind": "ingress"},
-        trust=ISTIO_GATEWAY_TRUST,
+        trust=constants.ISTIO_GATEWAY_TRUST,
     )
     await ops_test.model.add_relation("istio-pilot", "istio-ingressgateway")
     await ops_test.model.wait_for_idle(
-        [ISTIO_PILOT, ISTIO_GATEWAY_APP_NAME],
+        [constants.ISTIO_PILOT, constants.ISTIO_GATEWAY_APP_NAME],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
@@ -213,16 +173,18 @@ async def test_build_and_deploy(ops_test: OpsTest):
     # build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     resources = {
-        "kserve-controller-image": METADATA["resources"]["kserve-controller-image"][
+        "kserve-controller-image": constants.METADATA["resources"]["kserve-controller-image"][
             "upstream-source"
         ],
-        "kube-rbac-proxy-image": METADATA["resources"]["kube-rbac-proxy-image"]["upstream-source"],
+        "kube-rbac-proxy-image": constants.METADATA["resources"]["kube-rbac-proxy-image"][
+            "upstream-source"
+        ],
     }
     await ops_test.model.deploy(
         charm,
         resources=resources,
         config={"deployment-mode": "rawdeployment"},
-        application_name=APP_NAME,
+        application_name=constants.APP_NAME,
         trust=True,
     )
     await ops_test.model.add_relation("istio-pilot", "kserve-controller")
@@ -230,12 +192,12 @@ async def test_build_and_deploy(ops_test: OpsTest):
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
+            apps=[constants.APP_NAME],
             status="active",
             raise_on_blocked=False,
             timeout=1000,
         )
-    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+    assert ops_test.model.applications[constants.APP_NAME].units[0].workload_status == "active"
 
 
 @pytest.fixture()
@@ -246,11 +208,13 @@ def test_namespace(lightkube_client: lightkube.Client):
         reraise=True,
     )
     def create_namespace():
-        lightkube_client.create(Namespace(metadata=ObjectMeta(name=TESTING_NAMESPACE_NAME)))
+        lightkube_client.create(
+            Namespace(metadata=ObjectMeta(name=constants.TESTING_NAMESPACE_NAME))
+        )
 
     create_namespace()
     yield
-    lightkube_client.delete(Namespace, name=TESTING_NAMESPACE_NAME)
+    lightkube_client.delete(Namespace, name=constants.TESTING_NAMESPACE_NAME)
 
 
 @pytest.mark.parametrize(
@@ -286,7 +250,7 @@ def test_inference_service_raw_deployment(
         reraise=True,
     )
     def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=TESTING_NAMESPACE_NAME)
+        lightkube_client.create(inf_svc_object, namespace=constants.TESTING_NAMESPACE_NAME)
 
     # Assert InferenceService state is Available
     @tenacity.retry(
@@ -296,7 +260,7 @@ def test_inference_service_raw_deployment(
     )
     def assert_inf_svc_state():
         inf_svc = lightkube_client.get(
-            inference_service_resource, inf_svc_name, namespace=TESTING_NAMESPACE_NAME
+            inference_service_resource, inf_svc_name, namespace=constants.TESTING_NAMESPACE_NAME
         )
         conditions = inf_svc.get("status", {}).get("conditions")
         logger.info(
@@ -330,9 +294,9 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
     # Deploy knative-operator
     await ops_test.model.deploy(
-        KNATIVE_OPERATOR,
-        channel=KNATIVE_CHANNEL,
-        trust=KNATIVE_OPERATOR_TRUST,
+        constants.KNATIVE_OPERATOR,
+        channel=constants.KNATIVE_CHANNEL,
+        trust=constants.KNATIVE_OPERATOR_TRUST,
     )
 
     # Wait for idle knative-operator before deploying knative-serving
@@ -346,17 +310,17 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
     # Deploy knative-serving
     await ops_test.model.deploy(
-        KNATIVE_SERVING,
-        channel=KNATIVE_CHANNEL,
+        constants.KNATIVE_SERVING,
+        channel=constants.KNATIVE_CHANNEL,
         config={
             "namespace": "knative-serving",
             "istio.gateway.namespace": namespace,
-            "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
+            "istio.gateway.name": constants.ISTIO_INGRESS_GATEWAY,
         },
-        trust=KNATIVE_SERVING_TRUST,
+        trust=constants.KNATIVE_SERVING_TRUST,
     )
     await ops_test.model.wait_for_idle(
-        [KNATIVE_SERVING],
+        [constants.KNATIVE_SERVING],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
@@ -444,9 +408,9 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
     inferenceservice_config = lightkube_client.get(
-        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+        ConfigMap, constants.CONFIGMAP_NAME, namespace=ops_test.model_name
     )
-    assert inferenceservice_config.data == EXPECTED_CONFIGMAP
+    assert inferenceservice_config.data == constants.EXPECTED_CONFIGMAP
 
 
 async def test_configmap_changes_with_config(
@@ -468,30 +432,32 @@ async def test_configmap_changes_with_config(
         apps=["kserve-controller"], status="active", raise_on_blocked=True, timeout=300
     )
     inferenceservice_config = lightkube_client.get(
-        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+        ConfigMap, constants.CONFIGMAP_NAME, namespace=ops_test.model_name
     )
-    assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
+    assert inferenceservice_config.data == constants.EXPECTED_CONFIGMAP_CHANGED
 
 
 async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
-    await ops_test.model.deploy(MINIO, channel=MINIO_CHANNEL, config=MINIO_CONFIG)
+    await ops_test.model.deploy(
+        constants.MINIO, channel=constants.MINIO_CHANNEL, config=constants.MINIO_CONFIG
+    )
     await ops_test.model.wait_for_idle(
-        apps=[MINIO],
+        apps=[constants.MINIO],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=600,
     )
-    await ops_test.model.relate(MINIO, CHARM_NAME)
+    await ops_test.model.relate(constants.MINIO, constants.CHARM_NAME)
     await ops_test.model.wait_for_idle(
-        apps=[CHARM_NAME],
+        apps=[constants.CHARM_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=600,
     )
-    assert ops_test.model.applications[CHARM_NAME].units[0].workload_status == "active"
+    assert ops_test.model.applications[constants.CHARM_NAME].units[0].workload_status == "active"
 
 
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
@@ -500,24 +466,26 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
 
     We need to deploy Metacontroller and poddefaults CRD (for Resource dispatcher).
     """
-    deploy_k8s_resources([PODDEFAULTS_CRD_TEMPLATE])
+    deploy_k8s_resources([constants.PODDEFAULTS_CRD_TEMPLATE])
     await ops_test.model.deploy(
-        entity_url=METACONTROLLER,
-        channel=METACONTROLLER_CHANNEL,
-        trust=METACONTROLLER_TRUST,
+        entity_url=constants.METACONTROLLER,
+        channel=constants.METACONTROLLER_CHANNEL,
+        trust=constants.METACONTROLLER_TRUST,
     )
     await ops_test.model.wait_for_idle(
-        apps=[METACONTROLLER],
+        apps=[constants.METACONTROLLER],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=120,
     )
     await ops_test.model.deploy(
-        RESOURCE_DISPATCHER, channel=RESOURCE_DISPATCHER_CHANNEL, trust=RESOURCE_DISPATCHER_TRUST
+        constants.RESOURCE_DISPATCHER,
+        channel=constants.RESOURCE_DISPATCHER_CHANNEL,
+        trust=constants.RESOURCE_DISPATCHER_TRUST,
     )
     await ops_test.model.wait_for_idle(
-        apps=[CHARM_NAME],
+        apps=[constants.CHARM_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -526,18 +494,21 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     )
 
     await ops_test.model.relate(
-        f"{CHARM_NAME}:service-accounts", f"{RESOURCE_DISPATCHER}:service-accounts"
+        f"{constants.CHARM_NAME}:service-accounts",
+        f"{constants.RESOURCE_DISPATCHER}:service-accounts",
     )
-    await ops_test.model.relate(f"{CHARM_NAME}:secrets", f"{RESOURCE_DISPATCHER}:secrets")
+    await ops_test.model.relate(
+        f"{constants.CHARM_NAME}:secrets", f"{constants.RESOURCE_DISPATCHER}:secrets"
+    )
 
     await ops_test.model.wait_for_idle(
-        apps=[RESOURCE_DISPATCHER, CHARM_NAME],
+        apps=[constants.RESOURCE_DISPATCHER, constants.CHARM_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=1200,
     )
-    assert ops_test.model.applications[CHARM_NAME].units[0].workload_status == "active"
+    assert ops_test.model.applications[constants.CHARM_NAME].units[0].workload_status == "active"
 
 
 async def test_new_user_namespace_has_manifests(
@@ -545,15 +516,15 @@ async def test_new_user_namespace_has_manifests(
 ):
     """Create user namespace with correct label and check manifests."""
     time.sleep(30)  # sync can take up to 10 seconds for reconciliation loop to trigger
-    manifests_name = f"{CHARM_NAME}{MANIFESTS_SUFFIX}"
+    manifests_name = f"{constants.CHARM_NAME}{constants.MANIFESTS_SUFFIX}"
     secret = lightkube_client.get(Secret, manifests_name, namespace=namespace)
     service_account = lightkube_client.get(ServiceAccount, manifests_name, namespace=namespace)
     assert secret.data == {
-        "AWS_ACCESS_KEY_ID": base64.b64encode(MINIO_CONFIG["access-key"].encode("utf-8")).decode(
-            "utf-8"
-        ),
+        "AWS_ACCESS_KEY_ID": base64.b64encode(
+            constants.MINIO_CONFIG["access-key"].encode("utf-8")
+        ).decode("utf-8"),
         "AWS_SECRET_ACCESS_KEY": base64.b64encode(
-            MINIO_CONFIG["secret-key"].encode("utf-8")
+            constants.MINIO_CONFIG["secret-key"].encode("utf-8")
         ).decode("utf-8"),
     }
     assert service_account.secrets[0].name == manifests_name
