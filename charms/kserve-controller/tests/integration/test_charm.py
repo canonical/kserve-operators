@@ -26,7 +26,7 @@ from lightkube.resources.core_v1 import (
 )
 from pytest_operator.plugin import OpsTest
 
-from tests.integration import constants
+from . import constants
 
 logger = logging.getLogger(__name__)
 PodDefault = lightkube.generic_resource.create_namespaced_resource(
