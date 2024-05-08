@@ -30,19 +30,33 @@ logger = logging.getLogger(__name__)
 
 MANIFESTS_SUFFIX = "-s3"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-METACONTROLLER_CHARM_NAME = "metacontroller-operator"
-OBJECT_STORAGE_CHARM_NAME = "minio"
-OBJECT_STORAGE_CONFIG = {
+METACONTROLLER = "metacontroller-operator"
+METACONTROLLER_CHANNEL = "3.0/stable"
+METACONTROLLER_TRUST = True
+MINIO = "minio"
+MINIO_CHANNEL = "ckf-1.8/stable"
+MINIO_CONFIG = {
     "access-key": "minio",
     "secret-key": "minio123",
     "port": "9000",
 }
-RESOURCE_DISPATCHER_CHARM_NAME = "resource-dispatcher"
+RESOURCE_DISPATCHER = "resource-dispatcher"
+RESOURCE_DISPATCHER_CHANNEL = "1.0/stable"
+RESOURCE_DISPATCHER_TRUST = True
+ISTIO_CHANNEL = "1.17/stable"
+ISTIO_PILOT = "istio-pilot"
+ISTIO_PILOT_TRUST = True
+ISTIO_GATEWAY = "istio-gateway"
+ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+ISTIO_GATEWAY_TRUST = True
+KNATIVE_CHANNEL = "1.10/stable"
+KNATIVE_OPERATOR = "knative-operator"
+KNATIVE_OPERATOR_TRUST = True
+KNATIVE_SERVING = "knative-serving"
+KNATIVE_SERVING_TRUST = True
 CHARM_NAME = METADATA["name"]
 NAMESPACE_FILE = "./tests/integration/namespace.yaml"
 TESTING_LABELS = ["user.kubeflow.org/enabled"]
-ISTIO_VERSION = "1.16/stable"
-KNATIVE_VERSION = "latest/edge"
 ISTIO_INGRESS_GATEWAY = "test-gateway"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
@@ -175,22 +189,22 @@ async def test_build_and_deploy(ops_test: OpsTest):
     """
     # Deploy istio-operators for ingress configuration
     await ops_test.model.deploy(
-        "istio-pilot",
-        channel=ISTIO_VERSION,
+        ISTIO_PILOT,
+        channel=ISTIO_CHANNEL,
         config={"default-gateway": ISTIO_INGRESS_GATEWAY},
-        trust=True,
+        trust=ISTIO_PILOT_TRUST,
     )
 
     await ops_test.model.deploy(
-        "istio-gateway",
-        application_name="istio-ingressgateway",
-        channel=ISTIO_VERSION,
+        ISTIO_GATEWAY,
+        application_name=ISTIO_GATEWAY_APP_NAME,
+        channel=ISTIO_CHANNEL,
         config={"kind": "ingress"},
-        trust=True,
+        trust=ISTIO_GATEWAY_TRUST,
     )
     await ops_test.model.add_relation("istio-pilot", "istio-ingressgateway")
     await ops_test.model.wait_for_idle(
-        ["istio-pilot", "istio-ingressgateway"],
+        [ISTIO_PILOT, ISTIO_GATEWAY_APP_NAME],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
@@ -316,9 +330,9 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
     # Deploy knative-operator
     await ops_test.model.deploy(
-        "knative-operator",
-        channel=KNATIVE_VERSION,
-        trust=True,
+        KNATIVE_OPERATOR,
+        channel=KNATIVE_CHANNEL,
+        trust=KNATIVE_OPERATOR_TRUST,
     )
 
     # Wait for idle knative-operator before deploying knative-serving
@@ -332,17 +346,17 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
     # Deploy knative-serving
     await ops_test.model.deploy(
-        "knative-serving",
-        channel=KNATIVE_VERSION,
+        KNATIVE_SERVING,
+        channel=KNATIVE_CHANNEL,
         config={
             "namespace": "knative-serving",
             "istio.gateway.namespace": namespace,
             "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
         },
-        trust=True,
+        trust=KNATIVE_SERVING_TRUST,
     )
     await ops_test.model.wait_for_idle(
-        ["knative-serving"],
+        [KNATIVE_SERVING],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
@@ -461,17 +475,15 @@ async def test_configmap_changes_with_config(
 
 async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
-    await ops_test.model.deploy(
-        OBJECT_STORAGE_CHARM_NAME, channel="ckf-1.8/stable", config=OBJECT_STORAGE_CONFIG
-    )
+    await ops_test.model.deploy(MINIO, channel=MINIO_CHANNEL, config=MINIO_CONFIG)
     await ops_test.model.wait_for_idle(
-        apps=[OBJECT_STORAGE_CHARM_NAME],
+        apps=[MINIO],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=600,
     )
-    await ops_test.model.relate(OBJECT_STORAGE_CHARM_NAME, CHARM_NAME)
+    await ops_test.model.relate(MINIO, CHARM_NAME)
     await ops_test.model.wait_for_idle(
         apps=[CHARM_NAME],
         status="active",
@@ -490,18 +502,20 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     """
     deploy_k8s_resources([PODDEFAULTS_CRD_TEMPLATE])
     await ops_test.model.deploy(
-        entity_url=METACONTROLLER_CHARM_NAME,
-        channel="3.0/stable",
-        trust=True,
+        entity_url=METACONTROLLER,
+        channel=METACONTROLLER_CHANNEL,
+        trust=METACONTROLLER_TRUST,
     )
     await ops_test.model.wait_for_idle(
-        apps=[METACONTROLLER_CHARM_NAME],
+        apps=[METACONTROLLER],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=120,
     )
-    await ops_test.model.deploy(RESOURCE_DISPATCHER_CHARM_NAME, channel="1.0/stable", trust=True)
+    await ops_test.model.deploy(
+        RESOURCE_DISPATCHER, channel=RESOURCE_DISPATCHER_CHANNEL, trust=RESOURCE_DISPATCHER_TRUST
+    )
     await ops_test.model.wait_for_idle(
         apps=[CHARM_NAME],
         status="active",
@@ -512,14 +526,12 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     )
 
     await ops_test.model.relate(
-        f"{CHARM_NAME}:service-accounts", f"{RESOURCE_DISPATCHER_CHARM_NAME}:service-accounts"
+        f"{CHARM_NAME}:service-accounts", f"{RESOURCE_DISPATCHER}:service-accounts"
     )
-    await ops_test.model.relate(
-        f"{CHARM_NAME}:secrets", f"{RESOURCE_DISPATCHER_CHARM_NAME}:secrets"
-    )
+    await ops_test.model.relate(f"{CHARM_NAME}:secrets", f"{RESOURCE_DISPATCHER}:secrets")
 
     await ops_test.model.wait_for_idle(
-        apps=[RESOURCE_DISPATCHER_CHARM_NAME, CHARM_NAME],
+        apps=[RESOURCE_DISPATCHER, CHARM_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -537,11 +549,11 @@ async def test_new_user_namespace_has_manifests(
     secret = lightkube_client.get(Secret, manifests_name, namespace=namespace)
     service_account = lightkube_client.get(ServiceAccount, manifests_name, namespace=namespace)
     assert secret.data == {
-        "AWS_ACCESS_KEY_ID": base64.b64encode(
-            OBJECT_STORAGE_CONFIG["access-key"].encode("utf-8")
-        ).decode("utf-8"),
+        "AWS_ACCESS_KEY_ID": base64.b64encode(MINIO_CONFIG["access-key"].encode("utf-8")).decode(
+            "utf-8"
+        ),
         "AWS_SECRET_ACCESS_KEY": base64.b64encode(
-            OBJECT_STORAGE_CONFIG["secret-key"].encode("utf-8")
+            MINIO_CONFIG["secret-key"].encode("utf-8")
         ).decode("utf-8"),
     }
     assert service_account.secrets[0].name == manifests_name
