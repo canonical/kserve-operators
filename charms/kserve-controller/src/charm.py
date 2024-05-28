@@ -72,6 +72,7 @@ K8S_RESOURCE_FILES = [
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
+    "src/templates/cluster_storage_containers.yaml.j2",
 ]
 
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/

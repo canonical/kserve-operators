@@ -23,6 +23,7 @@ options:
       configmap__logger : ''
       configmap__router : ''
       configmap__storageInitializer : ''
+      serving_runtimes__huggingfaceserver: ''
       serving_runtimes__lgbserver : ''
       serving_runtimes__kserve_mlserver : ''
       serving_runtimes__paddleserver : ''

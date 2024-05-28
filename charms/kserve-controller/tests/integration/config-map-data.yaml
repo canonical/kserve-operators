@@ -1,6 +1,6 @@
 agent: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.11.2-f6cb212",
+      "image" : "kserve/agent:v0.12.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -8,11 +8,13 @@ agent: |-
   }
 batcher: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.11.2-f6cb212",
+      "image" : "kserve/agent:v0.12.1",
       "memoryRequest": "1Gi",
       "memoryLimit": "1Gi",
       "cpuRequest": "1",
-      "cpuLimit": "1"
+      "cpuLimit": "1",
+      "maxBatchSize": "32",
+      "maxLatency": "5000"
   }
 credentials: |-
   {
@@ -29,6 +31,7 @@ credentials: |-
          "s3Region": "",
          "s3VerifySSL": "",
          "s3UseVirtualBucket": "",
+         "s3UseAccelerate": "",
          "s3UseAnonymousCredential": "",
          "s3CABundle": ""
      }
@@ -60,7 +63,7 @@ ingress: |-
   }
 logger: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.11.2-f6cb212",
+      "image" : "kserve/agent:v0.12.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -74,7 +77,7 @@ metricsAggregator: |-
   }
 router: |-
   {
-      "image" : "kserve/router:v0.11.1",
+      "image" : "kserve/router:v0.12.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -82,10 +85,15 @@ router: |-
   }
 storageInitializer: |-
   {
-      "image" : "charmedkubeflow/storage-initializer:0.11.2-1bda55b",
+      "image" : "kserve/storage-initializer:v0.12.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
       "cpuLimit": "1",
-      "enableDirectPvcVolumeMount": false
+      "caBundleConfigMapName": "",
+      "caBundleVolumeMountPath": "/etc/ssl/custom-certs",
+      "enableDirectPvcVolumeMount": true,
+      "enableModelcar": false,
+      "cpuModelcar": "10m",
+      "memoryModelcar": "15Mi"
   }

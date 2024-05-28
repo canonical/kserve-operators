@@ -14,7 +14,9 @@ data:
         "memoryRequest": "1Gi",
         "memoryLimit": "1Gi",
         "cpuRequest": "1",
-        "cpuLimit": "1"
+        "cpuLimit": "1",
+        "maxBatchSize": "32",
+        "maxLatency": "5000"
     }
   credentials: |-
     {
@@ -31,6 +33,7 @@ data:
            "s3Region": "",
            "s3VerifySSL": "",
            "s3UseVirtualBucket": "",
+           "s3UseAccelerate": "",
            "s3UseAnonymousCredential": "",
            "s3CABundle": ""
        }
@@ -91,7 +94,12 @@ data:
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
         "cpuLimit": "1",
-        "enableDirectPvcVolumeMount": false
+        "caBundleConfigMapName": "",
+        "caBundleVolumeMountPath": "/etc/ssl/custom-certs",
+        "enableDirectPvcVolumeMount": true,
+        "enableModelcar": false,
+        "cpuModelcar": "10m",
+        "memoryModelcar": "15Mi"
     }
 kind: ConfigMap
 metadata:

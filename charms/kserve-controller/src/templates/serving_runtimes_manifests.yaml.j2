@@ -1,6 +1,35 @@
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  name: kserve-huggingfaceserver
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
+  containers:
+  - args:
+    - --model_name= {{ '{{.Name}}' }}
+    image: {{ serving_runtimes__huggingfaceserver }}
+    name: kserve-container
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+  protocolVersions:
+  - v2
+  - v1
+  supportedModelFormats:
+  - autoSelect: true
+    name: huggingface
+    priority: 1
+    version: "1"
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
   name: kserve-lgbserver
 spec:
   annotations:
@@ -62,7 +91,7 @@ spec:
   supportedModelFormats:
   - autoSelect: true
     name: sklearn
-    priority: 1
+    priority: 2
     version: "0"
   - autoSelect: true
     name: sklearn
@@ -246,7 +275,7 @@ spec:
   protocolVersions:
   - v1
   - v2
-  - grpc-v1
+  - grpc-v2
   supportedModelFormats:
   - autoSelect: true
     name: pytorch
