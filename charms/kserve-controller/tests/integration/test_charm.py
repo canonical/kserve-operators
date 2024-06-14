@@ -448,7 +448,7 @@ async def test_configmap_changes_with_config(
     """
     await ops_test.model.applications["kserve-controller"].set_config(
         {
-            "custom_images": '{"configmap__batcher": "custom:1.0", "configmap__explainers__alibi": "custom:2.1"}'  # noqa: E501
+            "custom_images": '{"configmap__batcher": "custom:1.0"}'  # noqa: E501
         }
     )
     await ops_test.model.wait_for_idle(

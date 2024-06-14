@@ -403,7 +403,6 @@ class KServeControllerCharm(CharmBase):
 
         # This are special cases comfigmap where they need to be split into image and version
         for image_name in [
-            "configmap__explainers__alibi",
             "configmap__explainers__art",
         ]:
             images[f"{image_name}__image"], images[f"{image_name}__version"] = images[
