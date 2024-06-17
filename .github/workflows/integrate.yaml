@@ -57,6 +57,7 @@ jobs:
           provider: microk8s
           channel: 1.25-strict/stable
           juju-channel: 3.5/stable
+          bootstrap-options: "--agent-version 3.5.0"
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: latest/candidate
       - run: |
