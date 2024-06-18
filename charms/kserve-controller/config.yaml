@@ -18,7 +18,6 @@ options:
     default: | 
       configmap__agent : ''
       configmap__batcher : ''
-      configmap__explainers__alibi : ''
       configmap__explainers__art : ''
       configmap__logger : ''
       configmap__router : ''
