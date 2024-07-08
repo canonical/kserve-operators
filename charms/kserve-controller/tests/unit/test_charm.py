@@ -91,6 +91,13 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     yield mocked_resource_handler.lightkube_client
 
 
+def test_log_forwarding(harness):
+    """Test LogForwarder initialization."""
+    with patch("charm.LogForwarder") as mock_logging:
+        harness.begin()
+        mock_logging.assert_called_once_with(charm=harness.charm)
+
+
 def test_events(harness, mocked_resource_handler, mocker):
     harness.begin()
     on_event = mocker.patch("charm.KServeControllerCharm._on_event")

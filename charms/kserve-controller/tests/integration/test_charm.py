@@ -15,6 +15,11 @@ import pytest
 import tenacity
 import yaml
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
+from charmed_kubeflow_chisme.testing import (
+    GRAFANA_AGENT_APP,
+    assert_logging,
+    deploy_and_assert_grafana_agent,
+)
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import (
@@ -189,7 +194,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         config={"kind": "ingress"},
         trust=True,
     )
-    await ops_test.model.add_relation("istio-pilot", "istio-ingressgateway")
+    await ops_test.model.integrate("istio-pilot", "istio-ingressgateway")
     await ops_test.model.wait_for_idle(
         ["istio-pilot", "istio-ingressgateway"],
         raise_on_blocked=False,
@@ -212,7 +217,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         application_name=APP_NAME,
         trust=True,
     )
-    await ops_test.model.add_relation("istio-pilot", "kserve-controller")
+    await ops_test.model.integrate("istio-pilot", APP_NAME)
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward():
@@ -223,6 +228,11 @@ async def test_build_and_deploy(ops_test: OpsTest):
             timeout=1000,
         )
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+
+    # Deploying grafana-agent-k8s and add all relations
+    await deploy_and_assert_grafana_agent(
+        ops_test.model, APP_NAME, metrics=False, dashboard=False, logging=True
+    )
 
 
 @pytest.fixture()
@@ -304,6 +314,12 @@ def test_inference_service_raw_deployment(
     assert_inf_svc_state()
 
 
+async def test_logging(ops_test: OpsTest):
+    """Test logging is defined in relation data bag."""
+    app = ops_test.model.applications[GRAFANA_AGENT_APP]
+    await assert_logging(app)
+
+
 #    # Remove the InferenceService deployed in RawDeployment mode
 #    lightkube_client.delete(
 #        inference_service_resource, name=inf_svc_name, namespace=rawdeployment_mode_namespace
@@ -350,15 +366,13 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     )
 
     # Relate kserve-controller and knative-serving
-    await ops_test.model.add_relation("knative-serving", "kserve-controller")
+    await ops_test.model.integrate("knative-serving", APP_NAME)
 
     # Change deployment mode to Serverless
-    await ops_test.model.applications["kserve-controller"].set_config(
-        {"deployment-mode": "serverless"}
-    )
+    await ops_test.model.applications[APP_NAME].set_config({"deployment-mode": "serverless"})
 
     await ops_test.model.wait_for_idle(
-        ["kserve-controller"],
+        [APP_NAME],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
@@ -446,11 +460,11 @@ async def test_configmap_changes_with_config(
         lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
-    await ops_test.model.applications["kserve-controller"].set_config(
+    await ops_test.model.applications[APP_NAME].set_config(
         {"custom_images": '{"configmap__batcher": "custom:1.0"}'}  # noqa: E501
     )
     await ops_test.model.wait_for_idle(
-        apps=["kserve-controller"], status="active", raise_on_blocked=True, timeout=300
+        apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=300
     )
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
@@ -461,7 +475,10 @@ async def test_configmap_changes_with_config(
 async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
     await ops_test.model.deploy(
-        OBJECT_STORAGE_CHARM_NAME, channel="ckf-1.7/stable", config=OBJECT_STORAGE_CONFIG
+        OBJECT_STORAGE_CHARM_NAME,
+        channel="ckf-1.7/stable",
+        config=OBJECT_STORAGE_CONFIG,
+        trust=True,
     )
     await ops_test.model.wait_for_idle(
         apps=[OBJECT_STORAGE_CHARM_NAME],
@@ -470,7 +487,7 @@ async def test_relate_to_object_store(ops_test: OpsTest):
         raise_on_error=False,
         timeout=600,
     )
-    await ops_test.model.relate(OBJECT_STORAGE_CHARM_NAME, CHARM_NAME)
+    await ops_test.model.integrate(OBJECT_STORAGE_CHARM_NAME, CHARM_NAME)
     await ops_test.model.wait_for_idle(
         apps=[CHARM_NAME],
         status="active",
@@ -510,10 +527,10 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
         idle_period=60,
     )
 
-    await ops_test.model.relate(
+    await ops_test.model.integrate(
         f"{CHARM_NAME}:service-accounts", f"{RESOURCE_DISPATCHER_CHARM_NAME}:service-accounts"
     )
-    await ops_test.model.relate(
+    await ops_test.model.integrate(
         f"{CHARM_NAME}:secrets", f"{RESOURCE_DISPATCHER_CHARM_NAME}:secrets"
     )
 
@@ -553,8 +570,8 @@ async def test_blocked_on_invalid_config(ops_test: OpsTest):
     Args:
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
-    await ops_test.model.applications["kserve-controller"].set_config({"custom_images": "{"})
+    await ops_test.model.applications[APP_NAME].set_config({"custom_images": "{"})
     await ops_test.model.wait_for_idle(
-        apps=["kserve-controller"], status="blocked", raise_on_blocked=False, timeout=300
+        apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=300
     )
-    assert ops_test.model.applications["kserve-controller"].units[0].workload_status == "blocked"
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
