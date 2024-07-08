@@ -652,7 +652,6 @@ class KServeControllerCharm(CharmBase):
             return
 
         try:
-            # dummy
             self.controller_container.restart(self._controller_container_name)
         except APIError as err:
             raise GenericCharmRuntimeError(
