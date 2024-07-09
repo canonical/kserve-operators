@@ -1,6 +1,6 @@
 # reusable workflow for publishing all charms in this repo
 name: Publish
-# trigger
+# trigger 2
 on:
   workflow_call:
     inputs:
