@@ -16,7 +16,6 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.testing import (
-    GRAFANA_AGENT_APP,
     assert_logging,
     deploy_and_assert_grafana_agent,
 )
@@ -316,7 +315,7 @@ def test_inference_service_raw_deployment(
 
 async def test_logging(ops_test: OpsTest):
     """Test logging is defined in relation data bag."""
-    app = ops_test.model.applications[GRAFANA_AGENT_APP]
+    app = ops_test.model.applications[APP_NAME]
     await assert_logging(app)
 
 
