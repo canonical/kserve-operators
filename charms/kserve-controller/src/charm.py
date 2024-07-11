@@ -28,6 +28,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRelationMissingError,
     GatewayRequirer,
 )
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.resource_dispatcher.v0.kubernetes_manifests import (
     KubernetesManifest,
     KubernetesManifestRequirerWrapper,
@@ -162,6 +163,8 @@ class KServeControllerCharm(CharmBase):
 
         self._rbac_proxy_container_name = "kube-rbac-proxy"
         self.rbac_proxy_container = self.unit.get_container(self._rbac_proxy_container_name)
+
+        self._logging = LogForwarder(charm=self)
 
     @property
     def _context(self):
