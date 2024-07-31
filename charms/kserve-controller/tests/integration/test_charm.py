@@ -589,14 +589,7 @@ async def test_inference_service_proxy_envs_configuration(
         timeout=60 * 1,
     )
 
-    # Read InferenceService example and create namespaced resource
-    inference_service_resource = lightkube.generic_resource.create_namespaced_resource(
-        group="serving.kserve.io",
-        version="v1beta1",
-        kind="InferenceService",
-        plural="inferenceservices",
-        verbs=None,
-    )
+    # Read InferenceService example
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
