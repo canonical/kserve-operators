@@ -37,13 +37,13 @@ options:
       For usage details, see https://github.com/canonical/kserve-operators.
   http-proxy:
     default: ""
-    description: the value of HTTP_PROXY environment variable in the storage-initializer container.
+    description: The value of HTTP_PROXY environment variable in the storage-initializer container.
     type: string
   https-proxy:
     default: ""
-    description: the value of HTTPS_PROXY environment variable in the storage-initializer container.
+    description: The value of HTTPS_PROXY environment variable in the storage-initializer container.
     type: string
   no-proxy:
     default: ""
-    description: the value of NO_PROXY environment variable in the storage-initializer container.
+    description: The value of NO_PROXY environment variable in the storage-initializer container.
     type: string
