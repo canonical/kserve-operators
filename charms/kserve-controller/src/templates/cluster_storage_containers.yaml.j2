@@ -13,6 +13,15 @@ spec:
       requests:
         cpu: 100m
         memory: 100Mi
+    {% if http_proxy and https_proxy and no_proxy %}
+      env:
+      - name: HTTP_PROXY
+        value: {{ http_proxy }}
+      - name: HTTPS_PROXY
+        value: {{ https_proxy }}
+      - name: NO_PROXY
+        value: {{ no_proxy }}
+    {% endif %}
   supportedUriFormats:
   - prefix: gs://
   - prefix: s3://
