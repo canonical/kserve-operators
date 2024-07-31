@@ -562,6 +562,89 @@ async def test_new_user_namespace_has_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
+@pytest.mark.parametrize(
+    "cleanup_namespaces_after_execution", ["serverless-namespace"], indirect=True
+)
+async def test_inference_service_proxy_envs_configuration(
+    cleanup_namespaces_after_execution, ops_test: OpsTest
+):
+    """Changes `http-proxy`, `https-proxy` and `no-proxy` configs and asserts that
+    the InferenceService Pod is using the values from configs as environment variables."""
+    # Instantiate a lightkube client
+    lightkube_client = lightkube.Client()
+
+    # Set Proxy envs by setting the charm configs
+    test_http_proxy = "my_http_proxy"
+    test_https_proxy = "my_https_proxy"
+    test_no_proxy = "no_proxy"
+
+    await ops_test.model.applications["kserve-controller"].set_config(
+        {"http-proxy": test_http_proxy, "https-proxy": test_https_proxy, "no-proxy": test_no_proxy}
+    )
+
+    await ops_test.model.wait_for_idle(
+        ["kserve-controller"],
+        status="active",
+        raise_on_blocked=False,
+        timeout=60 * 1,
+    )
+
+    # Read InferenceService example and create namespaced resource
+    inference_service_resource = lightkube.generic_resource.create_namespaced_resource(
+        group="serving.kserve.io",
+        version="v1beta1",
+        kind="InferenceService",
+        plural="inferenceservices",
+        verbs=None,
+    )
+    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
+    inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
+    inf_svc_name = inf_svc_object.metadata.name
+    serverless_mode_namespace = "serverless-namespace"
+
+    # Create Serverless namespace
+    lightkube_client.create(Namespace(metadata=ObjectMeta(name=serverless_mode_namespace)))
+
+    # Create InferenceService from example file
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(30),
+        reraise=True,
+    )
+    def create_inf_svc():
+        lightkube_client.create(inf_svc_object, namespace=serverless_mode_namespace)
+
+    # Assert InferenceService Pod specifies the proxy envs for the initContainer
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_attempt(30),
+        reraise=True,
+    )
+    def assert_inf_svc_pod_proxy_evns():
+        pods_list = lightkube_client.list(
+            res=Pod,
+            namespace=serverless_mode_namespace,
+            labels={"serving.kserve.io/inferenceservice": inf_svc_name},
+        )
+        isvc_pod = next(pods_list)
+        init_env_vars = isvc_pod.spec.initContainers[0].env
+
+        for env_var in init_env_vars:
+            if env_var.name == "HTTP_PROXY":
+                http_proxy_env = env_var.value
+            elif env_var.name == "HTTPS_PROXY":
+                https_proxy_env = env_var.value
+            elif env_var.name == "NO_PROXY":
+                no_proxy_env = env_var.value
+
+        assert http_proxy_env == test_http_proxy
+        assert https_proxy_env == test_https_proxy
+        assert no_proxy_env == test_no_proxy
+
+    create_inf_svc()
+    assert_inf_svc_pod_proxy_evns()
+
+
 async def test_blocked_on_invalid_config(ops_test: OpsTest):
     """
     Test whether the application is blocked on providing an invalid configuration.
