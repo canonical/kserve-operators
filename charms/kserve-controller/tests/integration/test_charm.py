@@ -153,15 +153,19 @@ def namespace(lightkube_client: lightkube.Client):
     delete_all_from_yaml(yaml_text, lightkube_client)
 
 
-@pytest.fixture
-def cleanup_namespaces_after_execution(request):
-    """Removes the namespaces used for deploying inferenceservices."""
-    yield
+@pytest.fixture(scope="function")
+def serverless_namespace(lightkube_client):
+    """Create a namespaces used for deploying inferenceservices, cleaning it up afterwards."""
+
+    namespace_name = "serverless-namespace"
+    lightkube_client.create(Namespace(metadata=ObjectMeta(name=namespace_name)))
+
+    yield namespace_name
+
     try:
-        lightkube_client = lightkube.Client()
-        lightkube_client.delete(Namespace, name=request.param)
+        lightkube_client.delete(Namespace, name=namespace_name)
     except ApiError:
-        logger.warning(f"The {request.param} namespace could not be removed.")
+        logger.warning(f"The {namespace_name} namespace could not be removed.")
         pass
 
 
@@ -378,12 +382,7 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
     )
 
 
-@pytest.mark.parametrize(
-    "cleanup_namespaces_after_execution", ["serverless-namespace"], indirect=True
-)
-def test_inference_service_serverless_deployment(
-    cleanup_namespaces_after_execution, ops_test: OpsTest
-):
+def test_inference_service_serverless_deployment(serverless_namespace, ops_test: OpsTest):
     """Validates that an InferenceService can be deployed."""
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
@@ -399,10 +398,7 @@ def test_inference_service_serverless_deployment(
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
-    serverless_mode_namespace = "serverless-namespace"
-
-    # Create Serverless namespace
-    lightkube_client.create(Namespace(metadata=ObjectMeta(name=serverless_mode_namespace)))
+    serverless_mode_namespace = serverless_namespace
 
     # Create InferenceService from example file
     @tenacity.retry(
@@ -562,12 +558,7 @@ async def test_new_user_namespace_has_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
-@pytest.mark.parametrize(
-    "cleanup_namespaces_after_execution", ["serverless-namespace"], indirect=True
-)
-async def test_inference_service_proxy_envs_configuration(
-    cleanup_namespaces_after_execution, ops_test: OpsTest
-):
+async def test_inference_service_proxy_envs_configuration(serverless_namespace, ops_test: OpsTest):
     """Changes `http-proxy`, `https-proxy` and `no-proxy` configs and asserts that
     the InferenceService Pod is using the values from configs as environment variables."""
     # Instantiate a lightkube client
@@ -593,10 +584,7 @@ async def test_inference_service_proxy_envs_configuration(
     inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
-    serverless_mode_namespace = "serverless-namespace"
-
-    # Create Serverless namespace
-    lightkube_client.create(Namespace(metadata=ObjectMeta(name=serverless_mode_namespace)))
+    serverless_mode_namespace = serverless_namespace
 
     # Create InferenceService from example file
     @tenacity.retry(
