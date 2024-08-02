@@ -29,6 +29,7 @@ from lightkube.resources.core_v1 import (
     ServiceAccount,
 )
 from pytest_operator.plugin import OpsTest
+from tenacity import Retrying, stop_after_delay, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,18 @@ PodDefault = lightkube.generic_resource.create_namespaced_resource(
 )
 TESTING_NAMESPACE_NAME = "raw-deployment"
 KSERVE_WORKLOAD_CONTAINER = "kserve-container"
+
+ISVC = lightkube.generic_resource.create_namespaced_resource(
+    group="serving.kserve.io",
+    version="v1beta1",
+    kind="InferenceService",
+    plural="inferenceservices",
+    verbs=None,
+)
+
+SKLEARN_INF_SVC_YAML = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
+SKLEARN_INF_SVC_OBJECT = lightkube.codecs.load_all_yaml(yaml.dump(SKLEARN_INF_SVC_YAML))[0]
+SKLEARN_INF_SVC_NAME = SKLEARN_INF_SVC_OBJECT.metadata.name
 
 
 def deploy_k8s_resources(template_files: str):
@@ -267,14 +280,8 @@ def test_inference_service_raw_deployment(
     test_namespace: None, lightkube_client: lightkube.Client, inference_file, ops_test: OpsTest
 ):
     """Validates that an InferenceService can be deployed."""
-    # Read InferenceService example and create namespaced resource
-    inference_service_resource = lightkube.generic_resource.create_namespaced_resource(
-        group="serving.kserve.io",
-        version="v1beta1",
-        kind="InferenceService",
-        plural="inferenceservices",
-        verbs=None,
-    )
+    # Read InferenceService example
+
     inf_svc_yaml = yaml.safe_load(Path(inference_file).read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
@@ -295,9 +302,7 @@ def test_inference_service_raw_deployment(
         reraise=True,
     )
     def assert_inf_svc_state():
-        inf_svc = lightkube_client.get(
-            inference_service_resource, inf_svc_name, namespace=TESTING_NAMESPACE_NAME
-        )
+        inf_svc = lightkube_client.get(ISVC, inf_svc_name, namespace=TESTING_NAMESPACE_NAME)
         conditions = inf_svc.get("status", {}).get("conditions")
         logger.info(
             f"INFO: Inspecting InferenceService {inf_svc.metadata.name} in namespace {inf_svc.metadata.namespace}"
@@ -387,19 +392,6 @@ def test_inference_service_serverless_deployment(serverless_namespace, ops_test:
     # Instantiate a lightkube client
     lightkube_client = lightkube.Client()
 
-    # Read InferenceService example and create namespaced resource
-    inference_service_resource = lightkube.generic_resource.create_namespaced_resource(
-        group="serving.kserve.io",
-        version="v1beta1",
-        kind="InferenceService",
-        plural="inferenceservices",
-        verbs=None,
-    )
-    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
-    inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
-    inf_svc_name = inf_svc_object.metadata.name
-    serverless_mode_namespace = serverless_namespace
-
     # Create InferenceService from example file
     @tenacity.retry(
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
@@ -407,7 +399,7 @@ def test_inference_service_serverless_deployment(serverless_namespace, ops_test:
         reraise=True,
     )
     def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=serverless_mode_namespace)
+        lightkube_client.create(SKLEARN_INF_SVC_OBJECT, namespace=serverless_namespace)
 
     # Assert InferenceService state is Available
     @tenacity.retry(
@@ -416,9 +408,7 @@ def test_inference_service_serverless_deployment(serverless_namespace, ops_test:
         reraise=True,
     )
     def assert_inf_svc_state():
-        inf_svc = lightkube_client.get(
-            inference_service_resource, inf_svc_name, namespace=serverless_mode_namespace
-        )
+        inf_svc = lightkube_client.get(ISVC, SKLEARN_INF_SVC_NAME, namespace=serverless_namespace)
         conditions = inf_svc.get("status", {}).get("conditions")
         for condition in conditions:
             if condition.get("status") == "False":
@@ -558,11 +548,18 @@ async def test_new_user_namespace_has_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
-async def test_inference_service_proxy_envs_configuration(serverless_namespace, ops_test: OpsTest):
+RETRY_FOR_THREE_MINUTES = Retrying(
+    stop=stop_after_delay(60 * 3),
+    wait=wait_fixed(5),
+    reraise=True,
+)
+
+
+async def test_inference_service_proxy_envs_configuration(
+    serverless_namespace, ops_test: OpsTest, lightkube_client: lightkube.Client
+):
     """Changes `http-proxy`, `https-proxy` and `no-proxy` configs and asserts that
     the InferenceService Pod is using the values from configs as environment variables."""
-    # Instantiate a lightkube client
-    lightkube_client = lightkube.Client()
 
     # Set Proxy envs by setting the charm configs
     test_http_proxy = "my_http_proxy"
@@ -580,50 +577,33 @@ async def test_inference_service_proxy_envs_configuration(serverless_namespace, 
         timeout=60 * 1,
     )
 
-    # Read InferenceService example
-    inf_svc_yaml = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
-    inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
-    inf_svc_name = inf_svc_object.metadata.name
-    serverless_mode_namespace = serverless_namespace
-
     # Create InferenceService from example file
-    @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_delay(30),
-        reraise=True,
-    )
-    def create_inf_svc():
-        lightkube_client.create(inf_svc_object, namespace=serverless_mode_namespace)
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            lightkube_client.create(SKLEARN_INF_SVC_OBJECT, namespace=serverless_namespace)
 
     # Assert InferenceService Pod specifies the proxy envs for the initContainer
-    @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_attempt(30),
-        reraise=True,
-    )
-    def assert_inf_svc_pod_proxy_evns():
-        pods_list = lightkube_client.list(
-            res=Pod,
-            namespace=serverless_mode_namespace,
-            labels={"serving.kserve.io/inferenceservice": inf_svc_name},
-        )
-        isvc_pod = next(pods_list)
-        init_env_vars = isvc_pod.spec.initContainers[0].env
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            pods_list = lightkube_client.list(
+                res=Pod,
+                namespace=serverless_namespace,
+                labels={"serving.kserve.io/inferenceservice": SKLEARN_INF_SVC_NAME},
+            )
+            isvc_pod = next(pods_list)
+            init_env_vars = isvc_pod.spec.initContainers[0].env
 
-        for env_var in init_env_vars:
-            if env_var.name == "HTTP_PROXY":
-                http_proxy_env = env_var.value
-            elif env_var.name == "HTTPS_PROXY":
-                https_proxy_env = env_var.value
-            elif env_var.name == "NO_PROXY":
-                no_proxy_env = env_var.value
+            for env_var in init_env_vars:
+                if env_var.name == "HTTP_PROXY":
+                    http_proxy_env = env_var.value
+                elif env_var.name == "HTTPS_PROXY":
+                    https_proxy_env = env_var.value
+                elif env_var.name == "NO_PROXY":
+                    no_proxy_env = env_var.value
 
-        assert http_proxy_env == test_http_proxy
-        assert https_proxy_env == test_https_proxy
-        assert no_proxy_env == test_no_proxy
-
-    create_inf_svc()
-    assert_inf_svc_pod_proxy_evns()
+            assert http_proxy_env == test_http_proxy
+            assert https_proxy_env == test_https_proxy
+            assert no_proxy_env == test_no_proxy
 
 
 async def test_blocked_on_invalid_config(ops_test: OpsTest):
