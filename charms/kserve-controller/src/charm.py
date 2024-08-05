@@ -29,6 +29,8 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRequirer,
 )
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.resource_dispatcher.v0.kubernetes_manifests import (
     KubernetesManifest,
     KubernetesManifestRequirerWrapper,
@@ -36,6 +38,7 @@ from charms.resource_dispatcher.v0.kubernetes_manifests import (
 from jinja2 import Template
 from jsonschema import ValidationError
 from lightkube import ApiError
+from lightkube.models.core_v1 import ServicePort
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -88,6 +91,8 @@ SERVICE_ACCOUNTS_FILES = [
     "src/service-accounts/kserve-mlflow-minio-svc-account.yaml.j2",
 ]
 NO_MINIO_RELATION_DATA = {}
+
+METRICS_PORT = 8080
 
 
 def parse_images_config(config: str) -> Dict:
@@ -166,6 +171,18 @@ class KServeControllerCharm(CharmBase):
 
         self._logging = LogForwarder(charm=self)
 
+        # metrics relation configuration
+        metrics_port = ServicePort(
+            port=METRICS_PORT, targetPort=METRICS_PORT, name=f"{self.app.name}-metrics"
+        )
+        self.service_patcher = KubernetesServicePatch(
+            self, [metrics_port], service_name=f"{self.model.app.name}"
+        )
+        self.prometheus_provider = MetricsEndpointProvider(
+            self,
+            jobs=[{"static_configs": [{"targets": [f"*:{METRICS_PORT}"]}]}],
+        )
+
     @property
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
@@ -233,7 +250,7 @@ class KServeControllerCharm(CharmBase):
                     self._controller_container_name: {
                         "override": "replace",
                         "summary": "KServe Controller",
-                        "command": "/manager --metrics-addr=:8080",
+                        "command": f"/manager --metrics-addr=:{METRICS_PORT}",
                         "startup": "enabled",
                         "environment": {
                             "POD_NAMESPACE": self.model.name,
@@ -253,7 +270,7 @@ class KServeControllerCharm(CharmBase):
                     self._rbac_proxy_container_name: {
                         "override": "replace",
                         "summary": "Kube Rbac Proxy",
-                        "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",  # noqa E501
+                        "command": f"/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:{METRICS_PORT} --logtostderr=true --v=10",  # noqa E501
                         "startup": "enabled",
                     }
                 }
