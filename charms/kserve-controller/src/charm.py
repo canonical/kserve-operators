@@ -68,6 +68,7 @@ K8S_RESOURCE_FILES = [
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
+    "src/templates/cluster_storage_containers.yaml.j2",
 ]
 
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
@@ -164,6 +165,9 @@ class KServeControllerCharm(CharmBase):
             "app_name": self.app.name,
             "namespace": self.model.name,
             "cert": f"'{ca_context.decode('utf-8')}'",
+            "http_proxy": self.model.config["http-proxy"],
+            "https_proxy": self.model.config["https-proxy"],
+            "no_proxy": self.model.config["no-proxy"],
         }
 
     @property
