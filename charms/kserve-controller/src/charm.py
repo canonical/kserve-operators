@@ -191,6 +191,9 @@ class KServeControllerCharm(CharmBase):
             "app_name": self.app.name,
             "namespace": self.model.name,
             "cert": f"'{ca_context.decode('utf-8')}'",
+            "http_proxy": self.model.config["http-proxy"],
+            "https_proxy": self.model.config["https-proxy"],
+            "no_proxy": self.model.config["no-proxy"],
         }
 
     @property
