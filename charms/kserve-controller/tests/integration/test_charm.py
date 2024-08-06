@@ -62,7 +62,7 @@ PODDEFAULTS_CRD_TEMPLATE = "./tests/integration/crds/poddefaults.yaml"
 PodDefault = lightkube.generic_resource.create_namespaced_resource(
     "kubeflow.org", "v1alpha1", "PodDefault", "poddefaults"
 )
-TESTING_NAMESPACE_NAME = "admin"
+TESTING_NAMESPACE_NAME = "raw-deployment"
 KSERVE_WORKLOAD_CONTAINER = "kserve-container"
 
 ISVC = lightkube.generic_resource.create_namespaced_resource(
