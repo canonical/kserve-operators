@@ -23,6 +23,9 @@ resources:
     type: oci-image
     description: OCI image for kube rbac proxy
     upstream-source: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
 requires:
   object-storage:
     interface: object-storage

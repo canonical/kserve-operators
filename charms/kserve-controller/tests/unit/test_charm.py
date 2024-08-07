@@ -72,7 +72,8 @@ def harness():
     harness.set_leader(True)
     harness.set_can_connect("kserve-controller", True)
     harness.set_can_connect("kube-rbac-proxy", True)
-    return harness
+    with patch("charm.ServicePort"), patch("charm.KubernetesServicePatch"):
+        yield harness
 
 
 @pytest.fixture()
@@ -89,6 +90,24 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     """Prevents lightkube clients from being created, returning a mock instead."""
     mocked_resource_handler.lightkube_client = MagicMock()
     yield mocked_resource_handler.lightkube_client
+
+
+def test_metrics(harness):
+    """Test MetricsEndpointProvider initialization."""
+    with patch("charm.MetricsEndpointProvider") as mock_metrics, patch(
+        "charm.KubernetesServicePatch"
+    ) as mock_service_patcher, patch("charm.ServicePort") as mock_service_port:
+        harness.begin()
+        mock_metrics.assert_called_once_with(
+            harness.charm,
+            jobs=[{"static_configs": [{"targets": ["*:8080"]}]}],
+        )
+        mock_service_port.assert_called_once_with(
+            port=8080, targetPort=8080, name="kserve-controller-metrics"
+        )
+        mock_service_patcher.assert_called_once_with(
+            harness.charm, [mock_service_port.return_value], service_name="kserve-controller"
+        )
 
 
 def test_log_forwarding(harness):
