@@ -26,7 +26,7 @@ jobs:
       matrix:
         charm: [controller]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-lint
 
@@ -37,7 +37,7 @@ jobs:
       matrix:
         charm: [controller]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-unit
 
@@ -49,7 +49,7 @@ jobs:
         charm: [controller]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
