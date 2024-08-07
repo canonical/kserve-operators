@@ -17,6 +17,7 @@ import yaml
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.testing import (
     assert_logging,
+    assert_metrics_endpoint,
     deploy_and_assert_grafana_agent,
 )
 from lightkube.core.exceptions import ApiError
@@ -230,7 +231,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # Deploying grafana-agent-k8s and add all relations
     await deploy_and_assert_grafana_agent(
-        ops_test.model, APP_NAME, metrics=False, dashboard=False, logging=True
+        ops_test.model, APP_NAME, metrics=True, dashboard=False, logging=True
     )
 
 
@@ -317,6 +318,16 @@ async def test_logging(ops_test: OpsTest):
     """Test logging is defined in relation data bag."""
     app = ops_test.model.applications[APP_NAME]
     await assert_logging(app)
+
+
+async def test_metrics_enpoint(ops_test):
+    """Test metrics_endpoints are defined in relation data bag and their accessibility.
+    This function gets all the metrics_endpoints from the relation data bag, checks if
+    they are available from the grafana-agent-k8s charm and finally compares them with the
+    ones provided to the function.
+    """
+    app = ops_test.model.applications[APP_NAME]
+    await assert_metrics_endpoint(app, metrics_port=8080, metrics_path="/metrics")
 
 
 #    # Remove the InferenceService deployed in RawDeployment mode
