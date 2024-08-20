@@ -35,4 +35,15 @@ options:
     description: >
       YAML or JSON formatted input defining images to use in Katib
       For usage details, see https://github.com/canonical/kserve-operators.
-
+  http-proxy:
+    default: ""
+    description: The value of HTTP_PROXY environment variable in the storage-initializer container.
+    type: string
+  https-proxy:
+    default: ""
+    description: The value of HTTPS_PROXY environment variable in the storage-initializer container.
+    type: string
+  no-proxy:
+    default: ""
+    description: The value of NO_PROXY environment variable in the storage-initializer container.
+    type: string
