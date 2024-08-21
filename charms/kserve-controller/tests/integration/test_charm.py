@@ -168,7 +168,7 @@ def namespace(lightkube_client: lightkube.Client):
 
 @pytest.fixture(scope="function")
 def serverless_namespace(lightkube_client):
-    """Create a namespaces used for deploying inferenceservices, cleaning it up afterwards."""
+    """Create a namespace used for deploying inferenceservices, cleaning it up afterwards."""
 
     namespace_name = "serverless-namespace"
     lightkube_client.create(Namespace(metadata=ObjectMeta(name=namespace_name)))
