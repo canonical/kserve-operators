@@ -1,0 +1,38 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterStorageContainer
+metadata:
+  name: default
+spec:
+  container:
+    image: {{ configmap__storageInitializer }}
+    name: storage-initializer
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+  {% if http_proxy or https_proxy or no_proxy %}
+    env:
+  {% if http_proxy %}
+    - name: HTTP_PROXY
+      value: {{ http_proxy }}
+  {% endif %}
+  {% if https_proxy %}
+    - name: HTTPS_PROXY
+      value: {{ https_proxy }}
+  {% endif %}
+  {% if no_proxy %}
+    - name: NO_PROXY
+      value: {{ no_proxy }}
+  {% endif %}
+  {% endif %}
+  supportedUriFormats:
+  - prefix: gs://
+  - prefix: s3://
+  - prefix: hdfs://
+  - prefix: webhdfs://
+  - regex: https://(.+?).blob.core.windows.net/(.+)
+  - regex: https://(.+?).file.core.windows.net/(.+)
+  - regex: https?://(.+)/(.+)
