@@ -46,7 +46,6 @@ jobs:
     uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-checks.yaml@main
     with:
       charm-path: ./charms/kserve-controller
-      model: kubeflow
       channel: latest/edge
       
   charm-integration:
