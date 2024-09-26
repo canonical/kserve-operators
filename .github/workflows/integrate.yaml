@@ -41,6 +41,13 @@ jobs:
     - run: sudo apt update && sudo apt install tox
     - run: tox -e ${{ matrix.charm }}-unit
 
+  terraform-checks:
+    name: Terraform
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-checks.yaml@main
+    with:
+      charm-path: ./charms/kserve-controller
+      channel: 0.13/stable
+      
   charm-integration:
     name: Individual Integration Tests
     runs-on: ubuntu-20.04
