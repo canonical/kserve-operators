@@ -4,3 +4,6 @@
 build/
 .vscode
 .python-version
+venv/
+.terraform*
+*.tfstate*
