@@ -16,9 +16,11 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.testing import (
+    assert_alert_rules,
     assert_logging,
     assert_metrics_endpoint,
     deploy_and_assert_grafana_agent,
+    get_alert_rules,
 )
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
@@ -337,6 +339,14 @@ async def test_metrics_enpoint(ops_test):
     """
     app = ops_test.model.applications[APP_NAME]
     await assert_metrics_endpoint(app, metrics_port=8080, metrics_path="/metrics")
+
+
+async def test_alert_rules(ops_test):
+    """Test check charm alert rules and rules defined in relation data bag."""
+    app = ops_test.model.applications[APP_NAME]
+    alert_rules = get_alert_rules()
+    logger.info("found alert_rules: %s", alert_rules)
+    await assert_alert_rules(app, alert_rules)
 
 
 #    # Remove the InferenceService deployed in RawDeployment mode
