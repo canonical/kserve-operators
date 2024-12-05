@@ -62,9 +62,9 @@ jobs:
         with:
           provider: microk8s
           channel: 1.29-strict/stable
-          juju-channel: 3.4/stable
+          juju-channel: 3.6/stable
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
-          charmcraft-channel: latest/candidate
+          charmcraft-channel: 3.x/stable
       - run: |
           juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=false
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
