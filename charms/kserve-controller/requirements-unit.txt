@@ -15,12 +15,12 @@ certifi==2023.7.22
     #   requests
 charmed-kubeflow-chisme==0.2.0
     # via
+    #   -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
     #   -r requirements-unit.in
-    #   -r requirements.in
 charset-normalizer==3.3.0
     # via requests
 cosl==0.0.12
-    # via -r requirements.in
+    # via -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
 coverage==7.3.2
     # via -r requirements-unit.in
 deepdiff==6.2.1
@@ -50,19 +50,19 @@ jsonschema==4.17.3
     # via serialized-data-interface
 lightkube==0.14.0
     # via
+    #   -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
     #   -r requirements-unit.in
-    #   -r requirements.in
     #   charmed-kubeflow-chisme
 lightkube-models==1.28.1.4
     # via
-    #   -r requirements.in
+    #   -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
     #   lightkube
 markupsafe==2.1.3
     # via jinja2
 ops==2.14.1
     # via
+    #   -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
     #   -r requirements-unit.in
-    #   -r requirements.in
     #   charmed-kubeflow-chisme
     #   cosl
     #   serialized-data-interface
@@ -82,9 +82,9 @@ pytest==7.4.2
     #   pytest-mock
 pytest-mock==3.11.1
     # via -r requirements-unit.in
-pyyaml==6.0.1
+pyyaml==6.0.2
     # via
-    #   -r requirements.in
+    #   -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
     #   cosl
     #   lightkube
     #   ops
@@ -97,7 +97,7 @@ ruamel-yaml-clib==0.2.8
     # via ruamel-yaml
 serialized-data-interface==0.7.0
     # via
-    #   -r requirements.in
+    #   -r /tmp/renovate/repos/github/canonical/kserve-operators/charms/kserve-controller/requirements.in
     #   charmed-kubeflow-chisme
 sniffio==1.3.0
     # via
