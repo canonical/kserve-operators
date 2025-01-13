@@ -140,7 +140,6 @@ class KServeControllerCharm(CharmBase):
             self.on.install,
             self.on.config_changed,
             self.on.kserve_controller_pebble_ready,
-            self.on.kube_rbac_proxy_pebble_ready,
             self.on["local-gateway"].relation_changed,
             self.on["ingress-gateway"].relation_changed,
             self.on["object-storage"].relation_changed,
@@ -165,9 +164,6 @@ class KServeControllerCharm(CharmBase):
 
         # Generate self-signed certificates and store them
         self._gen_certs_if_missing()
-
-        self._rbac_proxy_container_name = "kube-rbac-proxy"
-        self.rbac_proxy_container = self.unit.get_container(self._rbac_proxy_container_name)
 
         self._logging = LogForwarder(charm=self)
 
@@ -260,22 +256,6 @@ class KServeControllerCharm(CharmBase):
                             "SECRET_NAME": "kserve-webhook-server-cert",
                         },
                     },
-                }
-            }
-        )
-
-    @property
-    def _rbac_proxy_pebble_layer(self):
-        """Return the Pebble layer for the workload."""
-        return Layer(
-            {
-                "services": {
-                    self._rbac_proxy_container_name: {
-                        "override": "replace",
-                        "summary": "Kube Rbac Proxy",
-                        "command": f"/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:{METRICS_PORT} --logtostderr=true --v=10",  # noqa E501
-                        "startup": "enabled",
-                    }
                 }
             }
         )
@@ -489,13 +469,6 @@ class KServeControllerCharm(CharmBase):
                 self._controller_container_name,
                 self.controller_container,
                 self._controller_pebble_layer,
-                log,
-            )
-            # update kube-rbac-proxy layer
-            update_layer(
-                self._rbac_proxy_container_name,
-                self.rbac_proxy_container,
-                self._rbac_proxy_pebble_layer,
                 log,
             )
 

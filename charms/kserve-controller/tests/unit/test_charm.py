@@ -19,17 +19,6 @@ from tests.test_data.manifests import MANIFESTS_TEST_DATA
 # enable simulation of container networking
 ops.testing.SIMULATE_CAN_CONNECT = True
 
-RBAC_PROXY_EXPECTED_LAYER = {
-    "services": {
-        "kube-rbac-proxy": {
-            "override": "replace",
-            "summary": "Kube Rbac Proxy",
-            "command": "/usr/local/bin/kube-rbac-proxy --secure-listen-address=0.0.0.0:8443 --upstream=http://127.0.0.1:8080 --logtostderr=true --v=10",  # noqa E501
-            "startup": "enabled",
-        }
-    }
-}
-
 KSERVE_CONTROLLER_EXPECTED_LAYER = {
     "services": {
         "kserve-controller": {
@@ -71,7 +60,6 @@ def harness():
     harness = Harness(KServeControllerCharm)
     harness.set_leader(True)
     harness.set_can_connect("kserve-controller", True)
-    harness.set_can_connect("kube-rbac-proxy", True)
     with patch("charm.ServicePort"), patch("charm.KubernetesServicePatch"):
         yield harness
 
@@ -132,10 +120,6 @@ def test_events(harness, mocked_resource_handler, mocker):
     harness.charm.on.kserve_controller_pebble_ready.emit("kserve-controller")
     on_event.assert_called_once()
 
-    on_event.reset_mock()
-    harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
-    on_event.assert_called_once()
-
 
 def test_on_install_active(harness, mocked_resource_handler):
     harness.begin()
@@ -155,65 +139,6 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     with pytest.raises(ApiError):
         harness.charm.on.install.emit()
     mocked_logger.error.assert_called()
-
-
-def test_on_kube_rbac_proxy_ready_active(harness, mocked_resource_handler, mocker):
-    harness.begin()
-    # Check initial plan is empty
-    initial_plan = harness.get_container_pebble_plan("kube-rbac-proxy")
-    assert initial_plan.to_yaml() == "{}\n"
-
-    # Add relation with ingress-gateway providers
-    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
-    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
-
-    # Updated the data bag with ingress-gateway
-    remote_ingress_data = {
-        "gateway_name": "test-ingress-name",
-        "gateway_namespace": "test-ingress-namespace",
-    }
-    remote_local_data = {
-        "gateway_name": "test-local-name",
-        "gateway_namespace": "test-local-namespace",
-    }
-    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
-    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
-
-    # Check layer gets created
-    harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
-    assert harness.get_container_pebble_plan("kube-rbac-proxy")._services != {}
-
-    updated_plan = harness.get_container_pebble_plan("kube-rbac-proxy").to_dict()
-    assert RBAC_PROXY_EXPECTED_LAYER == updated_plan
-
-    service = harness.model.unit.get_container("kube-rbac-proxy").get_service("kube-rbac-proxy")
-    assert service.is_running() is True
-
-    assert harness.model.unit.status == ActiveStatus()
-
-
-def test_on_kube_rbac_proxy_ready_exception_blocked(harness, mocked_resource_handler, mocker):
-    harness.begin()
-
-    mocked_update_layer = mocker.patch("charm.update_layer")
-    mocked_update_layer.side_effect = _FakeErrorWithStatus()
-    mocked_logger = mocker.patch("charm.log")
-
-    harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
-    mocked_logger.error.assert_called_once()
-    mocked_logger.info.assert_not_called()
-
-
-def test_on_kube_rbac_proxy_ready_exception_other(harness, mocked_resource_handler, mocker):
-    harness.begin()
-
-    mocked_update_layer = mocker.patch("charm.update_layer")
-    mocked_update_layer.side_effect = _FakeErrorWithStatus(status_type=MaintenanceStatus)
-    mocked_logger = mocker.patch("charm.log")
-
-    harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kube-rbac-proxy")
-
-    mocked_logger.error.assert_called_once()
 
 
 def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, mocker):
@@ -240,7 +165,6 @@ def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, moc
     harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
 
     # Check layer gets created
-    harness.charm.on.kube_rbac_proxy_pebble_ready.emit("kserve-controller-ready")
     assert harness.get_container_pebble_plan("kserve-controller")._services != {}
 
     updated_plan = harness.get_container_pebble_plan("kserve-controller").to_dict()
