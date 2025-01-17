@@ -35,6 +35,6 @@ EOF
 juju deploy ./istio.yaml
 
 charmcraft pack
-juju deploy ./kserve-controller_ubuntu-20.04-amd64.charm --resource kserve-controller-image=kserve/kserve-controller:v0.8.0 --resource kube-rbac-proxy-image=gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0 --trust
+juju deploy ./kserve-controller_ubuntu-20.04-amd64.charm --resource kserve-controller-image=kserve/kserve-controller:v0.8.0 --trust
 
 
