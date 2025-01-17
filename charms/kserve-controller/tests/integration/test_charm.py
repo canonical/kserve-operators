@@ -226,8 +226,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     resources = {
         "kserve-controller-image": METADATA["resources"]["kserve-controller-image"][
             "upstream-source"
-        ],
-        "kube-rbac-proxy-image": METADATA["resources"]["kube-rbac-proxy-image"]["upstream-source"],
+        ]
     }
     await ops_test.model.deploy(
         charm,
