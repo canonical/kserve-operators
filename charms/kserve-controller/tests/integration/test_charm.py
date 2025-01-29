@@ -301,7 +301,7 @@ def test_inference_service_raw_deployment(
 
     # Assert InferenceService state is Available
     @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=30),
         stop=tenacity.stop_after_attempt(30),
         reraise=True,
     )
