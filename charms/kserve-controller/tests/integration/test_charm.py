@@ -271,13 +271,13 @@ def test_namespace(lightkube_client: lightkube.Client):
 @pytest.mark.parametrize(
     "inference_file",
     [
+        "./tests/integration/hugginface-bert.yaml",
         "./tests/integration/sklearn-iris.yaml",
         "./tests/integration/lgbserver.yaml",
         "./tests/integration/pmml-server.yaml",
         "./tests/integration/paddleserver-resnet.yaml",
         "./tests/integration/xgbserver.yaml",
         "./tests/integration/tensorflow-serving.yaml",
-        "./tests/integration/hugginface-bert.yaml",
     ],
 )
 def test_inference_service_raw_deployment(
