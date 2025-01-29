@@ -277,6 +277,7 @@ def test_namespace(lightkube_client: lightkube.Client):
         "./tests/integration/paddleserver-resnet.yaml",
         "./tests/integration/xgbserver.yaml",
         "./tests/integration/tensorflow-serving.yaml",
+        "./tests/integration/hugginface-bert.yaml"
     ],
 )
 def test_inference_service_raw_deployment(
