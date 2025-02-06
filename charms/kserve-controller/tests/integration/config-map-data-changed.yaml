@@ -1,6 +1,6 @@
 agent: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.13.0-aba72fd",
+      "image" : "kserve/agent:v0.14.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -50,16 +50,22 @@ explainers: |-
 ingress: |-
   {
     "ingressGateway" : "kubeflow/test-gateway",
-    "ingressService" : "istio-ingressgateway-workload.kubeflow.svc.cluster.local",
     "ingressDomain"  : "example.com",
     "ingressClassName" : "istio",
     "localGateway" : "knative-serving/knative-local-gateway",
     "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",
     "urlScheme": "http"
   }
+localModel: |-
+  {
+    "enabled": false,
+    "jobNamespace": "kserve-localmodel-jobs",
+    "defaultJobImage" : "{{ configmap__storageInitializer }}",
+    "fsGroup": 1000
+  }
 logger: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.13.0-aba72fd",
+      "image" : "kserve/agent:v0.14.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -73,15 +79,19 @@ metricsAggregator: |-
   }
 router: |-
   {
-      "image" : "kserve/router:v0.13.0",
+      "image" : "kserve/router:v0.14.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
       "cpuLimit": "1"
   }
+security: |-
+  {
+    "autoMountServiceAccountToken": true
+  }
 storageInitializer: |-
   {
-      "image" : "charmedkubeflow/storage-initializer:0.13.0-70e4564",
+      "image" : "kserve/storage-initializer:v0.14.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
