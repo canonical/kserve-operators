@@ -18,6 +18,17 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+    volumeMounts:
+    - mountPath: /dev/shm
+      name: devshm
+  hostIPC: false
   protocolVersions:
   - v2
   - v1
@@ -26,6 +37,10 @@ spec:
     name: huggingface
     priority: 1
     version: "1"
+  volumes:
+  - emptyDir:
+      medium: Memory
+    name: devshm
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
@@ -50,6 +65,13 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
   protocolVersions:
   - v1
   - v2
@@ -86,6 +108,13 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
   protocolVersions:
   - v2
   supportedModelFormats:
@@ -102,13 +131,25 @@ spec:
     priority: 2
     version: "1"
   - autoSelect: true
+    name: xgboost
+    priority: 2
+    version: "2"
+  - autoSelect: true
     name: lightgbm
     priority: 2
     version: "3"
   - autoSelect: true
+    name: lightgbm
+    priority: 2
+    version: "4"
+  - autoSelect: true
     name: mlflow
     priority: 1
     version: "1"
+  - autoSelect: true
+    name: mlflow
+    priority: 1
+    version: "2"
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
@@ -132,6 +173,13 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
   protocolVersions:
   - v1
   - v2
@@ -163,6 +211,13 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
   protocolVersions:
   - v1
   - v2
@@ -198,6 +253,13 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
   protocolVersions:
   - v1
   - v2
@@ -233,6 +295,14 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 1000
   protocolVersions:
   - v1
   - grpc-v1
@@ -272,6 +342,14 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 1000
   protocolVersions:
   - v1
   - v2
@@ -307,6 +385,14 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 1000
   protocolVersions:
   - v2
   - grpc-v2
@@ -357,6 +443,13 @@ spec:
       requests:
         cpu: "1"
         memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
   protocolVersions:
   - v1
   - v2
