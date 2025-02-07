@@ -60,13 +60,6 @@ data:
       {%- endif %}
       "urlScheme": "http"
     }
-  localModel: |-
-    {
-      "enabled": false,
-      "jobNamespace": "kserve-localmodel-jobs",
-      "defaultJobImage" : "{{ configmap__storageInitializer }}",
-      "fsGroup": 1000
-    }
   logger: |-
     {
         "image" : "{{ configmap__logger }}",
