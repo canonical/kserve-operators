@@ -56,13 +56,6 @@ ingress: |-
     "localGatewayService" : "knative-local-gateway.kubeflow.svc.cluster.local",
     "urlScheme": "http"
   }
-localModel: |-
-  {
-    "enabled": false,
-    "jobNamespace": "kserve-localmodel-jobs",
-    "defaultJobImage" : "{{ configmap__storageInitializer }}",
-    "fsGroup": 1000
-  }
 logger: |-
   {
       "image" : "kserve/agent:v0.14.1",
