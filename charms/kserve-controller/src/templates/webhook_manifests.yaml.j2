@@ -1,3 +1,4 @@
+# Source manifests/contrib/kserve/kserve/kserve_kubeflow.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -71,6 +72,34 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  name: clusterservingruntime.serving.kserve.io
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: kserve-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha1-clusterservingruntime
+    failurePolicy: Fail
+    name: clusterservingruntime.kserve-webhook-server.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - clusterservingruntimes
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
   name: inferencegraph.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -122,6 +151,34 @@ webhooks:
     resources:
     - inferenceservices
   sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: servingruntime.serving.kserve.io
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: kserve-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha1-servingruntime
+    failurePolicy: Fail
+    name: servingruntime.kserve-webhook-server.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - servingruntimes
+    sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
