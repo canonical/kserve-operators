@@ -31,7 +31,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.resource_dispatcher.v0.kubernetes_manifests import (
+from charms.resource_dispatcher.v0.resource_dispatcher import (
     KubernetesManifest,
     KubernetesManifestRequirerWrapper,
 )

@@ -1,7 +1,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from charms.resource_dispatcher.v0.kubernetes_manifests import KubernetesManifest
+from charms.resource_dispatcher.v0.resource_dispatcher import KubernetesManifest
 from pytest import param
 
 SECRETS_TEST_FILES = ["tests/test_data/secret.yaml.j2"]
