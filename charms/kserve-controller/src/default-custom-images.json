@@ -8,7 +8,7 @@
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.14.1",
     "serving_runtimes__lgbserver": "kserve/lgbserver:v0.14.1",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
-	"serving_runtimes__paddleserver": "charmedkubeflow/paddleserver:0.14.1-99f7dc9",
+    "serving_runtimes__paddleserver": "charmedkubeflow/paddleserver:0.14.1-99f7dc9",
     "serving_runtimes__pmmlserver": "charmedkubeflow/pmmlserver:0.14.1-bd08793",
     "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.14.1",
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
