@@ -84,7 +84,7 @@ security: |-
   }
 storageInitializer: |-
   {
-      "image" : "kserve/storage-initializer:v0.14.1",
+      "image" : "charmedkubeflow/storage-initializer:0.14.1-397d028",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
