@@ -1,8 +1,8 @@
 {
-    "configmap__agent": "kserve/agent:v0.14.1",
-    "configmap__batcher": "kserve/agent:v0.14.1",
+    "configmap__agent": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+    "configmap__batcher": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
     "configmap__explainers__art": "kserve/art-explainer:latest",
-    "configmap__logger": "kserve/agent:v0.14.1",
+    "configmap__logger": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
     "configmap__router": "kserve/router:v0.14.1",
     "configmap__storageInitializer": "kserve/storage-initializer:v0.14.1",
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.14.1",

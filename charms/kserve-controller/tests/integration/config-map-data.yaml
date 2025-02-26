@@ -1,6 +1,6 @@
 agent: |-
   {
-      "image" : "kserve/agent:v0.14.1",
+      "image" : "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -8,7 +8,7 @@ agent: |-
   }
 batcher: |-
   {
-      "image" : "kserve/agent:v0.14.1",
+      "image" : "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
       "memoryRequest": "1Gi",
       "memoryLimit": "1Gi",
       "cpuRequest": "1",
@@ -58,7 +58,7 @@ ingress: |-
   }
 logger: |-
   {
-      "image" : "kserve/agent:v0.14.1",
+      "image" : "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
