@@ -10,7 +10,7 @@
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
     "serving_runtimes__paddleserver": "kserve/paddleserver:v0.14.1",
     "serving_runtimes__pmmlserver": "charmedkubeflow/pmmlserver:0.14.1-bd08793",
-    "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.14.1",
+    "serving_runtimes__sklearnserver": "charmedkubeflow/sklearnserver:0.14.1-685a8e7",
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
     "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.9.0",
     "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
