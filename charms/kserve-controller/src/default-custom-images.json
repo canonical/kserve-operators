@@ -4,7 +4,7 @@
     "configmap__explainers__art": "kserve/art-explainer:latest",
     "configmap__logger": "kserve/agent:v0.14.1",
     "configmap__router": "kserve/router:v0.14.1",
-    "configmap__storageInitializer": "kserve/storage-initializer:v0.14.1",
+    "configmap__storageInitializer": "charmedkubeflow/storage-initializer:0.14.1-397d028",
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.14.1",
     "serving_runtimes__lgbserver": "kserve/lgbserver:v0.14.1",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
