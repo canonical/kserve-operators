@@ -43,8 +43,8 @@ deploy: |-
 explainers: |-
   {
       "art": {
-          "image" : "kserve/art-explainer",
-          "defaultImageVersion": "latest"
+          "image" : "charmedkubeflow/artexplainer",
+          "defaultImageVersion": "0.14.1-8ace842"
       }
   }
 ingress: |-
