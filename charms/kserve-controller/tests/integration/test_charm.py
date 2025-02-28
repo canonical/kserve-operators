@@ -271,6 +271,7 @@ def test_namespace(lightkube_client: lightkube.Client):
 @pytest.mark.parametrize(
     "inference_file",
     [
+        "./tests/integration/hugginface-bert.yaml",
         "./tests/integration/sklearn-iris.yaml",
         "./tests/integration/lgbserver.yaml",
         "./tests/integration/pmml-server.yaml",
@@ -300,8 +301,8 @@ def test_inference_service_raw_deployment(
 
     # Assert InferenceService state is Available
     @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_attempt(30),
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=30),
+        stop=tenacity.stop_after_attempt(60),
         reraise=True,
     )
     def assert_inf_svc_state():
