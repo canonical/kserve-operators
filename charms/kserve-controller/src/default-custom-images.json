@@ -1,8 +1,8 @@
 {
-    "configmap__agent": "kserve/agent:v0.14.1",
-    "configmap__batcher": "kserve/agent:v0.14.1",
-    "configmap__explainers__art": "kserve/art-explainer:latest",
-    "configmap__logger": "kserve/agent:v0.14.1",
+    "configmap__agent": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+    "configmap__batcher": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+    "configmap__explainers__art": "charmedkubeflow/artexplainer:0.14.1-8ace842",
+    "configmap__logger": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
     "configmap__router": "kserve/router:v0.14.1",
     "configmap__storageInitializer": "charmedkubeflow/storage-initializer:0.14.1-397d028",
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.14.1",
@@ -14,7 +14,7 @@
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
     "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.9.0",
     "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
-    "serving_runtimes__xgbserver": "kserve/xgbserver:v0.14.1"
+    "serving_runtimes__xgbserver": "charmedkubeflow/xgbserver:0.14.1-77c46bc"
 }
 
 
