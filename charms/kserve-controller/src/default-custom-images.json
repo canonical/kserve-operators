@@ -16,6 +16,3 @@
     "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
     "serving_runtimes__xgbserver": "charmedkubeflow/xgbserver:0.14.1-77c46bc"
 }
-
-
-

@@ -65,6 +65,7 @@ from certs import gen_certs
 
 log = logging.getLogger(__name__)
 
+CLUSTER_RUNTIMES_FILES = ["src/templates/serving_runtimes_manifests.yaml.j2"]
 CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
 CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 DEFAULT_IMAGES_FILE = "src/default-custom-images.json"
@@ -74,7 +75,6 @@ with open(DEFAULT_IMAGES_FILE, "r") as json_file:
 K8S_RESOURCE_FILES = [
     "src/templates/crd_manifests.yaml.j2",
     "src/templates/auth_manifests.yaml.j2",
-    "src/templates/serving_runtimes_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
     "src/templates/cluster_storage_containers.yaml.j2",
 ]
@@ -153,6 +153,7 @@ class KServeControllerCharm(CharmBase):
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
         self._cm_resource_handler = None
+        self._cluster_runtimes_resource_handler = None
         self._secrets_manifests_wrapper = None
         self._service_accounts_manifests_wrapper = None
         self._lightkube_field_manager = "lightkube"
@@ -203,7 +204,8 @@ class KServeControllerCharm(CharmBase):
             deployment_mode = "RawDeployment"
         else:
             raise ErrorWithStatus(
-                "Please set deployment-mode to either Serverless or RawDeployment", BlockedStatus
+                "Please set deployment-mode to either Serverless or RawDeployment",
+                BlockedStatus,
             )
 
         inference_service_context = {
@@ -241,6 +243,19 @@ class KServeControllerCharm(CharmBase):
         return self._cm_resource_handler
 
     @property
+    def cluster_runtimes_resource_handler(self):
+        """Resource Handler for ClusterRuntime CRs."""
+        if not self._cluster_runtimes_resource_handler:
+            self._cluster_runtimes_resource_handler = KubernetesResourceHandler(
+                field_manager=self._lightkube_field_manager,
+                template_files=CLUSTER_RUNTIMES_FILES,
+                context={**self.images_context},
+                logger=log,
+            )
+
+        return self._cluster_runtimes_resource_handler
+
+    @property
     def _controller_pebble_layer(self):
         """Return the Pebble layer for the workload."""
         return Layer(
@@ -256,7 +271,25 @@ class KServeControllerCharm(CharmBase):
                             "SECRET_NAME": "kserve-webhook-server-cert",
                         },
                     },
-                }
+                },
+                "checks": {
+                    "kserve-controller-ready": {
+                        "override": "replace",
+                        "level": "ready",
+                        "period": "5m",
+                        "timeout": "60s",
+                        "threshold": 3,
+                        "http": {"url": "http://localhost:8081/readyz"},
+                    },
+                    "kserve-controller-alive": {
+                        "override": "replace",
+                        "level": "alive",
+                        "period": "5m",
+                        "timeout": "60s",
+                        "threshold": 3,
+                        "http": {"url": "http://localhost:8081/healthz"},
+                    },
+                },
             }
         )
 
@@ -414,7 +447,10 @@ class KServeControllerCharm(CharmBase):
         return images
 
     def _send_manifests(
-        self, context, manifest_files, relation_requirer: KubernetesManifestRequirerWrapper
+        self,
+        context,
+        manifest_files,
+        relation_requirer: KubernetesManifestRequirerWrapper,
     ):
         """Render manifests and send to the desired relation."""
         manifests = self._create_manifests(manifest_files, context)
@@ -476,6 +512,28 @@ class KServeControllerCharm(CharmBase):
             # configuration is changed, otherwise the service will remain
             # unaware of such changes.
             self._restart_controller_service()
+
+            # If the Pod is not ready (condition with type Ready, all containers must be Ready)
+            # then K8s will drop request to svc with message "connect: connection refused".
+            # The charm container will become ready only once the start event has completed, and
+            # the workload container's pebble readiness probes are healthy.
+            # Until then the Pod is not ready, non-ready containers, thus traffic will be dropped.
+            # https://github.com/canonical/kserve-operators/issues/301
+            try:
+                self.cluster_runtimes_resource_handler.apply()
+                self.model.unit.status = ActiveStatus()
+                log.info("KServe Controller Pod was ready. Applied all ClusterServingRuntimes.")
+            except ApiError as e:
+                if "connection refused" in e.status.message:
+                    msg = "Charm Pod is not ready yet. Will apply ClusterServingRuntimes later."
+                    log.warning(msg)
+                    self.model.unit.status = MaintenanceStatus(msg)
+                else:
+                    log.warning("Unexpected ApiError happened: %s", e)
+                    raise ErrorWithStatus(
+                        f"Unexpected ApiError happened: {e.status.message}",
+                        BlockedStatus,
+                    )
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
@@ -483,7 +541,6 @@ class KServeControllerCharm(CharmBase):
         except ApiError as api_err:
             log.error(api_err)
             raise
-        self.model.unit.status = ActiveStatus()
 
     def _on_remove(self, event):
         try:
@@ -494,18 +551,19 @@ class KServeControllerCharm(CharmBase):
             log.error(f"Failed to handle {event} with error: {err}")
             return
         self.unit.status = MaintenanceStatus("Removing k8s resources")
-        k8s_resources_manifests = self.k8s_resource_handler.render_manifests()
-        cm_resources_manifests = self.cm_resource_handler.render_manifests()
-        try:
-            delete_many(
-                self.k8s_resource_handler.lightkube_client,
-                k8s_resources_manifests,
-            )
-            delete_many(
-                self.cm_resource_handler.lightkube_client,
-                cm_resources_manifests,
-            )
 
+        handlers = [
+            self.k8s_resource_handler,
+            self.cm_resource_handler,
+            self.cluster_runtimes_resource_handler,
+        ]
+
+        try:
+            for handler in handlers:
+                delete_many(
+                    handler.lightkube_client,
+                    handler.render_manifests(),
+                )
         except ApiError as e:
             log.warning(f"Failed to delete resources, with error: {e}")
             raise e
@@ -649,6 +707,7 @@ class KServeControllerCharm(CharmBase):
 
         try:
             self.controller_container.restart(self._controller_container_name)
+            log.info("Restarted the controller pebble service.")
         except APIError as err:
             raise GenericCharmRuntimeError(
                 f"Failed to restart {self._controller_container_name} service"

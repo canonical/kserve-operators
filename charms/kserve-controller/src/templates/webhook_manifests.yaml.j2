@@ -181,3 +181,32 @@ webhooks:
     resources:
     - trainedmodels
   sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: clusterservingruntime.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: kserve-webhook-server-service
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha1-clusterservingruntime
+  failurePolicy: Fail
+  name: clusterservingruntime.kserve-webhook-server.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - clusterservingruntimes
+  sideEffects: None
+---
