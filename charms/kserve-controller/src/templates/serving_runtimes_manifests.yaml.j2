@@ -8,7 +8,7 @@ spec:
     prometheus.kserve.io/port: "8080"
   containers:
   - args:
-    - --model_name= {{ '{{.Name}}' }}
+    - --model_name={{ '{{.Name}}' }}
     image: {{ serving_runtimes__huggingfaceserver }}
     name: kserve-container
     resources:
@@ -52,7 +52,7 @@ spec:
     prometheus.kserve.io/port: "8080"
   containers:
   - args:
-    - --model_name= {{ '{{.Name}}' }}
+    - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     - --nthread=1
@@ -161,7 +161,7 @@ spec:
     prometheus.kserve.io/port: "8080"
   containers:
   - args:
-    - --model_name= {{ '{{.Name}}' }}
+    - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
     image: {{ serving_runtimes__paddleserver }}
