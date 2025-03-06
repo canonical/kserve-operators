@@ -513,7 +513,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     deploy_k8s_resources([PODDEFAULTS_CRD_TEMPLATE])
     await ops_test.model.deploy(
         entity_url=METACONTROLLER_CHARM_NAME,
-        channel="latest/edge",
+        channel="3.0/stable",
         trust=True,
     )
     await ops_test.model.wait_for_idle(
