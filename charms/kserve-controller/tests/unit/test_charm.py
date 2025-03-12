@@ -30,6 +30,10 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
             "override": "replace",
             "startup": "enabled",
             "summary": "KServe Controller",
+            "on-check-failure": {
+                "kserve-controller-ready": "restart",
+                "kserve-controller-alive": "restart",
+            },
         }
     },
     "checks": {
