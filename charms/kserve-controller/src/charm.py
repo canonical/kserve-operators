@@ -531,8 +531,9 @@ class KServeControllerCharm(CharmBase):
                 log.info("KServe Controller Pod was ready. Applied all ClusterServingRuntimes.")
             except ApiError as e:
                 if "connection refused" in e.status.message:
+                    log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
                     msg = "Charm Pod is not ready yet. Will apply ClusterServingRuntimes later."
-                    log.warning(msg)
+                    log.info(msg)
                     self.model.unit.status = MaintenanceStatus(msg)
                 else:
                     log.warning("Unexpected ApiError happened: %s", e)
