@@ -270,6 +270,10 @@ class KServeControllerCharm(CharmBase):
                             "POD_NAMESPACE": self.model.name,
                             "SECRET_NAME": "kserve-webhook-server-cert",
                         },
+                        "on-check-failure": {
+                            "kserve-controller-ready": "restart",
+                            "kserve-controller-alive": "restart",
+                        },
                     },
                 },
                 "checks": {
