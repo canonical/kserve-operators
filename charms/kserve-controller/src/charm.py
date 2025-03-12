@@ -281,18 +281,12 @@ class KServeControllerCharm(CharmBase):
                     "kserve-controller-ready": {
                         "override": "replace",
                         "level": "ready",
-                        "period": "5m",
-                        "timeout": "60s",
-                        "threshold": 3,
                         "http": {"url": "http://localhost:8081/readyz"},
                     },
                     # https://github.com/kserve/kserve/blob/v0.14.1/install/v0.14.1/kserve_kubeflow.yaml#L31988
                     "kserve-controller-alive": {
                         "override": "replace",
                         "level": "alive",
-                        "period": "5m",
-                        "timeout": "60s",
-                        "threshold": 3,
                         "http": {"url": "http://localhost:8081/healthz"},
                     },
                 },

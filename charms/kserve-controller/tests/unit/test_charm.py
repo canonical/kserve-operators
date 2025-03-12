@@ -40,17 +40,11 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
         "kserve-controller-ready": {
             "override": "replace",
             "level": "ready",
-            "period": "5m",
-            "timeout": "60s",
-            "threshold": 3,
             "http": {"url": "http://localhost:8081/readyz"},
         },
         "kserve-controller-alive": {
             "override": "replace",
             "level": "alive",
-            "period": "5m",
-            "timeout": "60s",
-            "threshold": 3,
             "http": {"url": "http://localhost:8081/healthz"},
         },
     },
