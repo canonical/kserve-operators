@@ -500,18 +500,6 @@ class KServeControllerCharm(CharmBase):
                 destination_path=CONTAINER_CERTS_DEST,
                 certs_store=self._stored,
             )
-            # update kserve-controller layer
-            update_layer(
-                self._controller_container_name,
-                self.controller_container,
-                self._controller_pebble_layer,
-                log,
-            )
-
-            # The kserve-controller service must be restarted whenever the
-            # configuration is changed, otherwise the service will remain
-            # unaware of such changes.
-            self._restart_controller_service()
 
             # If the Pod is not ready (condition with type Ready, all containers must be Ready)
             # then K8s will drop request to svc with message "connect: connection refused".
@@ -535,6 +523,19 @@ class KServeControllerCharm(CharmBase):
                         f"Unexpected ApiError happened: {e.status.message}",
                         BlockedStatus,
                     )
+
+            # update kserve-controller layer
+            update_layer(
+                self._controller_container_name,
+                self.controller_container,
+                self._controller_pebble_layer,
+                log,
+            )
+
+            # The kserve-controller service must be restarted whenever the
+            # configuration is changed, otherwise the service will remain
+            # unaware of such changes.
+            self._restart_controller_service()
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
