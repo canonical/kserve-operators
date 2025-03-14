@@ -23,12 +23,31 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
     "services": {
         "kserve-controller": {
             "command": "/manager --metrics-addr=:8080",
-            "environment": {"POD_NAMESPACE": None, "SECRET_NAME": "kserve-webhook-server-cert"},
+            "environment": {
+                "POD_NAMESPACE": None,
+                "SECRET_NAME": "kserve-webhook-server-cert",
+            },
             "override": "replace",
             "startup": "enabled",
             "summary": "KServe Controller",
+            "on-check-failure": {
+                "kserve-controller-ready": "restart",
+                "kserve-controller-alive": "restart",
+            },
         }
-    }
+    },
+    "checks": {
+        "kserve-controller-ready": {
+            "override": "replace",
+            "level": "ready",
+            "http": {"url": "http://localhost:8081/readyz"},
+        },
+        "kserve-controller-alive": {
+            "override": "replace",
+            "level": "alive",
+            "http": {"url": "http://localhost:8081/healthz"},
+        },
+    },
 }
 
 
@@ -94,7 +113,9 @@ def test_metrics(harness):
             port=8080, targetPort=8080, name="kserve-controller-metrics"
         )
         mock_service_patcher.assert_called_once_with(
-            harness.charm, [mock_service_port.return_value], service_name="kserve-controller"
+            harness.charm,
+            [mock_service_port.return_value],
+            service_name="kserve-controller",
         )
 
 
@@ -125,6 +146,7 @@ def test_on_install_active(harness, mocked_resource_handler):
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
+    harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
     mocked_resource_handler.apply.assert_called()
     assert harness.charm.model.unit.status == ActiveStatus()
@@ -136,6 +158,7 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_resource_handler.apply.side_effect = _FakeApiError()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
+    harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
     with pytest.raises(ApiError):
         harness.charm.on.install.emit()
     mocked_logger.error.assert_called()
@@ -202,6 +225,7 @@ def test_on_remove_success(harness, mocker, mocked_resource_handler):
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
+    harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
     harness.charm.on.remove.emit()
     mocked_delete_many.assert_called()
     assert isinstance(harness.charm.model.unit.status, MaintenanceStatus)
@@ -216,6 +240,7 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler):
 
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
+    harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
 
     with pytest.raises(ApiError):
         harness.charm.on.remove.emit()
@@ -261,7 +286,8 @@ def test_generate_gateways_context_serverless_no_relation(
 
 
 @pytest.mark.parametrize(
-    "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
+    "remote_data",
+    ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"}),
 )
 def test_generate_gateways_context_raw_mode_missing_data(
     remote_data, harness, mocker, mocked_resource_handler
@@ -281,7 +307,8 @@ def test_generate_gateways_context_raw_mode_missing_data(
 
 
 @pytest.mark.parametrize(
-    "remote_data", ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"})
+    "remote_data",
+    ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"}),
 )
 @patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_serverless_missing_data(
