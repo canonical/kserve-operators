@@ -140,6 +140,7 @@ class KServeControllerCharm(CharmBase):
             self.on.install,
             self.on.config_changed,
             self.on.kserve_controller_pebble_ready,
+            self.on.leader_elected,
             self.on["local-gateway"].relation_changed,
             self.on["ingress-gateway"].relation_changed,
             self.on["object-storage"].relation_changed,
@@ -501,20 +502,44 @@ class KServeControllerCharm(CharmBase):
                 certs_store=self._stored,
             )
 
-            # If the Pod is not ready (condition with type Ready, all containers must be Ready)
-            # then K8s will drop request to svc with message "connect: connection refused".
-            # The charm container will become ready only once the start event has completed, and
-            # the workload container's pebble readiness probes are healthy.
-            # Until then the Pod is not ready, non-ready containers, thus traffic will be dropped.
-            # https://github.com/canonical/kserve-operators/issues/301
+            # update kserve-controller layer
+            # Start the Pebble service before applying the ClusterServingRuntime resources
+            # due to these resources needing to go through the Validating Webhook
+            # with the name `clusterservingruntime.serving.kserve.io`.
+            # If the Pebble service is not started, then the webhook server is not up.
+            # https://github.com/canonical/kserve-operators/issues/321
+            update_layer(
+                self._controller_container_name,
+                self.controller_container,
+                self._controller_pebble_layer,
+                log,
+            )
+
+
             try:
                 self.cluster_runtimes_resource_handler.apply()
                 self.model.unit.status = ActiveStatus()
                 log.info("KServe Controller Pod was ready. Applied all ClusterServingRuntimes.")
             except ApiError as e:
                 if "connection refused" in e.status.message:
+                    # If the Pod is not ready (condition with type Ready, all containers must be Ready)
+                    # then K8s will drop request to svc with message "connect: connection refused".
+                    # The charm container will become ready only once the start event has completed, and
+                    # the workload container's pebble readiness probes are healthy.
+                    # Until then the Pod is not ready, non-ready containers, thus traffic will be dropped.
+                    # https://github.com/canonical/kserve-operators/issues/301
                     log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
                     msg = "Charm Pod is not ready yet. Will apply ClusterServingRuntimes later."
+                    log.info(msg)
+                    self.model.unit.status = MaintenanceStatus(msg)
+                elif "no endpoints available" in e.status.message:
+                    # If the Endpoint for the webhook server Service is not yet created
+                    # then K8s will drop request to svc with message "no endpoints available".
+                    # The Endpoint gets created automatically by the control plane shortly
+                    # after the Service is created. Drop the traffic and set the status to
+                    # `MaintenanceStatus` expecting the error to be resolved in the future hooks.
+                    log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
+                    msg = "Service Endpoints are not yet created. Will apply ClusterServingRuntimes later."
                     log.info(msg)
                     self.model.unit.status = MaintenanceStatus(msg)
                 else:
@@ -523,14 +548,6 @@ class KServeControllerCharm(CharmBase):
                         f"Unexpected ApiError happened: {e.status.message}",
                         BlockedStatus,
                     )
-
-            # update kserve-controller layer
-            update_layer(
-                self._controller_container_name,
-                self.controller_container,
-                self._controller_pebble_layer,
-                log,
-            )
 
             # The kserve-controller service must be restarted whenever the
             # configuration is changed, otherwise the service will remain
