@@ -21,24 +21,40 @@ jobs:
 
   lint:
     name: Lint Code
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         charm: [controller]
     steps:
-    - uses: actions/checkout@v3
-    - run: sudo apt update && sudo apt install tox
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v5.3.0
+      with:
+        python-version: 3.8
+
+    - name: Install dependencies
+      run: pip install tox
+
     - run: tox -e ${{ matrix.charm }}-lint
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         charm: [controller]
     steps:
-    - uses: actions/checkout@v3
-    - run: sudo apt update && sudo apt install tox
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v5.3.0
+      with:
+        python-version: 3.8
+
+    - name: Install dependencies
+      run: pip install tox
+
     - run: tox -e ${{ matrix.charm }}-unit
 
   terraform-checks:
@@ -46,16 +62,21 @@ jobs:
     uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-checks.yaml@main
     with:
       charm-path: ./charms/kserve-controller
-      
+
   charm-integration:
     name: Individual Integration Tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         charm: [controller]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: 3.8
 
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
