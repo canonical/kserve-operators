@@ -549,7 +549,7 @@ class KServeControllerCharm(CharmBase):
                 # `MaintenanceStatus` expecting the error to be resolved in the future hooks.
                 elif "no endpoints available" in e.status.message:
                     log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
-                    msg = "Service Endpoints are not yet created. Will apply ClusterServingRuntimes later."
+                    msg = "Webhook Server Service endpoints not ready. Will apply ClusterServingRuntimes later."
                     log.info(msg)
                     self.model.unit.status = MaintenanceStatus(msg)
                 else:
