@@ -547,6 +547,7 @@ class KServeControllerCharm(CharmBase):
                 # The Endpoint gets created automatically by the control plane shortly
                 # after the Service is created. Drop the traffic and set the status to
                 # `MaintenanceStatus` expecting the error to be resolved in the future hooks.
+                # https://github.com/canonical/kserve-operators/issues/321
                 elif "no endpoints available" in e.status.message:
                     log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
                     msg = "Webhook Server Service endpoints not ready. Will apply ClusterServingRuntimes later."
