@@ -46,11 +46,12 @@ from ops.model import (
     ActiveStatus,
     BlockedStatus,
     Container,
+    ErrorStatus,
     MaintenanceStatus,
     ModelError,
     WaitingStatus,
 )
-from ops.pebble import APIError, Layer, PathError, ProtocolError
+from ops.pebble import APIError, CheckStatus, Layer, PathError, ProtocolError
 from serialized_data_interface import (
     NoCompatibleVersions,
     NoVersionsListed,
@@ -93,6 +94,8 @@ SERVICE_ACCOUNTS_FILES = [
 NO_MINIO_RELATION_DATA = {}
 
 METRICS_PORT = 8080
+
+WEBHOOK_SERVICE_CHECK_NAME = "kserve-webhook-service-up"
 
 
 def parse_images_config(config: str) -> Dict:
@@ -140,6 +143,7 @@ class KServeControllerCharm(CharmBase):
             self.on.install,
             self.on.config_changed,
             self.on.kserve_controller_pebble_ready,
+            self.on.leader_elected,
             self.on["local-gateway"].relation_changed,
             self.on["ingress-gateway"].relation_changed,
             self.on["object-storage"].relation_changed,
@@ -150,6 +154,9 @@ class KServeControllerCharm(CharmBase):
         ]:
             self.framework.observe(event, self._on_event)
 
+        self.framework.observe(
+            self.on.kserve_controller_pebble_check_recovered, self._on_check_recovered
+        )
         self._k8s_resource_handler = None
         self._crd_resource_handler = None
         self._cm_resource_handler = None
@@ -288,6 +295,17 @@ class KServeControllerCharm(CharmBase):
                         "override": "replace",
                         "level": "alive",
                         "http": {"url": "http://localhost:8081/healthz"},
+                    },
+                    WEBHOOK_SERVICE_CHECK_NAME: {
+                        "override": "replace",
+                        "startup": "enabled",
+                        # Set period to 1s due to https://github.com/canonical/pebble/issues/164
+                        "period": "1s",
+                        "threshold": 1,
+                        "tcp": {
+                            "port": 443,
+                            "host": f"kserve-webhook-server-service.{self._namespace}.svc",
+                        },
                     },
                 },
             }
@@ -487,6 +505,11 @@ class KServeControllerCharm(CharmBase):
             self.service_accounts_manifests_wrapper,
         )
 
+    def _on_check_recovered(self, event):
+        if event.info.name == WEBHOOK_SERVICE_CHECK_NAME:
+            log.info(f"Check {WEBHOOK_SERVICE_CHECK_NAME} recovered, executing main handler.")
+            self._on_event(event)
+
     def _on_event(self, event):
         try:
             self.custom_images = parse_images_config(self.model.config["custom_images"])
@@ -501,30 +524,12 @@ class KServeControllerCharm(CharmBase):
                 certs_store=self._stored,
             )
 
-            # If the Pod is not ready (condition with type Ready, all containers must be Ready)
-            # then K8s will drop request to svc with message "connect: connection refused".
-            # The charm container will become ready only once the start event has completed, and
-            # the workload container's pebble readiness probes are healthy.
-            # Until then the Pod is not ready, non-ready containers, thus traffic will be dropped.
-            # https://github.com/canonical/kserve-operators/issues/301
-            try:
-                self.cluster_runtimes_resource_handler.apply()
-                self.model.unit.status = ActiveStatus()
-                log.info("KServe Controller Pod was ready. Applied all ClusterServingRuntimes.")
-            except ApiError as e:
-                if "connection refused" in e.status.message:
-                    log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
-                    msg = "Charm Pod is not ready yet. Will apply ClusterServingRuntimes later."
-                    log.info(msg)
-                    self.model.unit.status = MaintenanceStatus(msg)
-                else:
-                    log.warning("Unexpected ApiError happened: %s", e)
-                    raise ErrorWithStatus(
-                        f"Unexpected ApiError happened: {e.status.message}",
-                        BlockedStatus,
-                    )
-
             # update kserve-controller layer
+            # Start the Pebble service before applying the ClusterServingRuntime resources
+            # due to these resources needing to go through the Validating Webhook
+            # with the name `clusterservingruntime.serving.kserve.io`.
+            # If the Pebble service is not started, then the webhook server is not up.
+            # https://github.com/canonical/kserve-operators/issues/321
             update_layer(
                 self._controller_container_name,
                 self.controller_container,
@@ -536,6 +541,28 @@ class KServeControllerCharm(CharmBase):
             # configuration is changed, otherwise the service will remain
             # unaware of such changes.
             self._restart_controller_service()
+
+            # Only apply the ClusterServingRuntimes if the Webhook Service port is accessible
+            if (
+                self.controller_container.get_check(WEBHOOK_SERVICE_CHECK_NAME).status
+                == CheckStatus.UP
+            ):
+                try:
+                    self.cluster_runtimes_resource_handler.apply()
+                    log.info("KServe Webhook Service was up. Applied all ClusterServingRuntimes.")
+                    self.model.unit.status = ActiveStatus()
+                except ApiError as e:
+                    log.warning(f"Failed to apply ClusterServingRuntimes with ApiError: {e}")
+                    raise ErrorWithStatus(
+                        f"Failed to apply ClusterServingRuntimes: {e.status.message}", ErrorStatus
+                    )
+            else:
+                log.warning(
+                    f"Check {WEBHOOK_SERVICE_CHECK_NAME} is not up, skipping applying the ClusterServingRuntimes."
+                )
+                self.model.unit.status = MaintenanceStatus(
+                    f"Waiting for {WEBHOOK_SERVICE_CHECK_NAME} to be up"
+                )
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
