@@ -198,6 +198,7 @@ class KServeControllerCharm(CharmBase):
             "http_proxy": self.model.config["http-proxy"],
             "https_proxy": self.model.config["https-proxy"],
             "no_proxy": self.model.config["no-proxy"],
+            "webhook_service_name": self._webhook_service_name,
         }
 
     @property
@@ -304,7 +305,7 @@ class KServeControllerCharm(CharmBase):
                         "threshold": 1,
                         "tcp": {
                             "port": 443,
-                            "host": f"kserve-webhook-server-service.{self._namespace}.svc",
+                            "host": f"{self._webhook_service_name}.{self._namespace}.svc",
                         },
                     },
                 },

@@ -4,7 +4,7 @@ kind: Service
 metadata:
   labels:
     app.kubernetes.io/name: {{ app_name }}
-  name: kserve-webhook-server-service
+  name: {{ webhook_service_name }}
   namespace: {{ namespace }}
 spec:
   ports:
@@ -24,7 +24,7 @@ webhooks:
   clientConfig:
     caBundle: {{ cert }}
     service:
-      name: kserve-webhook-server-service
+      name: {{ webhook_service_name }}
       namespace: {{ namespace }}
       path: /mutate-serving-kserve-io-v1beta1-inferenceservice
   failurePolicy: Fail
@@ -45,7 +45,7 @@ webhooks:
   clientConfig:
     caBundle: {{ cert }}
     service:
-      name: kserve-webhook-server-service
+      name: {{ webhook_service_name }}
       namespace: {{ namespace }}
       path: /mutate-pods
   failurePolicy: Fail
@@ -81,7 +81,7 @@ webhooks:
   clientConfig:
     caBundle: {{ cert }}
     service:
-      name: kserve-webhook-server-service
+      name: {{ webhook_service_name }}
       namespace: {{ namespace }}
       path: /validate-serving-kserve-io-v1alpha1-inferencegraph
   failurePolicy: Fail
@@ -109,7 +109,7 @@ webhooks:
   clientConfig:
     caBundle: {{ cert }}
     service:
-      name: kserve-webhook-server-service
+      name: {{ webhook_service_name }}
       namespace: {{ namespace }}
       path: /validate-serving-kserve-io-v1beta1-inferenceservice
   failurePolicy: Fail
@@ -137,7 +137,7 @@ webhooks:
     clientConfig:
       caBundle: {{ cert }}
       service:
-        name: kserve-webhook-server-service
+        name: {{ webhook_service_name }}
         namespace: {{ namespace }}
         path: /validate-serving-kserve-io-v1alpha1-servingruntime
     failurePolicy: Fail
@@ -165,7 +165,7 @@ webhooks:
   clientConfig:
     caBundle: {{ cert }}
     service:
-      name: kserve-webhook-server-service
+      name: {{ webhook_service_name }}
       namespace: {{ namespace }}
       path: /validate-serving-kserve-io-v1alpha1-trainedmodel
   failurePolicy: Fail
@@ -193,7 +193,7 @@ webhooks:
   clientConfig:
     caBundle: {{ cert }}
     service:
-      name: kserve-webhook-server-service
+      name: {{ webhook_service_name }}
       namespace: {{ namespace }}
       path: /validate-serving-kserve-io-v1alpha1-clusterservingruntime
   failurePolicy: Fail
