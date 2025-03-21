@@ -46,6 +46,7 @@ from ops.model import (
     ActiveStatus,
     BlockedStatus,
     Container,
+    ErrorStatus,
     MaintenanceStatus,
     ModelError,
     WaitingStatus,
@@ -555,7 +556,7 @@ class KServeControllerCharm(CharmBase):
                     log.warning("Unexpected ApiError happened: %s", e)
                     raise ErrorWithStatus(
                         f"Unexpected ApiError happened: {e.status.message}",
-                        BlockedStatus,
+                        ErrorStatus,
                     )
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
