@@ -238,7 +238,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.integrate("istio-pilot", APP_NAME)
 
     # issuing dummy update_status just to trigger an event
-    async with ops_test.fast_forward():
+    async with ops_test.fast_forward(fast_interval="60s"):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             status="active",
