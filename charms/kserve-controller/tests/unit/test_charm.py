@@ -10,10 +10,11 @@ import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.pebble import CheckStatus
 from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
 
-from charm import KServeControllerCharm
+from charm import WEBHOOK_SERVICE_CHECK_NAME, KServeControllerCharm
 from tests.test_data.manifests import MANIFESTS_TEST_DATA
 
 # enable simulation of container networking
@@ -46,6 +47,15 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
             "override": "replace",
             "level": "alive",
             "http": {"url": "http://localhost:8081/healthz"},
+        },
+        WEBHOOK_SERVICE_CHECK_NAME: {
+            "override": "replace",
+            "period": "1s",
+            "threshold": 1,
+            "tcp": {
+                "port": 443,
+                "host": "kserve-webhook-server-service.None.svc",
+            },
         },
     },
 }
@@ -99,6 +109,13 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     yield mocked_resource_handler.lightkube_client
 
 
+@pytest.fixture()
+def mocked_container_get_check():
+    mocked_container_get_check = MagicMock(status="up")
+    mocked_container_get_check.return_value.status = CheckStatus.UP
+    return mocked_container_get_check
+
+
 def test_metrics(harness):
     """Test MetricsEndpointProvider initialization."""
     with patch("charm.MetricsEndpointProvider") as mock_metrics, patch(
@@ -142,11 +159,12 @@ def test_events(harness, mocked_resource_handler, mocker):
     on_event.assert_called_once()
 
 
-def test_on_install_active(harness, mocked_resource_handler):
+def test_on_install_active(harness, mocked_resource_handler, mocked_container_get_check):
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
     harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
+    harness.charm.controller_container.get_check = mocked_container_get_check
     harness.charm.on.install.emit()
     mocked_resource_handler.apply.assert_called()
     assert harness.charm.model.unit.status == ActiveStatus()
@@ -164,8 +182,12 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger.error.assert_called()
 
 
-def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, mocker):
+def test_on_kserve_controller_ready_active(
+    harness, mocked_resource_handler, mocked_container_get_check, mocker
+):
     harness.begin()
+
+    harness.charm.controller_container.get_check = mocked_container_get_check
 
     # Check initial plan is empty
     initial_plan = harness.get_container_pebble_plan("kserve-controller")
@@ -384,10 +406,12 @@ def test_generate_gateways_context_serverless_mode_pass(
     harness,
     mocker,
     mocked_resource_handler,
+    mocked_container_get_check,
 ):
     """Assert the gateway context is correct."""
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm.controller_container.get_check = mocked_container_get_check
 
     # Change deployment-mode to serverless
     harness.update_config({"deployment-mode": "serverless"})
@@ -488,9 +512,12 @@ def test_gen_certs_if_missing(cert_data_dict, should_certs_refresh, harness: Har
     assert mocked_gen_certs.called == should_certs_refresh
 
 
-def test_restart_controller_service(harness, mocked_resource_handler, mocker):
+def test_restart_controller_service(
+    harness, mocked_resource_handler, mocked_container_get_check, mocker
+):
     """Checks the controller service is restarted correctly."""
     harness.begin()
+    harness.charm.controller_container.get_check = mocked_container_get_check
 
     # Before pebble ready, the service should not be
     # there, so no action should be taken
