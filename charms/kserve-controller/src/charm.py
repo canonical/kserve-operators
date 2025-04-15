@@ -87,9 +87,16 @@ S3_USEHTTPS = "0"
 
 SECRETS_FILES = [
     "src/secrets/kserve-mlflow-minio-secret.yaml.j2",
+    "src/secrets/kserve-mlflow-minio-secret-orfeas.yaml.j2",
 ]
 SERVICE_ACCOUNTS_FILES = [
     "src/service-accounts/kserve-mlflow-minio-svc-account.yaml.j2",
+]
+ROLES_FILES = [
+    "src/roles/role-basic.yaml.j2",
+]
+ROLE_BINDINGS_FILES = [
+    "src/role-bindings/role-binding-basic.yaml.j2",
 ]
 NO_MINIO_RELATION_DATA = {}
 
@@ -148,6 +155,8 @@ class KServeControllerCharm(CharmBase):
             self.on["object-storage"].relation_changed,
             self.on["secrets"].relation_changed,
             self.on["service-accounts"].relation_changed,
+            self.on["roles"].relation_changed,
+            self.on["role-bindings"].relation_changed,
             self.on["ingress-gateway"].relation_broken,
             self.on["local-gateway"].relation_broken,
         ]:
@@ -159,6 +168,8 @@ class KServeControllerCharm(CharmBase):
         self._cluster_runtimes_resource_handler = None
         self._secrets_manifests_wrapper = None
         self._service_accounts_manifests_wrapper = None
+        self._roles_manifests_wrapper = None
+        self._role_bindings_manifests_wrapper = None
         self._lightkube_field_manager = "lightkube"
         self._controller_container_name = "kserve-controller"
         self.controller_container = self.unit.get_container(self._controller_container_name)
@@ -322,6 +333,22 @@ class KServeControllerCharm(CharmBase):
             )
         return self._service_accounts_manifests_wrapper
 
+    @property
+    def roles_manifests_wrapper(self):
+        if not self._roles_manifests_wrapper:
+            self._roles_manifests_wrapper = KubernetesManifestRequirerWrapper(
+                charm=self, relation_name="roles"
+            )
+        return self._roles_manifests_wrapper
+
+    @property
+    def role_bindings_manifests_wrapper(self):
+        if not self._role_bindings_manifests_wrapper:
+            self._role_bindings_manifests_wrapper = KubernetesManifestRequirerWrapper(
+                charm=self, relation_name="role-bindings"
+            )
+        return self._role_bindings_manifests_wrapper
+
     def _get_interfaces(self):
         # Remove this abstraction when SDI adds .status attribute to NoVersionsListed,
         # NoCompatibleVersionsListed:
@@ -483,11 +510,27 @@ class KServeControllerCharm(CharmBase):
             "secret_name": f"{self.app.name}-s3",
         }
 
+        roles_context = {}
+
+        role_bindings_context = {
+            "svc_account_name": f"{self.app.name}-s3",
+        }
+
         self._send_manifests(secrets_context, SECRETS_FILES, self.secrets_manifests_wrapper)
         self._send_manifests(
             service_accounts_context,
             SERVICE_ACCOUNTS_FILES,
             self.service_accounts_manifests_wrapper,
+        )
+        self._send_manifests(
+            roles_context,
+            ROLES_FILES,
+            self.roles_manifests_wrapper,
+        )
+        self._send_manifests(
+            role_bindings_context,
+            ROLE_BINDINGS_FILES,
+            self.role_bindings_manifests_wrapper,
         )
 
     def _on_event(self, event):
