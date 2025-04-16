@@ -72,7 +72,7 @@ metricsAggregator: |-
   }
 router: |-
   {
-      "image" : "kserve/router:v0.14.1",
+      "image" : "charmedkubeflow/kserve-router:0.14.1-35ac068",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
