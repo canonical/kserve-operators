@@ -537,7 +537,7 @@ class KServeControllerCharm(CharmBase):
                 # Until then the Pod is not ready, non-ready containers, thus traffic will
                 # be dropped.
                 # https://github.com/canonical/kserve-operators/issues/301
-                if "connection refused" in e.status.message:
+                if "connect: " in e.status.message:
                     log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
                     msg = "Charm Pod is not ready yet. Will apply ClusterServingRuntimes later."
                     log.info(msg)
