@@ -13,6 +13,13 @@ parts:
   charm:
     charm-python-packages: [setuptools, pip]
     # Following lines are needed due to https://github.com/canonical/charmcraft/issues/1722
+    charm-binary-python-packages:
+      - cosl==0.0.45
+      - serialized-data-interface==0.7.0
+      - lightkube==0.15.6
+      - lightkube-models==1.31.1.8
+      - pyyaml==6.0.1
+      - charmed-kubeflow-chisme==0.4.3
     build-snaps: [rustup]
     build-packages: [pkg-config, libffi-dev, libssl-dev]
     override-build: |

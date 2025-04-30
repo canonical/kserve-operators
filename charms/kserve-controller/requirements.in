@@ -1,8 +1,8 @@
-charmed-kubeflow-chisme
-lightkube
-lightkube-models
 ops
-pyyaml==6.0.1
-serialized-data-interface
+# charmed-kubeflow-chisme
+# pyyaml==6.0.1
+# lightkube
+# lightkube-models
+# serialized-data-interface
 # from loki_k8s.v1.loki_push_api.py
-cosl
+# cosl

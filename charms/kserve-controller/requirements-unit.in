@@ -19,4 +19,7 @@ lightkube
 ops
 pytest
 pytest-mock
--r requirements.in
+pyyaml==6.0.1
+lightkube-models
+serialized-data-interface
+cosl
