@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        charm: [controller]
+        charm: [kserve-controller]
     steps:
     - uses: actions/checkout@v4
 
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        charm: [controller]
+        charm: [kserve-controller]
     steps:
     - uses: actions/checkout@v4
 
@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        charm: [controller]
+        charm: [kserve-controller]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
