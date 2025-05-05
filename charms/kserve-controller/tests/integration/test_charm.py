@@ -49,8 +49,8 @@ RESOURCE_DISPATCHER_CHARM_NAME = "resource-dispatcher"
 CHARM_NAME = METADATA["name"]
 NAMESPACE_FILE = "./tests/integration/namespace.yaml"
 TESTING_LABELS = ["user.kubeflow.org/enabled"]
-ISTIO_VERSION = "1.16/stable"
-KNATIVE_VERSION = "latest/edge"
+ISTIO_VERSION = "1.24/stable"
+KNATIVE_VERSION = "1.16/stable"
 ISTIO_INGRESS_GATEWAY = "test-gateway"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
@@ -482,7 +482,7 @@ async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
     await ops_test.model.deploy(
         OBJECT_STORAGE_CHARM_NAME,
-        channel="ckf-1.7/stable",
+        channel="ckf-1.10/stable",
         config=OBJECT_STORAGE_CONFIG,
         trust=True,
     )
@@ -513,7 +513,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     deploy_k8s_resources([PODDEFAULTS_CRD_TEMPLATE])
     await ops_test.model.deploy(
         entity_url=METACONTROLLER_CHARM_NAME,
-        channel="latest/edge",
+        channel="4.11/stable",
         trust=True,
     )
     await ops_test.model.wait_for_idle(
@@ -523,7 +523,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
         raise_on_error=False,
         timeout=120,
     )
-    await ops_test.model.deploy(RESOURCE_DISPATCHER_CHARM_NAME, channel="latest/edge", trust=True)
+    await ops_test.model.deploy(RESOURCE_DISPATCHER_CHARM_NAME, channel="2.0/stable", trust=True)
     await ops_test.model.wait_for_idle(
         apps=[CHARM_NAME],
         status="active",
