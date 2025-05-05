@@ -19,4 +19,5 @@ lightkube
 ops
 pytest
 pytest-mock
--r requirements.in
+cosl
+serialized-data-interface
