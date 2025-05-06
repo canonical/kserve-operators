@@ -4,7 +4,15 @@
 #
 #    pip-compile requirements.in
 #
-ops==2.17.1
+deprecated==1.2.18
+    # via opentelemetry-api
+importlib-metadata==8.5.0
+    # via
+    #   opentelemetry-api
+    #   ops
+opentelemetry-api==1.32.1
+    # via ops
+ops==2.21.1
     # via -r requirements.in
 pyyaml==6.0.1
     # via
@@ -12,3 +20,7 @@ pyyaml==6.0.1
     #   ops
 websocket-client==1.8.0
     # via ops
+wrapt==1.17.2
+    # via deprecated
+zipp==3.20.2
+    # via importlib-metadata
