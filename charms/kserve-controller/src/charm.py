@@ -531,13 +531,15 @@ class KServeControllerCharm(CharmBase):
                 log.info("KServe Controller Pod was ready. Applied all ClusterServingRuntimes.")
             except ApiError as e:
                 # If the Pod is not ready (condition with type Ready, all containers must be Ready)
-                # then K8s will drop request to svc with message "connect: connection refused".
+                # then K8s will drop request to svc with either of these messages
+                # 1. connect: connection refused
+                # 2. connect: operation not permitted
                 # The charm container will become ready only once the start event has completed,
                 # and the workload container's pebble readiness probes are healthy.
                 # Until then the Pod is not ready, non-ready containers, thus traffic will
                 # be dropped.
                 # https://github.com/canonical/kserve-operators/issues/301
-                if "connection refused" in e.status.message:
+                if e.status.code == 500 and "connect: " in e.status.message:
                     log.warning("Failed to create ClusterServingRuntimes: %s", e.status.message)
                     msg = "Charm Pod is not ready yet. Will apply ClusterServingRuntimes later."
                     log.info(msg)
