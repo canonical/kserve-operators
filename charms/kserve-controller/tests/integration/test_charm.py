@@ -22,6 +22,15 @@ from charmed_kubeflow_chisme.testing import (
     deploy_and_assert_grafana_agent,
     get_alert_rules,
 )
+from charms_dependencies import (
+    ISTIO_GATEWAY,
+    ISTIO_PILOT,
+    KNATIVE_OPERATOR,
+    KNATIVE_SERVING,
+    METACONTROLLER_OPERATOR,
+    MINIO,
+    RESOURCE_DISPATCHER,
+)
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import (
@@ -38,20 +47,10 @@ logger = logging.getLogger(__name__)
 
 MANIFESTS_SUFFIX = "-s3"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-METACONTROLLER_CHARM_NAME = "metacontroller-operator"
-OBJECT_STORAGE_CHARM_NAME = "minio"
-OBJECT_STORAGE_CONFIG = {
-    "access-key": "minio",
-    "secret-key": "minio123",
-    "port": "9000",
-}
-RESOURCE_DISPATCHER_CHARM_NAME = "resource-dispatcher"
-CHARM_NAME = METADATA["name"]
 NAMESPACE_FILE = "./tests/integration/namespace.yaml"
 TESTING_LABELS = ["user.kubeflow.org/enabled"]
-ISTIO_VERSION = "1.16/stable"
-KNATIVE_VERSION = "latest/edge"
 ISTIO_INGRESS_GATEWAY = "test-gateway"
+ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 CONFIGMAP_NAME = "inferenceservice-config"
@@ -82,9 +81,9 @@ SKLEARN_INF_SVC_NAME = SKLEARN_INF_SVC_OBJECT.metadata.name
 
 def deploy_k8s_resources(template_files: str):
     """Deploy k8s resources from template files."""
-    lightkube_client = lightkube.Client(field_manager=CHARM_NAME)
+    lightkube_client = lightkube.Client(field_manager=APP_NAME)
     k8s_resource_handler = KubernetesResourceHandler(
-        field_manager=CHARM_NAME, template_files=template_files, context={}
+        field_manager=APP_NAME, template_files=template_files, context={}
     )
     lightkube.generic_resource.load_in_cluster_generic_resources(lightkube_client)
     k8s_resource_handler.apply()
@@ -200,22 +199,22 @@ async def test_build_and_deploy(ops_test: OpsTest):
     """
     # Deploy istio-operators for ingress configuration
     await ops_test.model.deploy(
-        "istio-pilot",
-        channel=ISTIO_VERSION,
+        ISTIO_PILOT.charm,
+        channel=ISTIO_PILOT.channel,
         config={"default-gateway": ISTIO_INGRESS_GATEWAY},
-        trust=True,
+        trust=ISTIO_PILOT.trust,
     )
 
     await ops_test.model.deploy(
-        "istio-gateway",
-        application_name="istio-ingressgateway",
-        channel=ISTIO_VERSION,
-        config={"kind": "ingress"},
-        trust=True,
+        ISTIO_GATEWAY.charm,
+        application_name=ISTIO_GATEWAY_APP_NAME,
+        channel=ISTIO_GATEWAY.channel,
+        config=ISTIO_GATEWAY.config,
+        trust=ISTIO_GATEWAY.trust,
     )
-    await ops_test.model.integrate("istio-pilot", "istio-ingressgateway")
+    await ops_test.model.integrate(ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME)
     await ops_test.model.wait_for_idle(
-        ["istio-pilot", "istio-ingressgateway"],
+        [ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
@@ -235,7 +234,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         application_name=APP_NAME,
         trust=True,
     )
-    await ops_test.model.integrate("istio-pilot", APP_NAME)
+    await ops_test.model.integrate(ISTIO_PILOT.charm, APP_NAME)
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward(fast_interval="60s"):
@@ -362,15 +361,15 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
     # Deploy knative-operator
     await ops_test.model.deploy(
-        "knative-operator",
-        channel=KNATIVE_VERSION,
-        trust=True,
+        KNATIVE_OPERATOR.charm,
+        channel=KNATIVE_OPERATOR.channel,
+        trust=KNATIVE_OPERATOR.trust,
     )
 
     # Wait for idle knative-operator before deploying knative-serving
     # due to issue https://github.com/canonical/knative-operators/issues/156
     await ops_test.model.wait_for_idle(
-        ["knative-operator"],
+        [KNATIVE_OPERATOR.charm],
         status="active",
         raise_on_blocked=False,
         timeout=90 * 10,
@@ -378,24 +377,24 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
 
     # Deploy knative-serving
     await ops_test.model.deploy(
-        "knative-serving",
-        channel=KNATIVE_VERSION,
+        KNATIVE_SERVING.charm,
+        channel=KNATIVE_SERVING.channel,
         config={
             "namespace": "knative-serving",
             "istio.gateway.namespace": namespace,
             "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
         },
-        trust=True,
+        trust=KNATIVE_SERVING.trust,
     )
     await ops_test.model.wait_for_idle(
-        ["knative-serving"],
+        [KNATIVE_SERVING.charm],
         raise_on_blocked=False,
         status="active",
         timeout=90 * 10,
     )
 
     # Relate kserve-controller and knative-serving
-    await ops_test.model.integrate("knative-serving", APP_NAME)
+    await ops_test.model.integrate(KNATIVE_SERVING.charm, APP_NAME)
 
     # Change deployment mode to Serverless
     await ops_test.model.applications[APP_NAME].set_config({"deployment-mode": "serverless"})
@@ -481,27 +480,27 @@ async def test_configmap_changes_with_config(
 async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
     await ops_test.model.deploy(
-        OBJECT_STORAGE_CHARM_NAME,
-        channel="ckf-1.7/stable",
-        config=OBJECT_STORAGE_CONFIG,
-        trust=True,
+        MINIO.charm,
+        channel=MINIO.channel,
+        config=MINIO.config,
+        trust=MINIO.trust,
     )
     await ops_test.model.wait_for_idle(
-        apps=[OBJECT_STORAGE_CHARM_NAME],
+        apps=[MINIO.charm],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=600,
     )
-    await ops_test.model.integrate(OBJECT_STORAGE_CHARM_NAME, CHARM_NAME)
+    await ops_test.model.integrate(MINIO.charm, APP_NAME)
     await ops_test.model.wait_for_idle(
-        apps=[CHARM_NAME],
+        apps=[APP_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=600,
     )
-    assert ops_test.model.applications[CHARM_NAME].units[0].workload_status == "active"
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
@@ -512,20 +511,24 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     """
     deploy_k8s_resources([PODDEFAULTS_CRD_TEMPLATE])
     await ops_test.model.deploy(
-        entity_url=METACONTROLLER_CHARM_NAME,
-        channel="latest/edge",
-        trust=True,
+        entity_url=METACONTROLLER_OPERATOR.charm,
+        channel=METACONTROLLER_OPERATOR.channel,
+        trust=METACONTROLLER_OPERATOR.trust,
     )
     await ops_test.model.wait_for_idle(
-        apps=[METACONTROLLER_CHARM_NAME],
+        apps=[METACONTROLLER_OPERATOR.charm],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=120,
     )
-    await ops_test.model.deploy(RESOURCE_DISPATCHER_CHARM_NAME, channel="latest/edge", trust=True)
+    await ops_test.model.deploy(
+        RESOURCE_DISPATCHER.charm,
+        channel=RESOURCE_DISPATCHER.channel,
+        trust=RESOURCE_DISPATCHER.trust,
+    )
     await ops_test.model.wait_for_idle(
-        apps=[CHARM_NAME],
+        apps=[APP_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -534,20 +537,18 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     )
 
     await ops_test.model.integrate(
-        f"{CHARM_NAME}:service-accounts", f"{RESOURCE_DISPATCHER_CHARM_NAME}:service-accounts"
+        f"{APP_NAME}:service-accounts", f"{RESOURCE_DISPATCHER.charm}:service-accounts"
     )
-    await ops_test.model.integrate(
-        f"{CHARM_NAME}:secrets", f"{RESOURCE_DISPATCHER_CHARM_NAME}:secrets"
-    )
+    await ops_test.model.integrate(f"{APP_NAME}:secrets", f"{RESOURCE_DISPATCHER.charm}:secrets")
 
     await ops_test.model.wait_for_idle(
-        apps=[RESOURCE_DISPATCHER_CHARM_NAME, CHARM_NAME],
+        apps=[RESOURCE_DISPATCHER.charm, APP_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
         timeout=1200,
     )
-    assert ops_test.model.applications[CHARM_NAME].units[0].workload_status == "active"
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
 async def test_new_user_namespace_has_manifests(
@@ -555,15 +556,15 @@ async def test_new_user_namespace_has_manifests(
 ):
     """Create user namespace with correct label and check manifests."""
     time.sleep(30)  # sync can take up to 10 seconds for reconciliation loop to trigger
-    manifests_name = f"{CHARM_NAME}{MANIFESTS_SUFFIX}"
+    manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
     secret = lightkube_client.get(Secret, manifests_name, namespace=namespace)
     service_account = lightkube_client.get(ServiceAccount, manifests_name, namespace=namespace)
     assert secret.data == {
-        "AWS_ACCESS_KEY_ID": base64.b64encode(
-            OBJECT_STORAGE_CONFIG["access-key"].encode("utf-8")
-        ).decode("utf-8"),
+        "AWS_ACCESS_KEY_ID": base64.b64encode(MINIO.config["access-key"].encode("utf-8")).decode(
+            "utf-8"
+        ),
         "AWS_SECRET_ACCESS_KEY": base64.b64encode(
-            OBJECT_STORAGE_CONFIG["secret-key"].encode("utf-8")
+            MINIO.config["secret-key"].encode("utf-8")
         ).decode("utf-8"),
     }
     assert service_account.secrets[0].name == manifests_name
@@ -587,12 +588,12 @@ async def test_inference_service_proxy_envs_configuration(
     test_https_proxy = "my_https_proxy"
     test_no_proxy = "no_proxy"
 
-    await ops_test.model.applications["kserve-controller"].set_config(
+    await ops_test.model.applications[APP_NAME].set_config(
         {"http-proxy": test_http_proxy, "https-proxy": test_https_proxy, "no-proxy": test_no_proxy}
     )
 
     await ops_test.model.wait_for_idle(
-        ["kserve-controller"],
+        [APP_NAME],
         status="active",
         raise_on_blocked=False,
         timeout=60 * 1,
