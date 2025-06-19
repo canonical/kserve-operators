@@ -1,9 +1,8 @@
 ops
 pyyaml==6.0.1
-# Commented because of https://github.com/canonical/charmcraft/issues/2259
 # from loki_k8s.v1.loki_push_api.py
-# cosl
-# charmed-kubeflow-chisme
-# lightkube
-# lightkube-models
-# serialized-data-interface
+cosl
+charmed-kubeflow-chisme
+lightkube
+lightkube-models
+serialized-data-interface
