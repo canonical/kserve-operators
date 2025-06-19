@@ -53,6 +53,10 @@ idna==3.10
     #   anyio
     #   httpx
     #   requests
+importlib-metadata==8.7.0
+    # via
+    #   opentelemetry-api
+    #   ops
 jinja2==3.1.6
     # via charmed-kubeflow-chisme
 jsonschema==4.17.3
@@ -79,7 +83,9 @@ oauthlib==3.3.0
     # via
     #   kubernetes
     #   requests-oauthlib
-ops==2.17.1
+opentelemetry-api==1.34.1
+    # via ops
+ops==2.22.0
     # via
     #   -r requirements.in
     #   charmed-kubeflow-chisme
@@ -170,6 +176,7 @@ typing-extensions==4.14.0
     #   anyio
     #   cosl
     #   juju
+    #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   typing-inspect
@@ -188,3 +195,5 @@ websocket-client==1.8.0
     #   ops
 websockets==15.0.1
     # via juju
+zipp==3.23.0
+    # via importlib-metadata
