@@ -21,3 +21,4 @@ pytest
 pytest-mock
 cosl
 serialized-data-interface
+-r requirements.in
