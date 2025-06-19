@@ -612,7 +612,7 @@ async def test_inference_service_proxy_envs_configuration(
                 namespace=serverless_namespace,
                 labels={"serving.kserve.io/inferenceservice": SKLEARN_INF_SVC_NAME},
             )
-            isvc_pod = next(pods_list)
+            isvc_pod = next(iter(pods_list))
             init_env_vars = isvc_pod.spec.initContainers[0].env
 
             for env_var in init_env_vars:
