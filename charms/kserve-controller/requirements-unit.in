@@ -13,7 +13,9 @@
 #     add clarity to the dependency list.
 #   * Pinning a version of a python package/lib shared with requirements.in
 #     must not introduce any incompatibilities.
-charmed-kubeflow-chisme
+# "charmed-kubeflow-chisme" pinned to avoid closed "latest" tracks with COS charms, see:
+# https://github.com/canonical/charmed-kubeflow-chisme/issues/155
+charmed-kubeflow-chisme>=0.4.11
 coverage
 lightkube
 ops
@@ -21,3 +23,4 @@ pytest
 pytest-mock
 cosl
 serialized-data-interface
+-r requirements.in
