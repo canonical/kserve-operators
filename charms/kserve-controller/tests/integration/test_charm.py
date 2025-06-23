@@ -607,10 +607,12 @@ async def test_inference_service_proxy_envs_configuration(
     # Assert InferenceService Pod specifies the proxy envs for the initContainer
     for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
-            pods_list = lightkube_client.list(
-                res=Pod,
-                namespace=serverless_namespace,
-                labels={"serving.kserve.io/inferenceservice": SKLEARN_INF_SVC_NAME},
+            pods_list = iter(
+                lightkube_client.list(
+                    res=Pod,
+                    namespace=serverless_namespace,
+                    labels={"serving.kserve.io/inferenceservice": SKLEARN_INF_SVC_NAME},
+                )
             )
             isvc_pod = next(pods_list)
             init_env_vars = isvc_pod.spec.initContainers[0].env

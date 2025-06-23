@@ -28,10 +28,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v5.3.0
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5.6.0
       with:
-        python-version: 3.8
+        python-version: "3.12"
 
     - name: Install dependencies
       run: pip install tox
@@ -47,10 +47,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v5.3.0
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5.6.0
       with:
-        python-version: 3.8
+        python-version: "3.12"
 
     - name: Install dependencies
       run: pip install tox
@@ -73,11 +73,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v5.3.0
-        with:
-          python-version: 3.8
-
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -87,7 +82,7 @@ jobs:
           microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
           charmcraft-channel: 3.x/stable
       - run: |
-          juju add-model kubeflow --config default-series=focal --config automatically-retry-hooks=false
+          juju add-model kubeflow --config automatically-retry-hooks=false
           tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
 
       - name: Get all

@@ -1,5 +1,4 @@
 aiohttp
-charmed-kubeflow-chisme
 jinja2
 # Pinning to <4.0 due to compatibility with the 3.1 controller version
 juju<4.0
@@ -7,6 +6,6 @@ lightkube
 pytest-operator
 requests
 tenacity
-# Pin to >=0.4.0 because the reusable test infrastructure is on that version and above
-# This prevents pip-compile from trying to pin an earlier version
-charmed-kubeflow-chisme>=0.4.0
+# "charmed-kubeflow-chisme" pinned to avoid closed "latest" tracks with COS charms, see:
+# https://github.com/canonical/charmed-kubeflow-chisme/issues/155
+charmed-kubeflow-chisme>=0.4.11
