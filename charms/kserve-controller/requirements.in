@@ -1,5 +1,5 @@
 ops
-pyyaml==6.0.1
+pyyaml==6.0.2
 # from loki_k8s.v1.loki_push_api.py
 cosl
 # "charmed-kubeflow-chisme" pinned to avoid closed "latest" tracks with COS charms, see:
