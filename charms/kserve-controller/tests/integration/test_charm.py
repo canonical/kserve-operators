@@ -4,6 +4,7 @@
 
 
 import base64
+import json
 import logging
 import time
 from pathlib import Path
@@ -31,6 +32,7 @@ from charms_dependencies import (
     MINIO,
     RESOURCE_DISPATCHER,
 )
+from jinja2 import Template
 from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import (
@@ -45,6 +47,13 @@ from tenacity import Retrying, stop_after_delay, wait_fixed
 
 logger = logging.getLogger(__name__)
 
+CUSTOM_IMAGES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "src" / "default-custom-images.json"
+)
+with CUSTOM_IMAGES_PATH.open() as f:
+    custom_images = json.load(f)
+
+CONFIGMAP_DATA_PATH = Path("./tests/integration/config-map-data.yaml")
 MANIFESTS_SUFFIX = "-s3"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 NAMESPACE_FILE = "./tests/integration/namespace.yaml"
@@ -54,10 +63,6 @@ ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 CONFIGMAP_NAME = "inferenceservice-config"
-EXPECTED_CONFIGMAP = yaml.safe_load(Path("./tests/integration/config-map-data.yaml").read_text())
-EXPECTED_CONFIGMAP_CHANGED = yaml.safe_load(
-    Path("./tests/integration/config-map-data-changed.yaml").read_text()
-)
 PODDEFAULTS_CRD_TEMPLATE = "./tests/integration/crds/poddefaults.yaml"
 
 PodDefault = lightkube.generic_resource.create_namespaced_resource(
@@ -77,6 +82,42 @@ ISVC = lightkube.generic_resource.create_namespaced_resource(
 SKLEARN_INF_SVC_YAML = yaml.safe_load(Path("./tests/integration/sklearn-iris.yaml").read_text())
 SKLEARN_INF_SVC_OBJECT = lightkube.codecs.load_all_yaml(yaml.dump(SKLEARN_INF_SVC_YAML))[0]
 SKLEARN_INF_SVC_NAME = SKLEARN_INF_SVC_OBJECT.metadata.name
+
+
+def populate_configmap_template(configmap_template_path, image_config):
+    """Populates the ConfigMap template with image data from the JSON file.
+
+    Args:
+        configmap_template_path (str): The path to YAML file that serves as the ConfigMap template.
+        image_config (dict): A dictionary containing the image configuration data.
+
+    Returns:
+        dict: The populated ConfigMap as a YAML object (Python dictionary).
+
+    This function reads the template, replaces placeholders for images (like {{ agent_image }}),
+    and returns the populated ConfigMap as a Python dictionary.
+    """
+    with open(configmap_template_path, "r") as f:
+        configmap_template = f.read()
+
+    [explainer_image, explainer_version] = image_config.get("configmap__explainers__art").split(
+        ":"
+    )
+
+    template = Template(configmap_template)
+    populated_configmap = template.render(
+        agent_image=image_config.get("configmap__agent"),
+        batcher_image=image_config.get("configmap__batcher"),
+        explainer_image=explainer_image,
+        explainer_version=explainer_version,
+        logger_image=image_config.get("configmap__logger"),
+        router_image=image_config.get("configmap__router"),
+        storage_initializer_image=image_config.get("configmap__storageInitializer"),
+    )
+
+    populated_configmap_yaml = yaml.safe_load(populated_configmap)
+
+    return populated_configmap_yaml
 
 
 def deploy_k8s_resources(template_files: str):
@@ -449,10 +490,11 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
         lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
+    expected_configmap = populate_configmap_template(CONFIGMAP_DATA_PATH, custom_images)
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
-    assert inferenceservice_config.data == EXPECTED_CONFIGMAP
+    assert inferenceservice_config.data == expected_configmap
 
 
 async def test_configmap_changes_with_config(
@@ -471,10 +513,12 @@ async def test_configmap_changes_with_config(
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=300
     )
+    custom_images["configmap__batcher"] = "custom:1.0"
+    expected_configmap = populate_configmap_template(CONFIGMAP_DATA_PATH, custom_images)
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
-    assert inferenceservice_config.data == EXPECTED_CONFIGMAP_CHANGED
+    assert inferenceservice_config.data == expected_configmap
 
 
 async def test_relate_to_object_store(ops_test: OpsTest):

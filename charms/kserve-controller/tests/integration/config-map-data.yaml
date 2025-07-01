@@ -1,6 +1,6 @@
 agent: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+      "image" : "{{ agent_image }}",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -8,7 +8,7 @@ agent: |-
   }
 batcher: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+      "image" : "{{ batcher_image }}",
       "memoryRequest": "1Gi",
       "memoryLimit": "1Gi",
       "cpuRequest": "1",
@@ -43,8 +43,8 @@ deploy: |-
 explainers: |-
   {
       "art": {
-          "image" : "charmedkubeflow/artexplainer",
-          "defaultImageVersion": "0.14.1-8ace842"
+          "image" : "{{ explainer_image }}",
+          "defaultImageVersion": "{{ explainer_version }}"
       }
   }
 ingress: |-
@@ -58,7 +58,7 @@ ingress: |-
   }
 logger: |-
   {
-      "image" : "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+      "image" : "{{ logger_image }}",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -72,7 +72,7 @@ metricsAggregator: |-
   }
 router: |-
   {
-      "image" : "charmedkubeflow/kserve-router:0.14.1-35ac068",
+      "image" : "{{ router_image }}",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
@@ -84,7 +84,7 @@ security: |-
   }
 storageInitializer: |-
   {
-      "image" : "charmedkubeflow/storage-initializer:0.14.1-397d028",
+      "image" : "{{ storage_initializer_image }}",
       "memoryRequest": "100Mi",
       "memoryLimit": "1Gi",
       "cpuRequest": "100m",
