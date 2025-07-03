@@ -47,9 +47,7 @@ from tenacity import Retrying, stop_after_delay, wait_fixed
 
 logger = logging.getLogger(__name__)
 
-CUSTOM_IMAGES_PATH = (
-    Path("./src/default-custom-images.json")
-)
+CUSTOM_IMAGES_PATH = Path("./src/default-custom-images.json")
 with CUSTOM_IMAGES_PATH.open() as f:
     custom_images = json.load(f)
 
@@ -105,7 +103,9 @@ def populate_configmap_template(configmap_template_path, image_config):
     with open(configmap_template_path, "r") as f:
         configmap_template = f.read()
 
-    [explainer_image, explainer_version] = image_config.get("configmap__explainers__art").split(":")
+    [explainer_image, explainer_version] = image_config.get("configmap__explainers__art").split(
+        ":"
+    )
 
     template = Template(configmap_template)
     populated_configmap = template.render(
