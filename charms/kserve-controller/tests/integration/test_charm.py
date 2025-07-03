@@ -48,12 +48,20 @@ from tenacity import Retrying, stop_after_delay, wait_fixed
 logger = logging.getLogger(__name__)
 
 CUSTOM_IMAGES_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "src" / "default-custom-images.json"
+    Path("./src/default-custom-images.json")
 )
 with CUSTOM_IMAGES_PATH.open() as f:
     custom_images = json.load(f)
 
-CONFIGMAP_DATA_PATH = Path("./tests/integration/config-map-data.yaml")
+CONFIGMAP_DATA_PATH = Path("./src/templates/configmap_manifests.yaml.j2")
+CONFIGMAP_DATA_DEPLOYMENT_MODE = "Serverless"
+CONFIGMAP_DATA_INGRESS_DOMAIN = "example.com"
+CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
+CONFIGMAP_DATA_LOCAL_GATEWAY_NAME = "knative-local-gateway"
+CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME = "knative-local-gateway"
+CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE = "kubeflow"
+CONFIGMAP_DATA_INGRESS_GATEWAY_NAME = "test-gateway"
+
 MANIFESTS_SUFFIX = "-s3"
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 NAMESPACE_FILE = "./tests/integration/namespace.yaml"
@@ -93,31 +101,33 @@ def populate_configmap_template(configmap_template_path, image_config):
 
     Returns:
         dict: The populated ConfigMap as a YAML object (Python dictionary).
-
-    This function reads the template, replaces placeholders for images (like {{ agent_image }}),
-    and returns the populated ConfigMap as a Python dictionary.
     """
     with open(configmap_template_path, "r") as f:
         configmap_template = f.read()
 
-    [explainer_image, explainer_version] = image_config.get("configmap__explainers__art").split(
-        ":"
-    )
+    [explainer_image, explainer_version] = image_config.get("configmap__explainers__art").split(":")
 
     template = Template(configmap_template)
     populated_configmap = template.render(
-        agent_image=image_config.get("configmap__agent"),
-        batcher_image=image_config.get("configmap__batcher"),
-        explainer_image=explainer_image,
-        explainer_version=explainer_version,
-        logger_image=image_config.get("configmap__logger"),
-        router_image=image_config.get("configmap__router"),
-        storage_initializer_image=image_config.get("configmap__storageInitializer"),
+        configmap__agent=image_config.get("configmap__agent"),
+        configmap__batcher=image_config.get("configmap__batcher"),
+        deployment_mode=CONFIGMAP_DATA_DEPLOYMENT_MODE,
+        configmap__explainers__art__image=explainer_image,
+        configmap__explainers__art__version=explainer_version,
+        ingress_domain=CONFIGMAP_DATA_INGRESS_DOMAIN,
+        local_gateway_namespace=CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
+        local_gateway_name=CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
+        local_gateway_service_name=CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
+        ingress_gateway_namespace=CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
+        ingress_gateway_name=CONFIGMAP_DATA_INGRESS_GATEWAY_NAME,
+        configmap__logger=image_config.get("configmap__logger"),
+        configmap__router=image_config.get("configmap__router"),
+        configmap__storageInitializer=image_config.get("configmap__storageInitializer"),
     )
 
     populated_configmap_yaml = yaml.safe_load(populated_configmap)
 
-    return populated_configmap_yaml
+    return populated_configmap_yaml["data"]
 
 
 def deploy_k8s_resources(template_files: str):
