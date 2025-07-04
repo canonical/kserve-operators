@@ -39,9 +39,9 @@ from jinja2 import Template
 from jsonschema import ValidationError
 from lightkube import ApiError
 from lightkube.models.core_v1 import ServicePort
+from ops import main
 from ops.charm import CharmBase
 from ops.framework import StoredState
-from ops.main import main
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
