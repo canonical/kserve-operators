@@ -51,7 +51,7 @@ CUSTOM_IMAGES_PATH = Path("./src/default-custom-images.json")
 with CUSTOM_IMAGES_PATH.open() as f:
     custom_images = json.load(f)
 
-CONFIGMAP_DATA_PATH = Path("./src/templates/configmap_manifests.yaml.j2")
+CONFIGMAP_TEMPLATE_PATH = Path("./src/templates/configmap_manifests.yaml.j2")
 CONFIGMAP_DATA_DEPLOYMENT_MODE = "Serverless"
 CONFIGMAP_DATA_INGRESS_DOMAIN = "example.com"
 CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
@@ -89,45 +89,38 @@ SKLEARN_INF_SVC_YAML = yaml.safe_load(Path("./tests/integration/sklearn-iris.yam
 SKLEARN_INF_SVC_OBJECT = lightkube.codecs.load_all_yaml(yaml.dump(SKLEARN_INF_SVC_YAML))[0]
 SKLEARN_INF_SVC_NAME = SKLEARN_INF_SVC_OBJECT.metadata.name
 
+explainer_image, explainer_version = custom_images["configmap__explainers__art"].split(":")
+configmap_context = {
+    **custom_images,
+    "configmap__explainers__art__image": explainer_image,
+    "configmap__explainers__art__version": explainer_version,
+    "deployment_mode": CONFIGMAP_DATA_DEPLOYMENT_MODE,
+    "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
+    "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
+    "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
+    "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
+    "ingress_gateway_namespace": CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
+    "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME,
+}
 
-def populate_configmap_template(configmap_template_path, image_config):
-    """Populates the ConfigMap template with image data from the JSON file.
+
+def populate_template(template_path, context):
+    """Populates a YAML template with values from the provided context.
 
     Args:
-        configmap_template_path (str): The path to YAML file that serves as the ConfigMap template.
-        image_config (dict): A dictionary containing the image configuration data.
+        template_path (str): Path to the YAML file that serves as the Jinja2 template.
+        context (dict): Dictionary of values to render into the template.
 
     Returns:
-        dict: The populated ConfigMap as a YAML object (Python dictionary).
+        dict: The rendered YAML content as a Python dictionary.
     """
-    with open(configmap_template_path, "r") as f:
+    with open(template_path, "r") as f:
         configmap_template = f.read()
 
-    [explainer_image, explainer_version] = image_config.get("configmap__explainers__art").split(
-        ":"
-    )
-
-    template = Template(configmap_template)
-    populated_configmap = template.render(
-        configmap__agent=image_config.get("configmap__agent"),
-        configmap__batcher=image_config.get("configmap__batcher"),
-        deployment_mode=CONFIGMAP_DATA_DEPLOYMENT_MODE,
-        configmap__explainers__art__image=explainer_image,
-        configmap__explainers__art__version=explainer_version,
-        ingress_domain=CONFIGMAP_DATA_INGRESS_DOMAIN,
-        local_gateway_namespace=CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
-        local_gateway_name=CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
-        local_gateway_service_name=CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
-        ingress_gateway_namespace=CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
-        ingress_gateway_name=CONFIGMAP_DATA_INGRESS_GATEWAY_NAME,
-        configmap__logger=image_config.get("configmap__logger"),
-        configmap__router=image_config.get("configmap__router"),
-        configmap__storageInitializer=image_config.get("configmap__storageInitializer"),
-    )
-
+    populated_configmap = Template(configmap_template).render(context)
     populated_configmap_yaml = yaml.safe_load(populated_configmap)
 
-    return populated_configmap_yaml["data"]
+    return populated_configmap_yaml
 
 
 def deploy_k8s_resources(template_files: str):
@@ -500,11 +493,12 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
         lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
-    expected_configmap = populate_configmap_template(CONFIGMAP_DATA_PATH, custom_images)
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
-    assert inferenceservice_config.data == expected_configmap
+
+    expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
+    assert inferenceservice_config.data == expected_configmap["data"]
 
 
 async def test_configmap_changes_with_config(
@@ -523,12 +517,15 @@ async def test_configmap_changes_with_config(
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=300
     )
-    custom_images["configmap__batcher"] = "custom:1.0"
-    expected_configmap = populate_configmap_template(CONFIGMAP_DATA_PATH, custom_images)
+
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
-    assert inferenceservice_config.data == expected_configmap
+
+    configmap_context["configmap__batcher"] = "custom:1.0"
+    
+    expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
+    assert inferenceservice_config.data == expected_configmap["data"]
 
 
 async def test_relate_to_object_store(ops_test: OpsTest):
