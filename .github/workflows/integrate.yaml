@@ -28,13 +28,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v5.6.0
-      with:
-        python-version: "3.12"
-
     - name: Install dependencies
-      run: pip install tox
+      run: pipx install tox
 
     - run: tox -e ${{ matrix.charm }}-lint
 
@@ -47,13 +42,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v5.6.0
-      with:
-        python-version: "3.12"
-
     - name: Install dependencies
-      run: pip install tox
+      run: pipx install tox
 
     - run: tox -e ${{ matrix.charm }}-unit
 
