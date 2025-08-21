@@ -6,7 +6,7 @@
     "configmap__router": "charmedkubeflow/kserve-router:0.14.1-35ac068",
     "configmap__storageInitializer": "charmedkubeflow/storage-initializer:0.14.1-397d028",
     "serving_runtimes__huggingfaceserver": "charmedkubeflow/huggingfaceserver:0.14.1-790009b",
-    "serving_runtimes__lgbserver": "charmedkubeflow/lgbserver:0.14.1-537653b",
+    "serving_runtimes__lgbserver": "docker.io/charmedkubeflow/lgbserver:0.14.1-f85d000",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
     "serving_runtimes__paddleserver": "charmedkubeflow/paddleserver:0.14.1-537653b",
     "serving_runtimes__pmmlserver": "charmedkubeflow/pmmlserver:0.14.1-bd08793",
