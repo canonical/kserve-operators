@@ -62,18 +62,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pipx install tox
 
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: 1.32-strict/stable
-          juju-channel: 3.6/stable
-          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
-          charmcraft-channel: 3.x/stable
-      - run: |
-          juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
+      - name: Setup environment
+        run: |
+          sudo apt-get remove -y docker-ce docker-ce-cli containerd.io
+          sudo rm -rf /run/containerd
+          sudo snap install concierge --classic
+          sudo concierge prepare --trace
 
       - name: Get all
         run: kubectl get all -A
