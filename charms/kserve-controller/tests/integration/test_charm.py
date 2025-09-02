@@ -424,7 +424,6 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         KNATIVE_SERVING.charm,
         channel=KNATIVE_SERVING.channel,
         config={
-            "namespace": "knative-serving",
             "istio.gateway.namespace": namespace,
             "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
         },
