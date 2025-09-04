@@ -26,7 +26,7 @@ jobs:
       matrix:
         charm: [kserve-controller]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Install dependencies
       run: pipx install tox
@@ -40,7 +40,7 @@ jobs:
       matrix:
         charm: [kserve-controller]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Install dependencies
       run: pipx install tox
@@ -70,7 +70,7 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install dependencies
         run: pipx install tox
 
