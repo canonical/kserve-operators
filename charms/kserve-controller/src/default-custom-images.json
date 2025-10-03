@@ -1,8 +1,8 @@
 {
-    "configmap__agent": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
-    "configmap__batcher": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+    "configmap__agent": "docker.io/charmedkubeflow/kserve-agent:0.15.2-b6f5f3b",
+    "configmap__batcher": "docker.io/charmedkubeflow/kserve-agent:0.15.2-b6f5f3b",
     "configmap__explainers__art": "charmedkubeflow/artexplainer:0.14.1-8ace842",
-    "configmap__logger": "charmedkubeflow/kserve-agent:0.14.1-0fb8a34",
+    "configmap__logger": "docker.io/charmedkubeflow/kserve-agent:0.15.2-b6f5f3b",
     "configmap__router": "charmedkubeflow/kserve-router:0.14.1-35ac068",
     "configmap__storageInitializer": "charmedkubeflow/storage-initializer:0.14.1-397d028",
     "serving_runtimes__huggingfaceserver": "charmedkubeflow/huggingfaceserver:0.14.1-790009b",
