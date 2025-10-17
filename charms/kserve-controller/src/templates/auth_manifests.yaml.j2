@@ -3,10 +3,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    app: kserve
-    app.kubernetes.io/name: kserve
+    app: {{ app_name }}
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-leader-election-role
-  namespace: kubeflow
+  namespace: {{ namespace }}
 rules:
 - apiGroups:
   - coordination.k8s.io
@@ -48,8 +48,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    app: kserve
-    app.kubernetes.io/name: kserve
+    app: {{ app_name }}
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-manager-role
 rules:
 - apiGroups:
@@ -280,8 +280,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    app: kserve
-    app.kubernetes.io/name: kserve
+    app: {{ app_name }}
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-proxy-role
 rules:
 - apiGroups:
