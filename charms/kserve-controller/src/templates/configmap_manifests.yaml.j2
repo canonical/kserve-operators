@@ -49,8 +49,19 @@ data:
             "defaultImageVersion": "{{ configmap__explainers__art__version }}"
         }
     }
+  inferenceService: |-
+    {
+      "resource": {
+          "cpuLimit": "1",
+          "memoryLimit": "2Gi",
+          "cpuRequest": "1",
+          "memoryRequest": "2Gi"
+        }
+    }
   ingress: |-
     {
+      "enableGatewayApi": false,
+      "kserveIngressGateway": "kserve/kserve-ingress-gateway",
       "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressDomain"  : "{{ ingress_domain}}",
       "ingressClassName" : "istio",
@@ -74,6 +85,12 @@ data:
       "enableMetricAggregation": "true",
       "enablePrometheusScraping" : "true"
     }
+  opentelemetryCollector: |-
+    {
+      "scrapeInterval": "5s",
+      "metricReceiverEndpoint": "keda-otel-scaler.keda.svc:4317",
+      "metricScalerEndpoint": "keda-otel-scaler.keda.svc:4318"
+    }
   router: |-
     {
         "image" : "{{ configmap__router }}",
@@ -81,6 +98,7 @@ data:
         "memoryLimit": "1Gi",
         "cpuRequest": "100m",
         "cpuLimit": "1"
+        "imagePullPolicy": "IfNotPresent"
     }
   security: |-
     {
