@@ -45,7 +45,7 @@ juju relate istio-pilot istio-ingressgateway
 
 #### Only for Serverless mode
 
-For serverless operations kserve-operators depends on knative-serving. To correctly configure it, you can:
+CI Test, tor serverless operations kserve-operators depends on knative-serving. To correctly configure it, you can:
 
 > NOTE: these instructions assume you have deployed Microk8s and MetalLB is enabled. If your cloud configuration is different than this, please refer to [knative-operators](https://github.com/canonical/knative-operators#usage) documentation.
 
