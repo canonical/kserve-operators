@@ -280,13 +280,13 @@ class KServeControllerCharm(CharmBase):
                     },
                 },
                 "checks": {
-                    # https://github.com/kserve/kserve/blob/v0.14.1/install/v0.14.1/kserve_kubeflow.yaml#L32000
+                    # https://github.com/kserve/kserve/blob/v0.15.2/install/v0.15.2/kserve_kubeflow.yaml#L32876
                     "kserve-controller-ready": {
                         "override": "replace",
                         "level": "ready",
                         "http": {"url": "http://localhost:8081/readyz"},
                     },
-                    # https://github.com/kserve/kserve/blob/v0.14.1/install/v0.14.1/kserve_kubeflow.yaml#L31988
+                    # https://github.com/kserve/kserve/blob/v0.15.2/install/v0.15.2/kserve_kubeflow.yaml#L32864
                     "kserve-controller-alive": {
                         "override": "replace",
                         "level": "alive",
