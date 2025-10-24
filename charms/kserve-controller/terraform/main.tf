@@ -1,6 +1,7 @@
 resource "juju_application" "kserve_controller" {
   charm {
     name     = "kserve-controller"
+    base     = var.base
     channel  = var.channel
     revision = var.revision
   }
