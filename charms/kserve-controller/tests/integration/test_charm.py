@@ -203,6 +203,7 @@ def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: 
     reraise=True,
 )
 def assert_inf_svc_state(lightkube_client: lightkube.Client, inf_svc_name, namespace):
+    """Checks if a InferenceService is in a ready state by retrying."""
     inf_svc = lightkube_client.get(ISVC, inf_svc_name, namespace=namespace)
     conditions = inf_svc.get("status", {}).get("conditions")
     logger.info(
