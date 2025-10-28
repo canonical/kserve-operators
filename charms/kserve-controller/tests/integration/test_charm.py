@@ -197,6 +197,30 @@ def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: 
         logger.info("No Pods found - the pod might not be launched yet")
 
 
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=30),
+    stop=tenacity.stop_after_attempt(30),
+    reraise=True,
+)
+def assert_inf_svc_state(lightkube_client: lightkube.Client, inf_svc_name, namespace):
+    """Checks if a InferenceService is in a ready state by retrying."""
+    inf_svc = lightkube_client.get(ISVC, inf_svc_name, namespace=namespace)
+    conditions = inf_svc.get("status", {}).get("conditions")
+    logger.info(
+        f"INFO: Inspecting InferenceService {inf_svc.metadata.name} in namespace {inf_svc.metadata.namespace}"
+    )
+
+    for condition in conditions:
+        if condition.get("status") in ["False", "Unknown"] and condition.get("type") != "Stopped":
+            logger.info(f"Inference service is not ready according to condition: {condition}")
+            status_overall = False
+            print_inf_svc_logs(lightkube_client=lightkube_client, inf_svc=inf_svc)
+            break
+        status_overall = True
+        logger.info("Service is ready")
+    assert status_overall is True
+
+
 @pytest.fixture(scope="session")
 def namespace(lightkube_client: lightkube.Client):
     """Create user namespace with testing label"""
@@ -341,31 +365,9 @@ def test_inference_service_raw_deployment(
     def create_inf_svc():
         lightkube_client.create(inf_svc_object, namespace=TESTING_NAMESPACE_NAME)
 
-    # Assert InferenceService state is Available
-    @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=30),
-        stop=tenacity.stop_after_attempt(30),
-        reraise=True,
-    )
-    def assert_inf_svc_state():
-        inf_svc = lightkube_client.get(ISVC, inf_svc_name, namespace=TESTING_NAMESPACE_NAME)
-        conditions = inf_svc.get("status", {}).get("conditions")
-        logger.info(
-            f"INFO: Inspecting InferenceService {inf_svc.metadata.name} in namespace {inf_svc.metadata.namespace}"
-        )
-
-        for condition in conditions:
-            if condition.get("status") in ["False", "Unknown"]:
-                logger.info(f"Inference service is not ready according to condition: {condition}")
-                status_overall = False
-                print_inf_svc_logs(lightkube_client=lightkube_client, inf_svc=inf_svc)
-                break
-            status_overall = True
-            logger.info("Service is ready")
-        assert status_overall is True
-
     create_inf_svc()
-    assert_inf_svc_state()
+    # Assert InferenceService state is Available
+    assert_inf_svc_state(lightkube_client, inf_svc_name, TESTING_NAMESPACE_NAME)
 
 
 async def test_logging(ops_test: OpsTest):
@@ -464,24 +466,9 @@ def test_inference_service_serverless_deployment(serverless_namespace, ops_test:
     def create_inf_svc():
         lightkube_client.create(SKLEARN_INF_SVC_OBJECT, namespace=serverless_namespace)
 
-    # Assert InferenceService state is Available
-    @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
-        stop=tenacity.stop_after_attempt(30),
-        reraise=True,
-    )
-    def assert_inf_svc_state():
-        inf_svc = lightkube_client.get(ISVC, SKLEARN_INF_SVC_NAME, namespace=serverless_namespace)
-        conditions = inf_svc.get("status", {}).get("conditions")
-        for condition in conditions:
-            if condition.get("status") == "False":
-                status_overall = False
-                break
-            status_overall = True
-        assert status_overall is True
-
     create_inf_svc()
-    assert_inf_svc_state()
+    # Assert InferenceService state is Available
+    assert_inf_svc_state(lightkube_client, SKLEARN_INF_SVC_NAME, serverless_namespace)
 
 
 async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
