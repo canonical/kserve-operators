@@ -101,9 +101,11 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
 
 def test_metrics(harness):
     """Test MetricsEndpointProvider initialization."""
-    with patch("charm.MetricsEndpointProvider") as mock_metrics, patch(
-        "charm.KubernetesServicePatch"
-    ) as mock_service_patcher, patch("charm.ServicePort") as mock_service_port:
+    with (
+        patch("charm.MetricsEndpointProvider") as mock_metrics,
+        patch("charm.KubernetesServicePatch") as mock_service_patcher,
+        patch("charm.ServicePort") as mock_service_port,
+    ):
         harness.begin()
         mock_metrics.assert_called_once_with(
             harness.charm,

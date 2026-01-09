@@ -526,14 +526,14 @@ pycparser = {version = "*", markers = "implementation_name != \"PyPy\""}
 
 [[package]]
 name = "charmed-kubeflow-chisme"
-version = "0.4.20"
+version = "0.4.21"
 description = "A collection of helpers for Charms maintained by the Charmed Kubeflow team"
 optional = false
 python-versions = ">=3.6"
 groups = ["charm", "integration", "unit"]
 files = [
-    {file = "charmed_kubeflow_chisme-0.4.20-py3-none-any.whl", hash = "sha256:1f5e48fa24c748ca1dc66041b7a9801f60a87e2d6d693db059fbe3c51e567b8f"},
-    {file = "charmed_kubeflow_chisme-0.4.20.tar.gz", hash = "sha256:a2af54016fd1b78fd5b85a514df9c92f3058f620aea209386fa449244b3f6731"},
+    {file = "charmed_kubeflow_chisme-0.4.21-py3-none-any.whl", hash = "sha256:a87b62d73b445a43bcfc20701762174232a5f06a282a563039a1f24f20a2ffc5"},
+    {file = "charmed_kubeflow_chisme-0.4.21.tar.gz", hash = "sha256:951a59e74d97335e868fa9fc476971ce9aba88bd7393650bc20fa2f7a57f5737"},
 ]
 
 [package.dependencies]
@@ -551,6 +551,25 @@ tenacity = "*"
 
 [package.extras]
 test = ["black", "pytest"]
+
+[[package]]
+name = "charmed-service-mesh-helpers"
+version = "0.3.0"
+description = "Helpers for the Service Mesh charms."
+optional = false
+python-versions = "~=3.8"
+groups = ["charm"]
+files = [
+    {file = "charmed_service_mesh_helpers-0.3.0-py3-none-any.whl", hash = "sha256:39caa6e170c399794024c79c3490236ed1890a5b1984842f99eee1260b975d89"},
+    {file = "charmed_service_mesh_helpers-0.3.0.tar.gz", hash = "sha256:888c24a7648ac723edc4894e81efc90317a22f0f66da2e0ea301c583232e429d"},
+]
+
+[package.dependencies]
+ops = ">=2.5,<3.0"
+pydantic = ">=2"
+
+[package.extras]
+dev = ["codespell", "coverage[toml]", "pyright", "pytest", "ruff"]
 
 [[package]]
 name = "charset-normalizer"
@@ -1540,6 +1559,22 @@ PyYAML = "*"
 dev = ["pytest", "pytest-asyncio", "respx"]
 
 [[package]]
+name = "lightkube-extensions"
+version = "0.3.0"
+description = "A collection of helpers and shared code for using Lightkube."
+optional = false
+python-versions = "~=3.8"
+groups = ["charm"]
+files = [
+    {file = "lightkube_extensions-0.3.0-py3-none-any.whl", hash = "sha256:580178f937be39b378158264e926d6f188a05d13dd17d8491c2f1f6a234ebaf8"},
+    {file = "lightkube_extensions-0.3.0.tar.gz", hash = "sha256:997c5f7457c297449083ee66dce498a1a5a6423d58d4f87258cf68da04bb99f2"},
+]
+
+[package.dependencies]
+jinja2 = "*"
+lightkube = ">=0.11.0"
+
+[[package]]
 name = "lightkube-models"
 version = "1.35.0.8"
 description = "Models and Resources for lightkube module"
@@ -1989,14 +2024,14 @@ testing = ["docopt", "pytest"]
 
 [[package]]
 name = "pathspec"
-version = "1.0.2"
+version = "1.0.3"
 description = "Utility library for gitignore style pattern matching of file paths."
 optional = false
 python-versions = ">=3.9"
 groups = ["fmt", "lint"]
 files = [
-    {file = "pathspec-1.0.2-py3-none-any.whl", hash = "sha256:62f8558917908d237d399b9b338ef455a814801a4688bc41074b25feefd93472"},
-    {file = "pathspec-1.0.2.tar.gz", hash = "sha256:fa32b1eb775ed9ba8d599b22c5f906dc098113989da2c00bf8b210078ca7fb92"},
+    {file = "pathspec-1.0.3-py3-none-any.whl", hash = "sha256:e80767021c1cc524aa3fb14bedda9c34406591343cc42797b386ce7b9354fb6c"},
+    {file = "pathspec-1.0.3.tar.gz", hash = "sha256:bac5cf97ae2c2876e2d25ebb15078eb04d76e4b98921ee31c6f85ade8b59444d"},
 ]
 
 [package.extras]
@@ -3349,4 +3384,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "627335e969d146680adbf8bc022c3dba73ed0b311e83d16d5f50f1c9e9b48599"
+content-hash = "281c0bf49825aab0a92cc1720755a339a77eb8463b3d89b22985c43f48a14470"
