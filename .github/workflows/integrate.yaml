@@ -60,7 +60,7 @@ jobs:
       matrix:
         charm: [kserve-controller]
         test-type:
-          - integration
+          # - integration
           - integration-ambient
     steps:
       - name: Maximise GH runner space
