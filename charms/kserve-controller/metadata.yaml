@@ -12,6 +12,8 @@ summary: |
 containers:
   kserve-controller:
     resource: kserve-controller-image
+    uid: 584792
+    gid: 584792
 resources:
   kserve-controller-image:
     type: oci-image
@@ -63,3 +65,4 @@ requires:
   logging:
     interface: loki_push_api
     optional: true
+charm-user: non-root
