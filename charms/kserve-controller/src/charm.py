@@ -83,6 +83,11 @@ K8S_RESOURCE_FILES = [
     "src/templates/cluster_storage_containers.yaml.j2",
 ]
 
+# Relation names
+SDI_INGRESS_GATEWAY_RELATION = "ingress-gateway"
+SDI_LOCAL_GATEWAY_RELATION = "local-gateway"
+GATEWAY_METADATA_RELATION = "gateway-metadata"
+
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
 S3_USEANONCREDENTIALS = "false"
 S3_REGION = "us-east-1"
@@ -135,9 +140,13 @@ class KServeControllerCharm(CharmBase):
         super().__init__(*args)
         self.custom_images = []
         self.images_context = {}
-        self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="ingress-gateway")
-        self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
-        self.gateway_info = GatewayMetadataRequirer(self, relation_name="gateway-metadata")
+        self._ingress_gateway_requirer = GatewayRequirer(
+            self, relation_name=SDI_INGRESS_GATEWAY_RELATION
+        )
+        self._local_gateway_requirer = GatewayRequirer(
+            self, relation_name=SDI_LOCAL_GATEWAY_RELATION
+        )
+        self.gateway_info = GatewayMetadataRequirer(self, relation_name=GATEWAY_METADATA_RELATION)
 
         self.framework.observe(self.on.remove, self._on_remove)
 
@@ -364,6 +373,18 @@ class KServeControllerCharm(CharmBase):
             )
         return self._service_accounts_manifests_wrapper
 
+    @property
+    def policy_resource_manager(self) -> PolicyResourceManager:
+        """Create a Policy Resource Manager from service-mesh helper library."""
+        return PolicyResourceManager(
+            self,
+            lightkube_client=self.k8s_resource_handler.lightkube_client,
+            labels=create_charm_default_labels(
+                self.app.name, self.model.name, scope="allow-all-policy"
+            ),
+            logger=log,
+        )
+
     def _get_interfaces(self):
         # Remove this abstraction when SDI adds .status attribute to NoVersionsListed,
         # NoCompatibleVersionsListed:
@@ -532,17 +553,6 @@ class KServeControllerCharm(CharmBase):
             self.service_accounts_manifests_wrapper,
         )
 
-    def _get_policy_resource_manager(self) -> PolicyResourceManager:
-        """Create a Policy Resource Manager from service-mesh helper library."""
-        return PolicyResourceManager(
-            self,
-            lightkube_client=self.k8s_resource_handler.lightkube_client,
-            labels=create_charm_default_labels(
-                self.app.name, self.model.name, scope="allow-all-policy"
-            ),
-            logger=log,
-        )
-
     def reconcile_authorization_policies(self):
         """Create and reconcile the allow-all AuthorizationPolicy.
 
@@ -555,8 +565,7 @@ class KServeControllerCharm(CharmBase):
         if self._deployment_mode == "rawdeployment" and self._has_gateway_metadata_relation:
             policies.append(ap_raw)
 
-        pmr = self._get_policy_resource_manager()
-        pmr.reconcile([], MeshType.istio, policies)
+        self.policy_resource_manager.reconcile([], MeshType.istio, policies)
 
     def _on_event(self, event):
         try:
@@ -649,8 +658,7 @@ class KServeControllerCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
 
         # remove AuthorizationPolicies
-        pmr = self._get_policy_resource_manager()
-        pmr.reconcile([], MeshType.istio, [])
+        self.policy_resource_manager.reconcile([], MeshType.istio, [])
 
         handlers = [
             self.k8s_resource_handler,
