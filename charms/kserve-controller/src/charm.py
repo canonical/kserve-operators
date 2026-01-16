@@ -156,14 +156,15 @@ class KServeControllerCharm(CharmBase):
             self.on.kserve_controller_pebble_ready,
             self.on.leader_elected,
             self.on.update_status,
-            self.on["local-gateway"].relation_changed,
-            self.on["ingress-gateway"].relation_changed,
+            self.on[SDI_LOCAL_GATEWAY_RELATION].relation_changed,
+            self.on[SDI_INGRESS_GATEWAY_RELATION].relation_changed,
+            self.on[GATEWAY_METADATA_RELATION].relation_changed,
             self.on["object-storage"].relation_changed,
             self.on["secrets"].relation_changed,
             self.on["service-accounts"].relation_changed,
-            self.on["ingress-gateway"].relation_broken,
-            self.on["local-gateway"].relation_broken,
-            self.on["gateway-metadata"].relation_changed,
+            self.on[SDI_INGRESS_GATEWAY_RELATION].relation_broken,
+            self.on[SDI_LOCAL_GATEWAY_RELATION].relation_broken,
+            self.on[GATEWAY_METADATA_RELATION].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
 
@@ -205,7 +206,7 @@ class KServeControllerCharm(CharmBase):
     @property
     def _has_gateway_metadata_relation(self) -> bool:
         """Returns whether the gateway-metadata relation is established."""
-        return self.model.get_relation("gateway-metadata") is not None
+        return self.model.get_relation(GATEWAY_METADATA_RELATION) is not None
 
     @property
     def _context(self):
@@ -332,7 +333,7 @@ class KServeControllerCharm(CharmBase):
         """
         if self._deployment_mode == "rawdeployment":
             # ensure that the gateway-metadata relation is established
-            if not self.model.get_relation("gateway-metadata"):
+            if not self._has_gateway_metadata_relation:
                 raise ErrorWithStatus(
                     "RawDeployment mode detected but gateway-metadata relation is not established",
                     BlockedStatus,
@@ -736,7 +737,8 @@ class KServeControllerCharm(CharmBase):
                 )
             except GatewayRelationMissingError:
                 raise ErrorWithStatus(
-                    "Please relate to knative-serving:local-gateway", BlockedStatus
+                    f"Please relate to knative-serving:{SDI_LOCAL_GATEWAY_RELATION}",
+                    BlockedStatus,
                 )
             except GatewayRelationDataMissingError:
                 log.error("Missing or incomplete local gateway data.")
