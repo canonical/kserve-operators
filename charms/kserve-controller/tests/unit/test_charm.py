@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import ops.testing
 import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
+from charmed_service_mesh_helpers.interfaces import GatewayMetadata
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
@@ -559,3 +560,51 @@ def test_validate_sdi_interface_success(harness: Harness):
     harness.begin()
     result = harness.charm._validate_sdi_interface(interfaces, relation_name, "")
     assert result == expected_data
+
+
+def test_raw_deployment_blocked_no_gateway_metadatatadata_relation(
+    harness: Harness, mocked_resource_handler
+):
+    """Test that the charm goes to blocked status if there is no gateway-metadata relation."""
+    harness.begin()
+    harness.update_config({"deployment-mode": "RawDeployment"})
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "RawDeployment mode detected but gateway-metadata relation is not established"
+    )
+
+
+@patch("charm.KServeControllerCharm._restart_controller_service")
+def test_generate_gateways_context_raw_deployment_mode(
+    _mocked_restart_controller_service,
+    harness: Harness,
+    mocker,
+    mocked_resource_handler,
+):
+    """Assert the gateway context is correct in RawDeployment mode."""
+    harness.begin()
+
+    # Change deployment-mode to serverless
+    harness.update_config({"deployment-mode": "RawDeployment"})
+
+    # Add relation with ingress-gateway providers
+    harness.add_relation("service-mesh", "istio-beacon-k8s")
+    harness.add_relation("gateway-metadata", "istio-ingress-k8s")
+
+    # mock the self.gateway_info.get_metadata() to return hardcoded valuesu
+    mocker.patch.object(
+        harness.charm.gateway_info,
+        "get_metadata",
+        return_value=(
+            GatewayMetadata(
+                namespace="test-namespace",
+                deployment_name="test-deployment",
+                gateway_name="test-gateway",
+                service_account="test-service-account",
+            )
+        ),
+    )
+
+    gateway_context = harness.charm._generate_gateways_context()
+    assert gateway_context["ingress_gateway_name"] == "test-gateway"
+    assert gateway_context["ingress_gateway_namespace"] == "test-namespace"
+    assert gateway_context["ingress_gateway_service_name"] == "test-deployment"
