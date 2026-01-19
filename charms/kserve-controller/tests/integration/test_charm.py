@@ -6,7 +6,6 @@
 import base64
 import json
 import logging
-import time
 from pathlib import Path
 
 import lightkube
@@ -372,7 +371,6 @@ async def test_new_user_namespace_has_manifests(
     ops_test: OpsTest, lightkube_client: lightkube.Client, test_namespace: str
 ):
     """Create user namespace with correct label and check manifests."""
-    time.sleep(60 * 3)  # sync can take up to 10 seconds for reconciliation loop to trigger
     manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
     secret = get_k8s_secret(manifests_name, test_namespace, lightkube_client)
     service_account = get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
