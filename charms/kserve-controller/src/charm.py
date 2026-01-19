@@ -204,6 +204,16 @@ class KServeControllerCharm(CharmBase):
         return str(self.model.config["deployment-mode"]).lower()
 
     @property
+    def _is_raw_deployment_mode(self) -> bool:
+        """Returns whether the deployment mode is RawDeployment."""
+        return self._deployment_mode == "rawdeployment"
+
+    @property
+    def _is_serverless_mode(self) -> bool:
+        """Returns whether the deployment mode is Serverless."""
+        return self._deployment_mode == "serverless"
+
+    @property
     def _has_gateway_metadata_relation(self) -> bool:
         """Returns whether the gateway-metadata relation is established."""
         return self.model.get_relation(GATEWAY_METADATA_RELATION) is not None
@@ -227,9 +237,9 @@ class KServeControllerCharm(CharmBase):
         # Ensure any input is valid for deployment mode
         deployment_mode = self._deployment_mode
         enable_gateway_api = "false"
-        if deployment_mode == "serverless":
+        if self._is_serverless_mode:
             deployment_mode = "Serverless"
-        elif deployment_mode == "rawdeployment":
+        elif self._is_raw_deployment_mode:
             deployment_mode = "RawDeployment"
             enable_gateway_api = "true"
         else:
@@ -331,7 +341,7 @@ class KServeControllerCharm(CharmBase):
         If in RawDeployment then the gateway-metadata relation will be used.
         If in Serverless mode then the sdi gateway relation will be used.
         """
-        if self._deployment_mode == "rawdeployment":
+        if self._is_raw_deployment_mode:
             # ensure that the gateway-metadata relation is established
             if not self._has_gateway_metadata_relation:
                 raise ErrorWithStatus(
@@ -563,7 +573,7 @@ class KServeControllerCharm(CharmBase):
         ap_raw = generate_allow_all_authorization_policy(self.app.name, self.model.name)
 
         policies = []
-        if self._deployment_mode == "rawdeployment" and self._has_gateway_metadata_relation:
+        if self._is_raw_deployment_mode and self._has_gateway_metadata_relation:
             policies.append(ap_raw)
 
         self.policy_resource_manager.reconcile([], MeshType.istio, policies)
@@ -723,7 +733,7 @@ class KServeControllerCharm(CharmBase):
 
         # Get the local-gateway info. This value should only
         # be get and rendered in Serverless Mode.
-        if self._deployment_mode == "serverless":
+        if self._is_serverless_mode:
             try:
                 local_gateway_info = self._local_gateway_info
                 # FIXME: the local_gateway_service_name is hardcoded in knative-serving
