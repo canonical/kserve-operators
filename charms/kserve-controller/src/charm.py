@@ -669,14 +669,7 @@ class KServeControllerCharm(CharmBase):
             log.error(api_err)
             raise
 
-    def _on_remove(self, event):
-        try:
-            self.custom_images = parse_images_config(self.model.config["custom_images"])
-            self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
-        except ErrorWithStatus as err:
-            self.model.unit.status = err.status
-            log.error(f"Failed to handle {event} with error: {err}")
-            return
+    def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
 
         # remove AuthorizationPolicies
