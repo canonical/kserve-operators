@@ -526,6 +526,11 @@ async def test_remove_with_resources_present(ops_test: OpsTest):
         _last = object()
         assert next(crd_list, _last) is _last
 
+    # reset custom images to a valid value
+    await ops_test.model.applications[APP_NAME].set_config({"custom_images": None})
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300
+    )
     # remove deployed charm and verify that it is removed alongside resources it created
     await ops_test.model.remove_application(app_name=APP_NAME, block_until_done=True)
     assert APP_NAME not in ops_test.model.applications
