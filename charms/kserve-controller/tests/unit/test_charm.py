@@ -148,6 +148,21 @@ def test_events(harness, mocked_resource_handler, mocker):
 
 def test_on_install_active(harness, mocked_resource_handler):
     harness.begin()
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
     harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
@@ -159,6 +174,21 @@ def test_on_install_active(harness, mocked_resource_handler):
 def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger = mocker.patch("charm.log")
     harness.begin()
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
     mocked_resource_handler.apply.side_effect = _FakeApiError()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
