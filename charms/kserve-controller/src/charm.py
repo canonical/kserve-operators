@@ -219,6 +219,11 @@ class KServeControllerCharm(CharmBase):
         return self.model.get_relation(GATEWAY_METADATA_RELATION) is not None
 
     @property
+    def _has_ingress_gatway_relation(self) -> bool:
+        """Returns whether the ingress-gateway relation is established."""
+        return self.model.get_relation(SDI_INGRESS_GATEWAY_RELATION) is not None
+
+    @property
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
         ca_context = b64encode(self._stored.ca.encode("ascii"))
@@ -236,12 +241,10 @@ class KServeControllerCharm(CharmBase):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
         deployment_mode = self._deployment_mode
-        enable_gateway_api = "false"
         if self._is_serverless_mode:
             deployment_mode = "Serverless"
         elif self._is_raw_deployment_mode:
             deployment_mode = "RawDeployment"
-            enable_gateway_api = "true"
         else:
             raise ErrorWithStatus(
                 "Please set deployment-mode to either Serverless or RawDeployment",
@@ -252,7 +255,9 @@ class KServeControllerCharm(CharmBase):
             "ingress_domain": self.model.config["domain-name"],
             "deployment_mode": deployment_mode,
             "namespace": self.model.name,
-            "enable_gateway_api": enable_gateway_api,
+            "enable_gateway_api": str(
+                self._is_raw_deployment_mode and self._has_gateway_metadata_relation
+            ).lower(),
         }
         # Generate and add gateway context
         gateways_context = self._generate_gateways_context()
@@ -338,30 +343,27 @@ class KServeControllerCharm(CharmBase):
     def _ingress_gateway_info(self):
         """Returns the ingress gateway info.
 
-        If in RawDeployment then the gateway-metadata relation will be used.
-        If in Serverless mode then the sdi gateway relation will be used.
+        The function returns the gateway data from either the ingress-gateway or gateway-metadata
+        relations.
         """
-        if self._is_raw_deployment_mode:
-            # ensure that the gateway-metadata relation is established
-            if not self._has_gateway_metadata_relation:
-                raise ErrorWithStatus(
-                    "RawDeployment mode detected but gateway-metadata relation is not established",
-                    BlockedStatus,
-                )
+        self._validate_gateway_relations()
 
-            gw_metadata = self.gateway_info.get_metadata()
-            if not gw_metadata:
-                raise ErrorWithStatus("Waiting for gateway-metadata relation data", WaitingStatus)
+        # try to get the data from ingress-gateway relation
+        if self._has_ingress_gatway_relation:
+            gw_metadata = self._ingress_gateway_requirer.get_relation_data()
+            gw_metadata["gateway_service_name"] = "istio-ingressgateway-workload"
+            return gw_metadata
 
-            return {
-                "gateway_name": gw_metadata.gateway_name,
-                "gateway_namespace": gw_metadata.namespace,
-                "gateway_service_name": gw_metadata.deployment_name,
-            }
+        # try to get data from gateway-metadata relation
+        gw_metadata = self.gateway_info.get_metadata()
+        if not gw_metadata:
+            raise ErrorWithStatus("Waiting for gateway-metadata relation data", WaitingStatus)
 
-        gw_metadata = self._ingress_gateway_requirer.get_relation_data()
-        gw_metadata["gateway_service_name"] = "istio-ingressgateway-workload"
-        return gw_metadata
+        return {
+            "gateway_name": gw_metadata.gateway_name,
+            "gateway_namespace": gw_metadata.namespace,
+            "gateway_service_name": gw_metadata.deployment_name,
+        }
 
     @property
     def _local_gateway_info(self):
@@ -700,6 +702,42 @@ class KServeControllerCharm(CharmBase):
         if not container.can_connect():
             raise ErrorWithStatus("Pod startup is not complete", MaintenanceStatus)
 
+    def _validate_gateway_relations(self):
+        """Validates the existing gateway relations depending on the mode.
+
+        The function will raise the corresponding exception depending on the relations and the
+        deployment mode. Specifically:
+        1. If both inngress-gateway and gateway-metadata relations are established, it will
+           raise a BlockedStatus error.
+        2. If in Serverless mode and there is no ingress-gateway relation established, it will
+           raise a BlockedStatus error.
+        3. If the RawDeployment mode and there is no gateway-metadata or ingress-gateway relation
+           established, it will raise a BlockedStatus error.
+        """
+        if self._has_gateway_metadata_relation and self._has_ingress_gatway_relation:
+            raise ErrorWithStatus(
+                "Both gateway-metadata and ingress-gateway relations are established",
+                BlockedStatus,
+            )
+
+        # either ingress-gateway or gateway-metadata relation is established, or none, but not both
+        # RawDeployment can work with both ingress-gateway (sdi) relation and gateway-metadata
+        # Serverless can only work with ingress-gateway (sidecar istio)
+        if self._is_serverless_mode and not self._has_ingress_gatway_relation:
+            raise ErrorWithStatus(
+                "Serverless mode detected, but no relation to ingress-gateway",
+                BlockedStatus,
+            )
+
+        # RawDeployment should have a relation to either ingress-gateway or gateway-metadata
+        if self._is_raw_deployment_mode and not (
+            self._has_gateway_metadata_relation or self._has_ingress_gatway_relation
+        ):
+            raise ErrorWithStatus(
+                "RawDeployment mode detected, but no relation to gateway-metadata or ingress-gateway",
+                BlockedStatus,
+            )
+
     def _generate_gateways_context(self) -> dict:
         """Generates the ingress context based on certain rules.
 
@@ -710,6 +748,7 @@ class KServeControllerCharm(CharmBase):
             GatewayRelationMissingError: if any of the required relations are missing
             GatewayRelationDataMissingError: if relation data is missing or incomplete
         """
+
         # Get the ingress-gateway info. This should always be known by this charm.
         try:
             ingress_gateway_info = self._ingress_gateway_info
@@ -731,28 +770,29 @@ class KServeControllerCharm(CharmBase):
             "local_gateway_service_name": "",
         }
 
-        # Get the local-gateway info. This value should only
-        # be get and rendered in Serverless Mode.
-        if self._is_serverless_mode:
-            try:
-                local_gateway_info = self._local_gateway_info
-                # FIXME: the local_gateway_service_name is hardcoded in knative-serving
-                # and that information is not shared through the relation
-                gateways_context.update(
-                    {
-                        "local_gateway_name": local_gateway_info["gateway_name"],
-                        "local_gateway_namespace": local_gateway_info["gateway_namespace"],
-                        "local_gateway_service_name": "knative-local-gateway",
-                    }
-                )
-            except GatewayRelationMissingError:
-                raise ErrorWithStatus(
-                    f"Please relate to knative-serving:{SDI_LOCAL_GATEWAY_RELATION}",
-                    BlockedStatus,
-                )
-            except GatewayRelationDataMissingError:
-                log.error("Missing or incomplete local gateway data.")
-                raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
+        if self._is_raw_deployment_mode:
+            return gateways_context
+
+        # Get the local-gateway info
+        try:
+            local_gateway_info = self._local_gateway_info
+            # FIXME: the local_gateway_service_name is hardcoded in knative-serving
+            # and that information is not shared through the relation
+            gateways_context.update(
+                {
+                    "local_gateway_name": local_gateway_info["gateway_name"],
+                    "local_gateway_namespace": local_gateway_info["gateway_namespace"],
+                    "local_gateway_service_name": "knative-local-gateway",
+                }
+            )
+        except GatewayRelationMissingError:
+            raise ErrorWithStatus(
+                f"Please relate to knative-serving:{SDI_LOCAL_GATEWAY_RELATION}",
+                BlockedStatus,
+            )
+        except GatewayRelationDataMissingError:
+            log.error("Missing or incomplete local gateway data.")
+            raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
 
         return gateways_context
 

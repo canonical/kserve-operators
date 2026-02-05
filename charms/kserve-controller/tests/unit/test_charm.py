@@ -10,6 +10,7 @@ import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_service_mesh_helpers.interfaces import GatewayMetadata
 from lightkube import ApiError
+from ops import StatusBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
@@ -250,13 +251,15 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler):
     mocked_logger.warning.assert_called()
 
 
-def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_resource_handler):
+def test_generate_gateways_context_serverless_mode_no_relation(
+    harness, mocker, mocked_resource_handler
+):
     """Assert the unit gets blocked if no relation."""
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
     assert harness.charm.model.unit.status == BlockedStatus(
-        "Please relate to istio-pilot:gateway-info"
+        "Serverless mode detected, but no relation to ingress-gateway"
     )
 
 
@@ -562,15 +565,109 @@ def test_validate_sdi_interface_success(harness: Harness):
     assert result == expected_data
 
 
-def test_raw_deployment_blocked_no_gateway_metadatatadata_relation(
-    harness: Harness, mocked_resource_handler
+@pytest.mark.parametrize(
+    "deployment_mode, ingress_gateway_relation, gateway_metadata_relation, expected_status",
+    [
+        # Serverless, should only work with ingress-gateway relation
+        (
+            "serverless",
+            False,
+            False,
+            BlockedStatus("Serverless mode detected, but no relation to ingress-gateway"),
+        ),
+        (
+            "serverless",
+            False,
+            True,
+            BlockedStatus("Serverless mode detected, but no relation to ingress-gateway"),
+        ),
+        (
+            "serverless",
+            True,
+            True,
+            BlockedStatus("Both gateway-metadata and ingress-gateway relations are established"),
+        ),
+        (
+            "serverless",
+            True,
+            False,
+            ActiveStatus(),
+        ),
+        # RawDeployment, can work with either ingress-gateway or gateway-metadata relations
+        (
+            "rawdeployment",
+            False,
+            False,
+            BlockedStatus(
+                "RawDeployment mode detected, but no relation to gateway-metadata or ingress-gateway"
+            ),
+        ),
+        (
+            "rawdeployment",
+            False,
+            True,
+            ActiveStatus(),
+        ),
+        (
+            "rawdeployment",
+            True,
+            True,
+            BlockedStatus("Both gateway-metadata and ingress-gateway relations are established"),
+        ),
+        (
+            "rawdeployment",
+            True,
+            False,
+            ActiveStatus(),
+        ),
+    ],
+)
+def test_deployment_modes_gateway_relations(
+    mocked_resource_handler,
+    mocker,
+    harness: Harness,
+    deployment_mode: str,
+    ingress_gateway_relation: bool,
+    gateway_metadata_relation: bool,
+    expected_status: StatusBase,
 ):
-    """Test that the charm goes to blocked status if there is no gateway-metadata relation."""
     harness.begin()
-    harness.update_config({"deployment-mode": "RawDeployment"})
-    assert harness.charm.model.unit.status == BlockedStatus(
-        "RawDeployment mode detected but gateway-metadata relation is not established"
-    )
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    if gateway_metadata_relation:
+        harness.add_relation("gateway-metadata", "istio-ingress-k8s")
+        mocker.patch.object(
+            harness.charm.gateway_info,
+            "get_metadata",
+            return_value=(
+                GatewayMetadata(
+                    namespace="test-namespace",
+                    deployment_name="test-deployment",
+                    gateway_name="test-gateway",
+                    service_account="test-service-account",
+                )
+            ),
+        )
+
+    if ingress_gateway_relation:
+        relation_id_ingress = harness.add_relation("ingress-gateway", "istio-pilot")
+        relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+        # Updated the data bag with ingress-gateway
+        remote_ingress_data = {
+            "gateway_name": "test-ingress-name",
+            "gateway_namespace": "test-ingress-namespace",
+        }
+        remote_local_data = {
+            "gateway_name": "test-local-name",
+            "gateway_namespace": "test-local-namespace",
+        }
+        harness.update_relation_data(relation_id_ingress, "istio-pilot", remote_ingress_data)
+        harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
+
+    harness.update_config({"deployment-mode": deployment_mode})
+
+    assert harness.charm.model.unit.status == expected_status
 
 
 @patch("charm.KServeControllerCharm._restart_controller_service")
