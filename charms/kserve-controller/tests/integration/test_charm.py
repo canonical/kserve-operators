@@ -308,7 +308,7 @@ async def test_relate_to_object_store(ops_test: OpsTest):
         raise_on_error=False,
         timeout=600,
     )
-    await ops_test.model.integrate(MINIO.charm, APP_NAME)
+    await ops_test.model.integrate(f"{MINIO.charm}:object-storage", f"{APP_NAME}:object-storage")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",
