@@ -706,7 +706,7 @@ class KServeControllerCharm(CharmBase):
 
         The function will raise the corresponding exception depending on the relations and the
         deployment mode. Specifically:
-        1. If both inngress-gateway and gateway-metadata relations are established, it will
+        1. If both ingress-gateway and gateway-metadata relations are established, it will
            raise a BlockedStatus error.
         2. If in Serverless mode and there is no ingress-gateway relation established, it will
            raise a BlockedStatus error.
