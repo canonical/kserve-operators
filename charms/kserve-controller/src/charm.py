@@ -648,10 +648,9 @@ class KServeControllerCharm(CharmBase):
                     self.model.unit.status = MaintenanceStatus(msg)
                 else:
                     log.warning("Unexpected ApiError happened: %s", e)
-                    raise ErrorWithStatus(
+                    raise GenericCharmRuntimeError(
                         f"Unexpected ApiError happened: {e.status.message}",
-                        BlockedStatus,
-                    )
+                    ) from e
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
