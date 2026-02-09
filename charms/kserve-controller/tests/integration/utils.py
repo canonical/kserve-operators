@@ -19,13 +19,6 @@ from lightkube.resources.core_v1 import Pod, Secret, ServiceAccount
 from tests.integration.constants import APP_NAME
 
 KSERVE_WORKLOAD_CONTAINER = "kserve-container"
-ISVC = lightkube.generic_resource.create_namespaced_resource(
-    group="serving.kserve.io",
-    version="v1beta1",
-    kind="InferenceService",
-    plural="inferenceservices",
-    verbs=None,
-)
 
 logger = logging.getLogger(__name__)
 

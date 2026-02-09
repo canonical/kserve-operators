@@ -26,6 +26,13 @@ CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE = "kubeflow"
 POD_DEFAULT = lightkube.generic_resource.create_namespaced_resource(
     "kubeflow.org", "v1alpha1", "PodDefault", "poddefaults"
 )
+ISVC = lightkube.generic_resource.create_namespaced_resource(
+    group="serving.kserve.io",
+    version="v1beta1",
+    kind="InferenceService",
+    plural="inferenceservices",
+    verbs=None,
+)
 
 # Sklearn ISVC
 SKLEARN_INF_SVC_YAML = yaml.safe_load(Path(YAMLS_PREFIX + "sklearn-iris.yaml").read_text())
