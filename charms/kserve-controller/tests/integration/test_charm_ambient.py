@@ -161,7 +161,9 @@ async def test_inference_service(
     assert_inf_svc_state(lightkube_client, inf_svc_name, test_namespace)
 
     # Assert that traffic reaches the ISVC
-    await assert_isvc_ingress_traffic(inf_svc_name, test_namespace, lightkube_client)
+    await assert_isvc_ingress_traffic(
+        inf_svc_name, test_namespace, lightkube_client, ops_test.model_name
+    )
 
 
 # Test o11y

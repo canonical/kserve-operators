@@ -139,7 +139,10 @@ def get_k8s_service_account(
 
 # Assert helpers
 async def assert_isvc_ingress_traffic(
-    isvc_name: str, namespace: str, lightkube_client: lightkube.Client
+    isvc_name: str,
+    namespace: str,
+    lightkube_client: lightkube.Client,
+    gateway_namespace="kubeflow",
 ):
     isvc = lightkube_client.get(ISVC, isvc_name, namespace=namespace)
     isvc_url = isvc.get("status", {}).get("url", "").replace("http://", "")
@@ -156,7 +159,7 @@ async def assert_isvc_ingress_traffic(
 
     await assert_path_reachable_through_ingress(
         http_path="/v1/models",
-        namespace="kubeflow",
+        namespace=gateway_namespace,
         headers=headers,
         expected_status=expected_status,
         expected_response_text="model",
