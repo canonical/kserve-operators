@@ -9,9 +9,7 @@ import tenacity
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Namespace
 
-from tests.integration.constants import (
-    TESTING_NAMESPACE_NAME,
-)
+TESTING_NAMESPACE_NAME = "kserve-testing"
 
 logger = logging.getLogger(__name__)
 

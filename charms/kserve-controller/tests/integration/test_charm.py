@@ -42,17 +42,11 @@ from tests.integration.charms_dependencies import (
 from tests.integration.constants import (
     APP_NAME,
     CONFIGMAP_DATA_INGRESS_DOMAIN,
-    CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS,
     CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
-    CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
-    CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
-    CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
     CONFIGMAP_NAME,
     CONFIGMAP_TEMPLATE_PATH,
     CONTAINERS_SECURITY_CONTEXT_MAP,
     CUSTOM_IMAGES_PATH,
-    ISTIO_GATEWAY_APP_NAME,
-    ISTIO_INGRESS_GATEWAY,
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
@@ -67,6 +61,16 @@ from tests.integration.utils import (
     get_k8s_service_account,
     populate_template,
 )
+
+ISTIO_INGRESS_GATEWAY = "test-gateway"
+ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+
+# ConfigMap (Serverless)
+CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
+CONFIGMAP_DATA_LOCAL_GATEWAY_NAME = "knative-local-gateway"
+CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME = "knative-local-gateway"
+CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS = "test-gateway"
+
 
 logger = logging.getLogger(__name__)
 

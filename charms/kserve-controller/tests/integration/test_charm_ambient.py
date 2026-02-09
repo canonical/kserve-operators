@@ -45,7 +45,6 @@ from tests.integration.constants import (
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
-    RETRY_FOR_THREE_MINUTES,
     SKLEARN_INF_SVC_NAME,
     SKLEARN_INF_SVC_OBJECT,
     YAMLS_PREFIX,
@@ -57,6 +56,13 @@ from tests.integration.utils import (
     get_k8s_secret,
     get_k8s_service_account,
     populate_template,
+)
+
+# tenacity
+RETRY_FOR_THREE_MINUTES = tenacity.Retrying(
+    stop=tenacity.stop_after_delay(60 * 3),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
 )
 
 logger = logging.getLogger(__name__)
