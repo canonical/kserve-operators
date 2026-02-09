@@ -235,7 +235,10 @@ async def test_configmap_changes_with_config(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
 
-    assert "custom:1.0" in inferenceservice_config.data["batcher"]
+    configmap_context["configmap__batcher"] = "custom:1.0"
+
+    expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
+    assert inferenceservice_config.data == expected_configmap["data"]
 
 
 # Test MLflow integration, via Metacontroller, MinIO and Resource Dispatcher
