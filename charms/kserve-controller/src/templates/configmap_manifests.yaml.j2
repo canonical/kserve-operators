@@ -61,7 +61,7 @@ data:
   ingress: |-
     {
       "enableGatewayApi": {{ enable_gateway_api }},
-      "kserveIngressGateway": "kubeflow/istio-ingress-k8s",
+      "kserveIngressGateway": "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressDomain"  : "{{ ingress_domain}}",
       "ingressClassName" : "istio",
