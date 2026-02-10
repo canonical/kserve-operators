@@ -16,7 +16,7 @@ from jinja2 import Template
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Pod, Secret, ServiceAccount
 
-from tests.integration.constants import APP_NAME
+from tests.integration.constants import APP_NAME, ISVC
 
 KSERVE_WORKLOAD_CONTAINER = "kserve-container"
 
