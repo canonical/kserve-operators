@@ -23,6 +23,9 @@ from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRunt
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
+from charmed_kubeflow_chisme.service_mesh import generate_allow_all_authorization_policy
+from charmed_service_mesh_helpers.interfaces import GatewayMetadataRequirer
+from charms.istio_beacon_k8s.v0.service_mesh import MeshType, PolicyResourceManager
 from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRelationDataMissingError,
     GatewayRelationMissingError,
@@ -39,6 +42,7 @@ from jinja2 import Template
 from jsonschema import ValidationError
 from lightkube import ApiError
 from lightkube.models.core_v1 import ServicePort
+from lightkube_extensions.batch import create_charm_default_labels
 from ops import main
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -46,7 +50,6 @@ from ops.model import (
     ActiveStatus,
     BlockedStatus,
     Container,
-    ErrorStatus,
     MaintenanceStatus,
     ModelError,
     WaitingStatus,
@@ -79,6 +82,11 @@ K8S_RESOURCE_FILES = [
     "src/templates/webhook_manifests.yaml.j2",
     "src/templates/cluster_storage_containers.yaml.j2",
 ]
+
+# Relation names
+SDI_INGRESS_GATEWAY_RELATION = "ingress-gateway"
+SDI_LOCAL_GATEWAY_RELATION = "local-gateway"
+GATEWAY_METADATA_RELATION = "gateway-metadata"
 
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
 S3_USEANONCREDENTIALS = "false"
@@ -132,8 +140,13 @@ class KServeControllerCharm(CharmBase):
         super().__init__(*args)
         self.custom_images = []
         self.images_context = {}
-        self._ingress_gateway_requirer = GatewayRequirer(self, relation_name="ingress-gateway")
-        self._local_gateway_requirer = GatewayRequirer(self, relation_name="local-gateway")
+        self._ingress_gateway_requirer = GatewayRequirer(
+            self, relation_name=SDI_INGRESS_GATEWAY_RELATION
+        )
+        self._local_gateway_requirer = GatewayRequirer(
+            self, relation_name=SDI_LOCAL_GATEWAY_RELATION
+        )
+        self.gateway_info = GatewayMetadataRequirer(self, relation_name=GATEWAY_METADATA_RELATION)
 
         self.framework.observe(self.on.remove, self._on_remove)
 
@@ -143,13 +156,15 @@ class KServeControllerCharm(CharmBase):
             self.on.kserve_controller_pebble_ready,
             self.on.leader_elected,
             self.on.update_status,
-            self.on["local-gateway"].relation_changed,
-            self.on["ingress-gateway"].relation_changed,
+            self.on[SDI_LOCAL_GATEWAY_RELATION].relation_changed,
+            self.on[SDI_INGRESS_GATEWAY_RELATION].relation_changed,
+            self.on[GATEWAY_METADATA_RELATION].relation_changed,
             self.on["object-storage"].relation_changed,
             self.on["secrets"].relation_changed,
             self.on["service-accounts"].relation_changed,
-            self.on["ingress-gateway"].relation_broken,
-            self.on["local-gateway"].relation_broken,
+            self.on[SDI_INGRESS_GATEWAY_RELATION].relation_broken,
+            self.on[SDI_LOCAL_GATEWAY_RELATION].relation_broken,
+            self.on[GATEWAY_METADATA_RELATION].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
 
@@ -184,6 +199,31 @@ class KServeControllerCharm(CharmBase):
         )
 
     @property
+    def _deployment_mode(self) -> str:
+        """Returns the deployment mode."""
+        return str(self.model.config["deployment-mode"]).lower()
+
+    @property
+    def _is_raw_deployment_mode(self) -> bool:
+        """Returns whether the deployment mode is RawDeployment."""
+        return self._deployment_mode == "rawdeployment"
+
+    @property
+    def _is_serverless_mode(self) -> bool:
+        """Returns whether the deployment mode is Serverless."""
+        return self._deployment_mode == "serverless"
+
+    @property
+    def _has_gateway_metadata_relation(self) -> bool:
+        """Returns whether the gateway-metadata relation is established."""
+        return self.model.get_relation(GATEWAY_METADATA_RELATION) is not None
+
+    @property
+    def _has_ingress_gatway_relation(self) -> bool:
+        """Returns whether the ingress-gateway relation is established."""
+        return self.model.get_relation(SDI_INGRESS_GATEWAY_RELATION) is not None
+
+    @property
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
         ca_context = b64encode(self._stored.ca.encode("ascii"))
@@ -200,10 +240,10 @@ class KServeControllerCharm(CharmBase):
     def _inference_service_context(self):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
-        deployment_mode = self.model.config["deployment-mode"].lower()
-        if deployment_mode == "serverless":
+        deployment_mode = self._deployment_mode
+        if self._is_serverless_mode:
             deployment_mode = "Serverless"
-        elif deployment_mode == "rawdeployment":
+        elif self._is_raw_deployment_mode:
             deployment_mode = "RawDeployment"
         else:
             raise ErrorWithStatus(
@@ -215,6 +255,9 @@ class KServeControllerCharm(CharmBase):
             "ingress_domain": self.model.config["domain-name"],
             "deployment_mode": deployment_mode,
             "namespace": self.model.name,
+            "enable_gateway_api": str(
+                self._is_raw_deployment_mode and self._has_gateway_metadata_relation
+            ).lower(),
         }
         # Generate and add gateway context
         gateways_context = self._generate_gateways_context()
@@ -298,8 +341,29 @@ class KServeControllerCharm(CharmBase):
 
     @property
     def _ingress_gateway_info(self):
-        """Returns the ingress gateway info."""
-        return self._ingress_gateway_requirer.get_relation_data()
+        """Returns the ingress gateway info.
+
+        The function returns the gateway data from either the ingress-gateway or gateway-metadata
+        relations.
+        """
+        self._validate_gateway_relations()
+
+        # try to get the data from ingress-gateway relation
+        if self._has_ingress_gatway_relation:
+            gw_metadata = self._ingress_gateway_requirer.get_relation_data()
+            gw_metadata["gateway_service_name"] = "istio-ingressgateway-workload"
+            return gw_metadata
+
+        # try to get data from gateway-metadata relation
+        gw_metadata = self.gateway_info.get_metadata()
+        if not gw_metadata:
+            raise ErrorWithStatus("Waiting for gateway-metadata relation data", WaitingStatus)
+
+        return {
+            "gateway_name": gw_metadata.gateway_name,
+            "gateway_namespace": gw_metadata.namespace,
+            "gateway_service_name": gw_metadata.deployment_name,
+        }
 
     @property
     def _local_gateway_info(self):
@@ -321,6 +385,18 @@ class KServeControllerCharm(CharmBase):
                 charm=self, relation_name="service-accounts"
             )
         return self._service_accounts_manifests_wrapper
+
+    @property
+    def policy_resource_manager(self) -> PolicyResourceManager:
+        """Create a Policy Resource Manager from service-mesh helper library."""
+        return PolicyResourceManager(
+            self,
+            lightkube_client=self.k8s_resource_handler.lightkube_client,
+            labels=create_charm_default_labels(
+                self.app.name, self.model.name, scope="allow-all-policy"
+            ),
+            logger=log,
+        )
 
     def _get_interfaces(self):
         # Remove this abstraction when SDI adds .status attribute to NoVersionsListed,
@@ -490,11 +566,26 @@ class KServeControllerCharm(CharmBase):
             self.service_accounts_manifests_wrapper,
         )
 
+    def reconcile_authorization_policies(self):
+        """Create and reconcile the allow-all AuthorizationPolicy.
+
+        If in RawDeployment mode then create an allow-all AuthorizationPolicy. Otherwise,
+        in serverless mode, the function will remove any previously created policies.
+        """
+        ap_raw = generate_allow_all_authorization_policy(self.app.name, self.model.name)
+
+        policies = []
+        if self._is_raw_deployment_mode and self._has_gateway_metadata_relation:
+            policies.append(ap_raw)
+
+        self.policy_resource_manager.reconcile([], MeshType.istio, policies)
+
     def _on_event(self, event):
         try:
             self.custom_images = parse_images_config(self.model.config["custom_images"])
             self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
             self.unit.status = MaintenanceStatus("Creating k8s resources")
+            self.reconcile_authorization_policies()
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
             self.send_object_storage_manifests()
@@ -557,10 +648,9 @@ class KServeControllerCharm(CharmBase):
                     self.model.unit.status = MaintenanceStatus(msg)
                 else:
                     log.warning("Unexpected ApiError happened: %s", e)
-                    raise ErrorWithStatus(
+                    raise GenericCharmRuntimeError(
                         f"Unexpected ApiError happened: {e.status.message}",
-                        ErrorStatus,
-                    )
+                    ) from e
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
@@ -578,6 +668,9 @@ class KServeControllerCharm(CharmBase):
             log.error(f"Failed to handle {event} with error: {err}")
             return
         self.unit.status = MaintenanceStatus("Removing k8s resources")
+
+        # remove AuthorizationPolicies
+        self.policy_resource_manager.reconcile([], MeshType.istio, [])
 
         handlers = [
             self.k8s_resource_handler,
@@ -608,6 +701,42 @@ class KServeControllerCharm(CharmBase):
         if not container.can_connect():
             raise ErrorWithStatus("Pod startup is not complete", MaintenanceStatus)
 
+    def _validate_gateway_relations(self):
+        """Validates the existing gateway relations depending on the mode.
+
+        The function will raise the corresponding exception depending on the relations and the
+        deployment mode. Specifically:
+        1. If both ingress-gateway and gateway-metadata relations are established, it will
+           raise a BlockedStatus error.
+        2. If in Serverless mode and there is no ingress-gateway relation established, it will
+           raise a BlockedStatus error.
+        3. If the RawDeployment mode and there is no gateway-metadata or ingress-gateway relation
+           established, it will raise a BlockedStatus error.
+        """
+        if self._has_gateway_metadata_relation and self._has_ingress_gatway_relation:
+            raise ErrorWithStatus(
+                "Both gateway-metadata and ingress-gateway relations are established",
+                BlockedStatus,
+            )
+
+        # either ingress-gateway or gateway-metadata relation is established, or none, but not both
+        # RawDeployment can work with both ingress-gateway (sdi) relation and gateway-metadata
+        # Serverless can only work with ingress-gateway (sidecar istio)
+        if self._is_serverless_mode and not self._has_ingress_gatway_relation:
+            raise ErrorWithStatus(
+                "Serverless mode detected, but no relation to ingress-gateway",
+                BlockedStatus,
+            )
+
+        # RawDeployment should have a relation to either ingress-gateway or gateway-metadata
+        if self._is_raw_deployment_mode and not (
+            self._has_gateway_metadata_relation or self._has_ingress_gatway_relation
+        ):
+            raise ErrorWithStatus(
+                "RawDeployment mode detected, but no relation to gateway-metadata or ingress-gateway",
+                BlockedStatus,
+            )
+
     def _generate_gateways_context(self) -> dict:
         """Generates the ingress context based on certain rules.
 
@@ -618,6 +747,7 @@ class KServeControllerCharm(CharmBase):
             GatewayRelationMissingError: if any of the required relations are missing
             GatewayRelationDataMissingError: if relation data is missing or incomplete
         """
+
         # Get the ingress-gateway info. This should always be known by this charm.
         try:
             ingress_gateway_info = self._ingress_gateway_info
@@ -633,33 +763,35 @@ class KServeControllerCharm(CharmBase):
         gateways_context = {
             "ingress_gateway_name": ingress_gateway_info["gateway_name"],
             "ingress_gateway_namespace": ingress_gateway_info["gateway_namespace"],
-            "ingress_gateway_service_name": "istio-ingressgateway-workload",
+            "ingress_gateway_service_name": ingress_gateway_info["gateway_service_name"],
             "local_gateway_name": "",
             "local_gateway_namespace": "",
             "local_gateway_service_name": "",
         }
 
-        # Get the local-gateway info. This value should only
-        # be get and rendered in Serverless Mode.
-        if self.model.config["deployment-mode"].lower() == "serverless":
-            try:
-                local_gateway_info = self._local_gateway_info
-                # FIXME: the local_gateway_service_name is hardcoded in knative-serving
-                # and that information is not shared through the relation
-                gateways_context.update(
-                    {
-                        "local_gateway_name": local_gateway_info["gateway_name"],
-                        "local_gateway_namespace": local_gateway_info["gateway_namespace"],
-                        "local_gateway_service_name": "knative-local-gateway",
-                    }
-                )
-            except GatewayRelationMissingError:
-                raise ErrorWithStatus(
-                    "Please relate to knative-serving:local-gateway", BlockedStatus
-                )
-            except GatewayRelationDataMissingError:
-                log.error("Missing or incomplete local gateway data.")
-                raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
+        if self._is_raw_deployment_mode:
+            return gateways_context
+
+        # Get the local-gateway info
+        try:
+            local_gateway_info = self._local_gateway_info
+            # FIXME: the local_gateway_service_name is hardcoded in knative-serving
+            # and that information is not shared through the relation
+            gateways_context.update(
+                {
+                    "local_gateway_name": local_gateway_info["gateway_name"],
+                    "local_gateway_namespace": local_gateway_info["gateway_namespace"],
+                    "local_gateway_service_name": "knative-local-gateway",
+                }
+            )
+        except GatewayRelationMissingError:
+            raise ErrorWithStatus(
+                f"Please relate to knative-serving:{SDI_LOCAL_GATEWAY_RELATION}",
+                BlockedStatus,
+            )
+        except GatewayRelationDataMissingError:
+            log.error("Missing or incomplete local gateway data.")
+            raise ErrorWithStatus("Waiting for local gateway data.", WaitingStatus)
 
         return gateways_context
 

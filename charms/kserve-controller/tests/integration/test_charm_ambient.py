@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 
@@ -19,22 +19,17 @@ from charmed_kubeflow_chisme.testing import (
     assert_metrics_endpoint,
     assert_security_context,
     deploy_and_assert_grafana_agent,
+    deploy_and_integrate_service_mesh_charms,
     get_alert_rules,
     get_pod_names,
 )
-from lightkube import Client
 from lightkube.resources.core_v1 import (
     ConfigMap,
     Pod,
 )
 from pytest_operator.plugin import OpsTest
-from tenacity import Retrying, stop_after_delay, wait_fixed
 
 from tests.integration.charms_dependencies import (
-    ISTIO_GATEWAY,
-    ISTIO_PILOT,
-    KNATIVE_OPERATOR,
-    KNATIVE_SERVING,
     METACONTROLLER_OPERATOR,
     MINIO,
     RESOURCE_DISPATCHER,
@@ -56,39 +51,35 @@ from tests.integration.constants import (
 )
 from tests.integration.utils import (
     assert_inf_svc_state,
+    assert_isvc_ingress_traffic,
     deploy_k8s_resources,
     get_k8s_secret,
     get_k8s_service_account,
     populate_template,
 )
 
-ISTIO_INGRESS_GATEWAY = "test-gateway"
-ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
-
-# ConfigMap (Serverless)
-CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
-CONFIGMAP_DATA_LOCAL_GATEWAY_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS = "test-gateway"
-
+# tenacity
+RETRY_FOR_THREE_MINUTES = tenacity.Retrying(
+    stop=tenacity.stop_after_delay(60 * 3),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
+)
 
 logger = logging.getLogger(__name__)
 
 custom_images = json.loads(Path(CUSTOM_IMAGES_PATH).read_text())
+
 
 explainer_image, explainer_version = custom_images["configmap__explainers__art"].split(":")
 configmap_context = {
     **custom_images,
     "configmap__explainers__art__image": explainer_image,
     "configmap__explainers__art__version": explainer_version,
-    "deployment_mode": "Serverless",
-    "enable_gateway_api": "false",
+    "deployment_mode": "RawDeployment",
+    "enable_gateway_api": "true",
     "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
-    "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
-    "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
-    "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
     "ingress_gateway_namespace": CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
-    "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS,
+    "ingress_gateway_name": "istio-ingress-k8s",
 }
 
 
@@ -99,62 +90,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     Assert on the unit status before any relations/configurations take place.
     """
-    # Deploy istio-operators for ingress configuration
-    await ops_test.model.deploy(
-        ISTIO_PILOT.charm,
-        channel=ISTIO_PILOT.channel,
-        config={"default-gateway": ISTIO_INGRESS_GATEWAY},
-        trust=ISTIO_PILOT.trust,
-    )
-
-    await ops_test.model.deploy(
-        ISTIO_GATEWAY.charm,
-        application_name=ISTIO_GATEWAY_APP_NAME,
-        channel=ISTIO_GATEWAY.channel,
-        config=ISTIO_GATEWAY.config,
-        trust=ISTIO_GATEWAY.trust,
-    )
-    await ops_test.model.integrate(ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME)
-    await ops_test.model.wait_for_idle(
-        [ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME],
-        raise_on_blocked=False,
-        status="active",
-        timeout=90 * 10,
-    )
-
-    # Deploy knative-operator
-    await ops_test.model.deploy(
-        KNATIVE_OPERATOR.charm,
-        channel=KNATIVE_OPERATOR.channel,
-        trust=KNATIVE_OPERATOR.trust,
-    )
-
-    # Wait for idle knative-operator before deploying knative-serving
-    # due to issue https://github.com/canonical/knative-operators/issues/156
-    await ops_test.model.wait_for_idle(
-        [KNATIVE_OPERATOR.charm],
-        status="active",
-        raise_on_blocked=False,
-        timeout=90 * 10,
-    )
-
-    # Deploy knative-serving
-    await ops_test.model.deploy(
-        KNATIVE_SERVING.charm,
-        channel=KNATIVE_SERVING.channel,
-        config={
-            "istio.gateway.namespace": ops_test.model_name,
-            "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
-        },
-        trust=KNATIVE_SERVING.trust,
-    )
-    await ops_test.model.wait_for_idle(
-        [KNATIVE_SERVING.charm],
-        raise_on_blocked=False,
-        status="active",
-        timeout=90 * 10,
-    )
-
     # build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     resources = {
@@ -165,13 +100,18 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.deploy(
         charm,
         resources=resources,
+        config={"deployment-mode": "rawdeployment"},
         application_name=APP_NAME,
         trust=True,
     )
 
-    await ops_test.model.integrate(ISTIO_PILOT.charm, APP_NAME)
-    # Relate kserve-controller and knative-serving
-    await ops_test.model.integrate(KNATIVE_SERVING.charm, APP_NAME)
+    await deploy_and_integrate_service_mesh_charms(
+        APP_NAME,
+        model=ops_test.model,
+        relate_to_beacon=True,
+        relate_to_ingress_route_endpoint=False,
+        relate_to_ingress_gateway_endpoint=True,
+    )
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward(fast_interval="60s"):
@@ -200,7 +140,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         YAMLS_PREFIX + "tensorflow-serving.yaml",
     ],
 )
-def test_inference_service(
+async def test_inference_service(
     test_namespace: str,
     lightkube_client: lightkube.Client,
     inference_file,
@@ -226,6 +166,11 @@ def test_inference_service(
     # Assert InferenceService state is Available
     assert_inf_svc_state(lightkube_client, inf_svc_name, test_namespace)
 
+    # Assert that traffic reaches the ISVC
+    await assert_isvc_ingress_traffic(
+        inf_svc_name, test_namespace, lightkube_client, ops_test.model_name
+    )
+
 
 # Test o11y
 async def test_logging(ops_test: OpsTest):
@@ -234,7 +179,7 @@ async def test_logging(ops_test: OpsTest):
     await assert_logging(app)
 
 
-async def test_metrics_endpoint(ops_test: OpsTest):
+async def test_metrics_enpoint(ops_test):
     """Test metrics_endpoints are defined in relation data bag and their accessibility.
     This function gets all the metrics_endpoints from the relation data bag, checks if
     they are available from the grafana-agent-k8s charm and finally compares them with the
@@ -244,7 +189,7 @@ async def test_metrics_endpoint(ops_test: OpsTest):
     await assert_metrics_endpoint(app, metrics_port=8080, metrics_path="/metrics")
 
 
-async def test_alert_rules(ops_test: OpsTest):
+async def test_alert_rules(ops_test):
     """Test check charm alert rules and rules defined in relation data bag."""
     app = ops_test.model.applications[APP_NAME]
     alert_rules = get_alert_rules()
@@ -252,7 +197,7 @@ async def test_alert_rules(ops_test: OpsTest):
     await assert_alert_rules(app, alert_rules)
 
 
-# ConfigMap
+# Test KServe ConfigMap
 async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
     """
     Test whether the configmap is created with the expected data.
@@ -296,7 +241,7 @@ async def test_configmap_changes_with_config(
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
-# MLflow integration, via MinIO and Resource Dispatcher
+# Test MLflow integration, via Metacontroller, MinIO and Resource Dispatcher
 async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
     await ops_test.model.deploy(
@@ -390,15 +335,9 @@ async def test_new_user_namespace_has_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
-RETRY_FOR_THREE_MINUTES = Retrying(
-    stop=stop_after_delay(60 * 3),
-    wait=wait_fixed(5),
-    reraise=True,
-)
-
-
+# Test Proxy configurations
 async def test_inference_service_proxy_envs_configuration(
-    test_namespace: str, ops_test: OpsTest, lightkube_client: lightkube.Client
+    test_namespace, ops_test: OpsTest, lightkube_client: lightkube.Client
 ):
     """Changes `http-proxy`, `https-proxy` and `no-proxy` configs and asserts that
     the InferenceService Pod is using the values from configs as environment variables."""
@@ -471,7 +410,7 @@ async def test_blocked_on_invalid_config(ops_test: OpsTest):
 @pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
 async def test_container_security_context(
     ops_test: OpsTest,
-    lightkube_client: Client,
+    lightkube_client: lightkube.Client,
     container_name: str,
 ):
     """Test container security context is correctly set.

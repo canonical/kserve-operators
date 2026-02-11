@@ -9,6 +9,7 @@ description: |
 docs: https://discourse.charmhub.io/t/11939
 summary: |
   KServe Controller.
+charm-user: non-root
 containers:
   kserve-controller:
     resource: kserve-controller-image
@@ -22,6 +23,8 @@ resources:
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
+  provide-cmr-mesh:
+    interface: cross_model_mesh
 requires:
   object-storage:
     interface: object-storage
@@ -52,6 +55,9 @@ requires:
           - service
     versions: [v1]
     __schema_source: https://raw.githubusercontent.com/canonical/operator-schemas/master/object-storage.yaml
+  gateway-metadata:
+    interface: gateway_metadata
+    limit: 1
   ingress-gateway:
     interface: istio-gateway-info
     limit: 1
@@ -65,4 +71,8 @@ requires:
   logging:
     interface: loki_push_api
     optional: true
-charm-user: non-root
+  service-mesh:
+    limit: 1
+    interface: service_mesh
+  require-cmr-mesh:
+    interface: cross_model_mesh

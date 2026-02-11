@@ -59,16 +59,12 @@ jobs:
     strategy:
       matrix:
         charm: [kserve-controller]
+        test-type:
+          - integration
+          - integration-ambient
     steps:
       - name: Maximise GH runner space
-        uses: easimon/maximize-build-space@v10
-        with:
-          root-reserve-mb: 29696
-          remove-dotnet: 'true'
-          remove-haskell: 'true'
-          remove-android: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install dependencies
@@ -84,7 +80,7 @@ jobs:
       - name: Test
         run: |
           juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
+          tox -e ${{ matrix.charm }}-${{ matrix.test-type }} -- --model kubeflow -vv -s
 
       - name: Get all
         run: kubectl get all -A
