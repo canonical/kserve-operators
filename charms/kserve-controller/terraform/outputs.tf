@@ -4,17 +4,21 @@ output "app_name" {
 
 output "provides" {
   value = {
-    metrics_endpoint = "metrics-endpoint"
+    metrics_endpoint = "metrics-endpoint",
+    provide_cmr_mesh = "provide-cmr-mesh"
   }
 }
 
 output "requires" {
   value = {
-    object_storage   = "object-storage",
+    gateway_metadata = "gateway-metadata",
     ingress_gateway  = "ingress-gateway",
     local_gateway    = "local-gateway",
+    logging          = "logging",
+    object_storage   = "object-storage",
+    require_cmr_mesh = "require-cmr-mesh",
     secrets          = "secrets",
     service_accounts = "service-accounts",
-    logging          = "logging",
+    service_mesh     = "service-mesh"
   }
 }
