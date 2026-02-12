@@ -111,7 +111,8 @@ METRICS_PORT = 8080
 class ObjectStillExistsError(Exception):
     """Exception for when a K8s object exists, while it should have been removed."""
 
-    pass
+    def __init__(self, resource_name: str):
+        self.resource_name = resource_name
 
 
 def parse_images_config(config: str) -> Dict:
@@ -700,6 +701,12 @@ class KServeControllerCharm(CharmBase):
             if e.status.code != 404:
                 log.warning(f"Failed to delete resources, with error: {e}")
                 raise e
+        except ObjectStillExistsError as e:
+            log.warning(
+                "Failed to remove resource: %s. Manual intervention for cleanup might be required",
+                e.resource_name,
+            )
+            raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
     @tenacity.retry(stop=tenacity.stop_after_delay(300), wait=tenacity.wait_fixed(5), reraise=True)
@@ -721,7 +728,7 @@ class KServeControllerCharm(CharmBase):
         try:
             client.get(resource_kind, name=resource_name)
             log.info('Resource "%s" exists, retrying...', resource_name)
-            raise ObjectStillExistsError("Resource %s is not deleted.", resource_name)
+            raise ObjectStillExistsError(resource_name)
         except ApiError as e:
             if e.status.code == 404:
                 log.info('Resource "%s" does not exist!', resource_name)
@@ -914,6 +921,16 @@ class KServeControllerCharm(CharmBase):
 
 
 def _extract_runtimes_names(manifests: LightkubeResourcesList) -> dict:
+    """
+    Extracts a mapping of runtime resource names to their kinds.
+
+    Args:
+        manifests (LightkubeResourcesList): List of runtime manifest objects,
+        each with metadata and kind.
+
+    Returns:
+        dict: Dictionary mapping resource names (str) to their kind.
+    """
     runtimes_kind_name_mapping = {}
     for runtime in manifests:
         runtimes_kind_name_mapping.update({runtime.metadata.name: runtime.__class__})

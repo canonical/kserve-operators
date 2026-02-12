@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import ops.testing
 import pytest
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_service_mesh_helpers.interfaces import GatewayMetadata
 from lightkube import ApiError
 from ops import StatusBase
@@ -15,7 +14,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
 
-from charm import KServeControllerCharm
+from charm import KServeControllerCharm, ObjectStillExistsError
 from tests.test_data.manifests import MANIFESTS_TEST_DATA
 
 # enable simulation of container networking
@@ -53,9 +52,11 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
 }
 
 
-class _FakeErrorWithStatus(ErrorWithStatus):
-    def __init__(self, status_type=BlockedStatus):
-        super().__init__("err", status_type)
+class _FakeObjectStillExistsError(ObjectStillExistsError):
+    """Used to simulate an ObjectStillExistsError during testing."""
+
+    def __init__(self, resource_name="a-resource"):
+        super().__init__(resource_name=resource_name)
 
 
 class _FakeResponse:
@@ -265,7 +266,23 @@ def test_on_remove_success(harness, mocker, mocked_resource_handler):
     assert isinstance(harness.charm.model.unit.status, MaintenanceStatus)
 
 
-def test_on_remove_failure(harness, mocker, mocked_resource_handler):
+def test_on_remove_api_failure(harness, mocker, mocked_resource_handler):
+    harness.begin()
+
+    mocked_delete_many = mocker.patch("charm.delete_many")
+    mocked_delete_many.side_effect = _FakeObjectStillExistsError()
+    mocked_logger = mocker.patch("charm.log")
+
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm._cm_resource_handler = mocked_resource_handler
+    harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
+
+    with pytest.raises(ObjectStillExistsError):
+        harness.charm.on.remove.emit()
+    mocked_logger.warning.assert_called()
+
+
+def test_on_remove_deletion_failure(harness, mocker, mocked_resource_handler):
     harness.begin()
 
     mocked_delete_many = mocker.patch("charm.delete_many")
