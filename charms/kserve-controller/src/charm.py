@@ -18,12 +18,14 @@ from base64 import b64encode
 from pathlib import Path
 from typing import Dict
 
+import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charmed_kubeflow_chisme.service_mesh import generate_allow_all_authorization_policy
+from charmed_kubeflow_chisme.types import LightkubeResourcesList
 from charmed_service_mesh_helpers.interfaces import GatewayMetadataRequirer
 from charms.istio_beacon_k8s.v0.service_mesh import MeshType, PolicyResourceManager
 from charms.istio_pilot.v0.istio_gateway_info import (
@@ -40,7 +42,8 @@ from charms.resource_dispatcher.v0.kubernetes_manifests import (
 )
 from jinja2 import Template
 from jsonschema import ValidationError
-from lightkube import ApiError
+from lightkube import ApiError, Client
+from lightkube.generic_resource import load_in_cluster_generic_resources
 from lightkube.models.core_v1 import ServicePort
 from lightkube_extensions.batch import create_charm_default_labels
 from ops import main
@@ -104,6 +107,14 @@ NO_MINIO_RELATION_DATA = {}
 METRICS_PORT = 8080
 
 
+# For errors when a K8s object exists while it shouldn't
+class ObjectStillExistsError(Exception):
+    """Exception for when a K8s object exists, while it should have been removed."""
+
+    def __init__(self, resource_name: str):
+        self.resource_name = resource_name
+
+
 def parse_images_config(config: str) -> Dict:
     """
     Parse a YAML config-defined images list.
@@ -140,6 +151,7 @@ class KServeControllerCharm(CharmBase):
         super().__init__(*args)
         self.custom_images = []
         self.images_context = {}
+        self.inference_service_context = {}
         self._ingress_gateway_requirer = GatewayRequirer(
             self, relation_name=SDI_INGRESS_GATEWAY_RELATION
         )
@@ -169,7 +181,6 @@ class KServeControllerCharm(CharmBase):
             self.framework.observe(event, self._on_event)
 
         self._k8s_resource_handler = None
-        self._crd_resource_handler = None
         self._cm_resource_handler = None
         self._cluster_runtimes_resource_handler = None
         self._secrets_manifests_wrapper = None
@@ -236,8 +247,7 @@ class KServeControllerCharm(CharmBase):
             "no_proxy": self.model.config["no-proxy"],
         }
 
-    @property
-    def _inference_service_context(self):
+    def generate_inference_service_context(self):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
         deployment_mode = self._deployment_mode
@@ -283,7 +293,7 @@ class KServeControllerCharm(CharmBase):
             self._cm_resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
                 template_files=CONFIG_FILES,
-                context={**self._inference_service_context, **self.images_context},
+                context={**self.inference_service_context, **self.images_context},
                 logger=log,
             )
         return self._cm_resource_handler
@@ -298,7 +308,7 @@ class KServeControllerCharm(CharmBase):
                 context={**self.images_context},
                 logger=log,
             )
-
+        load_in_cluster_generic_resources(self._cluster_runtimes_resource_handler.lightkube_client)
         return self._cluster_runtimes_resource_handler
 
     @property
@@ -584,6 +594,7 @@ class KServeControllerCharm(CharmBase):
         try:
             self.custom_images = parse_images_config(self.model.config["custom_images"])
             self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
+            self.inference_service_context = self.generate_inference_service_context()
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.reconcile_authorization_policies()
             self.k8s_resource_handler.apply()
@@ -659,14 +670,7 @@ class KServeControllerCharm(CharmBase):
             log.error(api_err)
             raise
 
-    def _on_remove(self, event):
-        try:
-            self.custom_images = parse_images_config(self.model.config["custom_images"])
-            self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
-        except ErrorWithStatus as err:
-            self.model.unit.status = err.status
-            log.error(f"Failed to handle {event} with error: {err}")
-            return
+    def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
 
         # remove AuthorizationPolicies
@@ -675,19 +679,62 @@ class KServeControllerCharm(CharmBase):
         handlers = [
             self.k8s_resource_handler,
             self.cm_resource_handler,
-            self.cluster_runtimes_resource_handler,
         ]
-
         try:
+            runtimes_manifests = self.cluster_runtimes_resource_handler.render_manifests()
+            delete_many(
+                self.cluster_runtimes_resource_handler.lightkube_client,
+                runtimes_manifests,
+            )
+            for runtime_name, runtime_kind in _extract_runtimes_names(runtimes_manifests).items():
+                self.ensure_resource_is_deleted(
+                    client=self.cluster_runtimes_resource_handler.lightkube_client,
+                    resource_kind=runtime_kind,
+                    resource_name=runtime_name,
+                )
             for handler in handlers:
                 delete_many(
                     handler.lightkube_client,
                     handler.render_manifests(),
                 )
         except ApiError as e:
-            log.warning(f"Failed to delete resources, with error: {e}")
+            if e.status.code != 404:
+                log.warning(f"Failed to delete resources, with error: {e}")
+                raise e
+        except ObjectStillExistsError as e:
+            log.warning(
+                "Failed to remove resource: %s. Manual intervention for cleanup might be required",
+                e.resource_name,
+            )
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
+
+    @tenacity.retry(stop=tenacity.stop_after_delay(300), wait=tenacity.wait_fixed(5), reraise=True)
+    def ensure_resource_is_deleted(self, client: Client, resource_kind, resource_name: str):
+        """Check if the CRD doesn't exist with retries.
+
+        The function will keep retrying until the CRD is deleted, and handle the
+        404 error once it gets deleted.
+
+        Args:
+            crd_name: The CRD to be checked if it is deleted.
+            client: The lightkube client to use for talking to K8s.
+
+        Raises:
+            ApiError: From lightkube, if there was an error aside from 404.
+            ObjectStillExistsError: If the Profile's namespace was not deleted after retries.
+        """
+        log.info("Checking if resource exists: %s", resource_name)
+        try:
+            client.get(resource_kind, name=resource_name)
+            log.info('Resource "%s" exists, retrying...', resource_name)
+            raise ObjectStillExistsError(resource_name)
+        except ApiError as e:
+            if e.status.code == 404:
+                log.info('Resource "%s" does not exist!', resource_name)
+                return
+            # Raise any other error
+            raise
 
     def _check_container_connection(self, container: Container) -> None:
         """Check if connection can be made with container.
@@ -871,6 +918,23 @@ class KServeControllerCharm(CharmBase):
             raise GenericCharmRuntimeError(
                 f"Failed to restart {self._controller_container_name} service"
             ) from err
+
+
+def _extract_runtimes_names(manifests: LightkubeResourcesList) -> dict:
+    """
+    Extracts a mapping of runtime resource names to their kinds.
+
+    Args:
+        manifests (LightkubeResourcesList): List of runtime manifest objects,
+        each with metadata and kind.
+
+    Returns:
+        dict: Dictionary mapping resource names (str) to their kind.
+    """
+    runtimes_kind_name_mapping = {}
+    for runtime in manifests:
+        runtimes_kind_name_mapping.update({runtime.metadata.name: runtime.__class__})
+    return runtimes_kind_name_mapping
 
 
 if __name__ == "__main__":

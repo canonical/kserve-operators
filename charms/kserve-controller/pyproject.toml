@@ -57,6 +57,7 @@ ops = "^2.22.0"
 serialized-data-interface = "^0.7.0"
 charmed-service-mesh-helpers = "^0.3.0"
 lightkube-extensions = "^0.3.0"
+tenacity = "^9.1.2"
 
 [tool.poetry.group.fmt]
 optional = true
