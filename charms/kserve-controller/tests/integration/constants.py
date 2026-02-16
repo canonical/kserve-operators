@@ -20,7 +20,6 @@ CONTAINERS_SECURITY_CONTEXT_MAP = generate_container_securitycontext_map(METADAT
 # ConfigMap
 CONFIGMAP_TEMPLATE_PATH = Path("./src/templates/configmap_manifests.yaml.j2")
 CONFIGMAP_DATA_INGRESS_DOMAIN = "example.com"
-CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE = "kubeflow"
 
 # Lightkube resources
 POD_DEFAULT = lightkube.generic_resource.create_namespaced_resource(

@@ -37,7 +37,6 @@ from tests.integration.charms_dependencies import (
 from tests.integration.constants import (
     APP_NAME,
     CONFIGMAP_DATA_INGRESS_DOMAIN,
-    CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
     CONFIGMAP_NAME,
     CONFIGMAP_TEMPLATE_PATH,
     CONTAINERS_SECURITY_CONTEXT_MAP,
@@ -71,16 +70,19 @@ custom_images = json.loads(Path(CUSTOM_IMAGES_PATH).read_text())
 
 
 explainer_image, explainer_version = custom_images["configmap__explainers__art"].split(":")
-configmap_context = {
-    **custom_images,
-    "configmap__explainers__art__image": explainer_image,
-    "configmap__explainers__art__version": explainer_version,
-    "deployment_mode": "RawDeployment",
-    "enable_gateway_api": "true",
-    "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
-    "ingress_gateway_namespace": CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
-    "ingress_gateway_name": "istio-ingress-k8s",
-}
+
+
+def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
+    return {
+        **custom_images,
+        "configmap__explainers__art__image": explainer_image,
+        "configmap__explainers__art__version": explainer_version,
+        "deployment_mode": "RawDeployment",
+        "enable_gateway_api": "true",
+        "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
+        "ingress_gateway_namespace": ingress_gateway_namespace,
+        "ingress_gateway_name": "istio-ingress-k8s",
+    }
 
 
 @pytest.mark.skip_if_deployed
@@ -210,7 +212,9 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
 
-    expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
+    expected_configmap = populate_template(
+        CONFIGMAP_TEMPLATE_PATH, generate_configmap_context(ops_test.model_name)
+    )
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
@@ -235,6 +239,7 @@ async def test_configmap_changes_with_config(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
 
+    configmap_context = generate_configmap_context(ops_test.model_name)
     configmap_context["configmap__batcher"] = "custom:1.0"
 
     expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)

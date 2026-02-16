@@ -23,6 +23,7 @@ from charmed_kubeflow_chisme.testing import (
     get_pod_names,
 )
 from lightkube import Client
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from lightkube.resources.core_v1 import (
     ConfigMap,
     Pod,
@@ -42,7 +43,6 @@ from tests.integration.charms_dependencies import (
 from tests.integration.constants import (
     APP_NAME,
     CONFIGMAP_DATA_INGRESS_DOMAIN,
-    CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
     CONFIGMAP_NAME,
     CONFIGMAP_TEMPLATE_PATH,
     CONTAINERS_SECURITY_CONTEXT_MAP,
@@ -77,19 +77,22 @@ logger = logging.getLogger(__name__)
 custom_images = json.loads(Path(CUSTOM_IMAGES_PATH).read_text())
 
 explainer_image, explainer_version = custom_images["configmap__explainers__art"].split(":")
-configmap_context = {
-    **custom_images,
-    "configmap__explainers__art__image": explainer_image,
-    "configmap__explainers__art__version": explainer_version,
-    "deployment_mode": "Serverless",
-    "enable_gateway_api": "false",
-    "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
-    "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
-    "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
-    "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
-    "ingress_gateway_namespace": CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE,
-    "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS,
-}
+
+
+def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
+    return {
+        **custom_images,
+        "configmap__explainers__art__image": explainer_image,
+        "configmap__explainers__art__version": explainer_version,
+        "deployment_mode": "Serverless",
+        "enable_gateway_api": "false",
+        "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
+        "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
+        "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
+        "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
+        "ingress_gateway_namespace": ingress_gateway_namespace,
+        "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS,
+    }
 
 
 @pytest.mark.skip_if_deployed
@@ -265,7 +268,9 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
 
-    expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
+    expected_configmap = populate_template(
+        CONFIGMAP_TEMPLATE_PATH, generate_configmap_context(ops_test.model_name)
+    )
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
@@ -290,6 +295,7 @@ async def test_configmap_changes_with_config(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
 
+    configmap_context = generate_configmap_context(ops_test.model_name)
     configmap_context["configmap__batcher"] = "custom:1.0"
 
     expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
@@ -487,3 +493,41 @@ async def test_container_security_context(
         CONTAINERS_SECURITY_CONTEXT_MAP,
         ops_test.model.name,
     )
+
+
+@pytest.mark.abort_on_fail
+async def test_remove_with_resources_present(ops_test: OpsTest):
+    """Test remove with all resources deployed.
+
+    Verify that all deployed resources that need to be removed are removed.
+
+    This test should be next after test_upgrade(), because it removes deployed charm.
+    """
+
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(5 * 60),
+        reraise=True,
+    )
+    def assert_resources_removed():
+        """Asserts on the resource removal.
+
+        Retries multiple times using tenacity to allow time for the resources to be deleted.
+        """
+        lightkube_client = lightkube.Client()
+        crd_list = iter(
+            lightkube_client.list(
+                CustomResourceDefinition,
+                labels=[("app.juju.is/created-by", APP_NAME)],
+                namespace=ops_test.model_name,
+            )
+        )
+        # testing for empty list (iterator)
+        _last = object()
+        assert next(crd_list, _last) is _last
+
+    # remove deployed charm and verify that it is removed alongside resources it created
+    await ops_test.model.remove_application(app_name=APP_NAME, block_until_done=True)
+    assert APP_NAME not in ops_test.model.applications
+
+    assert_resources_removed()
