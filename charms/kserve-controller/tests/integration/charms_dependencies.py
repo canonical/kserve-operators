@@ -7,8 +7,8 @@ ISTIO_GATEWAY = CharmSpec(
     charm="istio-gateway", channel="latest/edge", config={"kind": "ingress"}, trust=True
 )
 ISTIO_PILOT = CharmSpec(charm="istio-pilot", channel="latest/edge", trust=True)
-KNATIVE_OPERATOR = CharmSpec(charm="knative-operator", channel="1.16/stable", trust=True)
-KNATIVE_SERVING = CharmSpec(charm="knative-serving", channel="1.16/stable", trust=True)
+KNATIVE_OPERATOR = CharmSpec(charm="knative-operator", channel="1.16/edge", trust=True)
+KNATIVE_SERVING = CharmSpec(charm="knative-serving", channel="1.16/edge", trust=True)
 METACONTROLLER_OPERATOR = CharmSpec(
     charm="metacontroller-operator", channel="4.11/stable", trust=True
 )
