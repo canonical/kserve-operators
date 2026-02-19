@@ -53,12 +53,8 @@ with CUSTOM_IMAGES_PATH.open() as f:
     custom_images = json.load(f)
 
 CONFIGMAP_TEMPLATE_PATH = Path("./src/templates/configmap_manifests.yaml.j2")
-CONFIGMAP_DATA_DEPLOYMENT_MODE = "Serverless"
+CONFIGMAP_DATA_DEPLOYMENT_MODE = "RawDeployment"
 CONFIGMAP_DATA_INGRESS_DOMAIN = "example.com"
-CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
-CONFIGMAP_DATA_LOCAL_GATEWAY_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_INGRESS_GATEWAY_NAMESPACE = "kubeflow"
 CONFIGMAP_DATA_INGRESS_GATEWAY_NAME = "test-gateway"
 
 MANIFESTS_SUFFIX = "-s3"
@@ -100,9 +96,6 @@ def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
         "configmap__explainers__art__version": explainer_version,
         "deployment_mode": CONFIGMAP_DATA_DEPLOYMENT_MODE,
         "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
-        "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
-        "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
-        "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
         "ingress_gateway_namespace": ingress_gateway_namespace,
         "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME,
     }
@@ -496,6 +489,15 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
         lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
         ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
     """
+    # Change deployment mode to RawDeployment
+    await ops_test.model.applications[APP_NAME].set_config({"deployment-mode": "rawdeployment"})
+    await ops_test.model.wait_for_idle(
+        [APP_NAME],
+        raise_on_blocked=False,
+        status="active",
+        timeout=90 * 10,
+    )
+
     inferenceservice_config = lightkube_client.get(
         ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
     )
