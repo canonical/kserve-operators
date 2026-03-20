@@ -7,13 +7,12 @@ from unittest.mock import MagicMock, patch
 
 import ops.testing
 import pytest
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from lightkube import ApiError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
 
-from charm import KServeControllerCharm
+from charm import KServeControllerCharm, ObjectStillExistsError
 from tests.test_data.manifests import MANIFESTS_TEST_DATA
 
 # enable simulation of container networking
@@ -51,9 +50,11 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
 }
 
 
-class _FakeErrorWithStatus(ErrorWithStatus):
-    def __init__(self, status_type=BlockedStatus):
-        super().__init__("err", status_type)
+class _FakeObjectStillExistsError(ObjectStillExistsError):
+    """Used to simulate an ObjectStillExistsError during testing."""
+
+    def __init__(self, resource_name="a-resource"):
+        super().__init__(resource_name=resource_name)
 
 
 class _FakeResponse:
@@ -99,7 +100,7 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     yield mocked_resource_handler.lightkube_client
 
 
-def test_metrics(harness):
+def test_metrics(harness: Harness):
     """Test MetricsEndpointProvider initialization."""
     with patch("charm.MetricsEndpointProvider") as mock_metrics, patch(
         "charm.KubernetesServicePatch"
@@ -119,14 +120,14 @@ def test_metrics(harness):
         )
 
 
-def test_log_forwarding(harness):
+def test_log_forwarding(harness: Harness):
     """Test LogForwarder initialization."""
     with patch("charm.LogForwarder") as mock_logging:
         harness.begin()
         mock_logging.assert_called_once_with(charm=harness.charm)
 
 
-def test_events(harness, mocked_resource_handler, mocker):
+def test_events(harness: Harness, mocked_resource_handler, mocker):
     harness.begin()
     on_event = mocker.patch("charm.KServeControllerCharm._on_event")
     on_remove = mocker.patch("charm.KServeControllerCharm._on_remove")
@@ -142,8 +143,23 @@ def test_events(harness, mocked_resource_handler, mocker):
     on_event.assert_called_once()
 
 
-def test_on_install_active(harness, mocked_resource_handler):
+def test_on_install_active(harness: Harness, mocked_resource_handler):
     harness.begin()
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
     harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
@@ -152,9 +168,24 @@ def test_on_install_active(harness, mocked_resource_handler):
     assert harness.charm.model.unit.status == ActiveStatus()
 
 
-def test_on_install_exception(harness, mocked_resource_handler, mocker):
+def test_on_install_exception(harness: Harness, mocked_resource_handler, mocker):
     mocked_logger = mocker.patch("charm.log")
     harness.begin()
+    # Add relation with ingress-gateway providers
+    relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
     mocked_resource_handler.apply.side_effect = _FakeApiError()
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
@@ -164,7 +195,7 @@ def test_on_install_exception(harness, mocked_resource_handler, mocker):
     mocked_logger.error.assert_called()
 
 
-def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, mocker):
+def test_on_kserve_controller_ready_active(harness: Harness, mocked_resource_handler, mocker):
     harness.begin()
 
     # Check initial plan is empty
@@ -201,7 +232,9 @@ def test_on_kserve_controller_ready_active(harness, mocked_resource_handler, moc
     assert harness.model.unit.status == ActiveStatus()
 
 
-def test_on_kserve_controller_ready_no_relation_blocked(harness, mocked_resource_handler, mocker):
+def test_on_kserve_controller_ready_no_relation_blocked(
+    harness: Harness, mocked_resource_handler, mocker
+):
     """Tests that charm goes to blocked when it has no relation to knative-serving."""
     harness.begin()
 
@@ -220,7 +253,7 @@ def test_on_kserve_controller_ready_no_relation_blocked(harness, mocked_resource
     )
 
 
-def test_on_remove_success(harness, mocker, mocked_resource_handler):
+def test_on_remove_success(harness: Harness, mocker, mocked_resource_handler):
     mocked_delete_many = mocker.patch("charm.delete_many")
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -231,7 +264,23 @@ def test_on_remove_success(harness, mocker, mocked_resource_handler):
     assert isinstance(harness.charm.model.unit.status, MaintenanceStatus)
 
 
-def test_on_remove_failure(harness, mocker, mocked_resource_handler):
+def test_on_remove_api_failure(harness: Harness, mocker, mocked_resource_handler):
+    harness.begin()
+
+    mocked_delete_many = mocker.patch("charm.delete_many")
+    mocked_delete_many.side_effect = _FakeObjectStillExistsError()
+    mocked_logger = mocker.patch("charm.log")
+
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.charm._cm_resource_handler = mocked_resource_handler
+    harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
+
+    with pytest.raises(ObjectStillExistsError):
+        harness.charm.on.remove.emit()
+    mocked_logger.warning.assert_called()
+
+
+def test_on_remove_deletion_failure(harness: Harness, mocker, mocked_resource_handler):
     harness.begin()
 
     mocked_delete_many = mocker.patch("charm.delete_many")
@@ -247,7 +296,9 @@ def test_on_remove_failure(harness, mocker, mocked_resource_handler):
     mocked_logger.warning.assert_called()
 
 
-def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_resource_handler):
+def test_generate_gateways_context_raw_mode_no_relation(
+    harness: Harness, mocker, mocked_resource_handler
+):
     """Assert the unit gets blocked if no relation."""
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -260,7 +311,7 @@ def test_generate_gateways_context_raw_mode_no_relation(harness, mocker, mocked_
 @patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_serverless_no_relation(
     _mocked_restart_controller_service,
-    harness,
+    harness: Harness,
     mocker,
     mocked_resource_handler,
 ):
@@ -290,7 +341,7 @@ def test_generate_gateways_context_serverless_no_relation(
     ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"}),
 )
 def test_generate_gateways_context_raw_mode_missing_data(
-    remote_data, harness, mocker, mocked_resource_handler
+    remote_data, harness: Harness, mocker, mocked_resource_handler
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
     harness.begin()
@@ -314,7 +365,7 @@ def test_generate_gateways_context_raw_mode_missing_data(
 def test_generate_gateways_context_serverless_missing_data(
     _mocked_restart_controller_service,
     remote_data,
-    harness,
+    harness: Harness,
     mocker,
     mocked_resource_handler,
 ):
@@ -343,7 +394,9 @@ def test_generate_gateways_context_serverless_missing_data(
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for local gateway data.")
 
 
-def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resource_handler):
+def test_generate_gateways_context_raw_mode_pass(
+    harness: Harness, mocker, mocked_resource_handler
+):
     """Assert the gateway context is correct."""
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -381,7 +434,7 @@ def test_generate_gateways_context_raw_mode_pass(harness, mocker, mocked_resourc
 @patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_serverless_mode_pass(
     _mocked_restart_controller_service,
-    harness,
+    harness: Harness,
     mocker,
     mocked_resource_handler,
 ):
@@ -431,7 +484,7 @@ def test_generate_gateways_context_serverless_mode_pass(
     assert actual_gateway_context == expected_gateway_context
 
 
-def test_get_certs(harness, mocker, mocked_resource_handler):
+def test_get_certs(harness: Harness, mocker, mocked_resource_handler):
     """Test certs generation."""
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
@@ -488,7 +541,7 @@ def test_gen_certs_if_missing(cert_data_dict, should_certs_refresh, harness: Har
     assert mocked_gen_certs.called == should_certs_refresh
 
 
-def test_restart_controller_service(harness, mocked_resource_handler, mocker):
+def test_restart_controller_service(harness: Harness, mocked_resource_handler, mocker):
     """Checks the controller service is restarted correctly."""
     harness.begin()
 
