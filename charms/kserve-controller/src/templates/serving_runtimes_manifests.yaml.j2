@@ -1,6 +1,8 @@
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: huggingfaceserver
   name: kserve-huggingfaceserver
 spec:
   annotations:
@@ -48,6 +50,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: huggingfaceserver
   name: kserve-huggingfaceserver-multinode
 spec:
   annotations:
@@ -59,10 +63,11 @@ spec:
     command:
     - bash
     - -c
-    - "export MODEL=${MODEL_ID}\nif [[ ! -z ${MODEL_DIR} ]]\nthen\n  export MODEL=${MODEL_DIR}\nfi\n\nexport
+    - "export MODEL_DIR_ARG=\"\"\nif [[ ! -z ${MODEL_ID} ]]\nthen\n  export MODEL_DIR_ARG=\"--model_dir=${MODEL_ID}\"\nfi\n\nif
+      [[ ! -z ${MODEL_DIR} ]]\nthen\n  export MODEL_DIR_ARG=\"--model_dir=${MODEL_DIR}\"\nfi\n\nexport
       RAY_ADDRESS=${POD_IP}:${RAY_PORT}\nray start --head --disable-usage-stats --include-dashboard
       false \npython ./huggingfaceserver/health_check.py registered_nodes --retries
-      200  --probe_name runtime_start\n\npython -m huggingfaceserver --model_dir=${MODEL}
+      200  --probe_name runtime_start\n\npython -m huggingfaceserver ${MODEL_DIR_ARG}
       --tensor-parallel-size=${TENSOR_PARALLEL_SIZE} --pipeline-parallel-size=${PIPELINE_PARALLEL_SIZE}
       $0 $@\n"
     env:
@@ -213,6 +218,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: lgbserver
   name: kserve-lgbserver
 spec:
   annotations:
@@ -247,11 +254,13 @@ spec:
   - autoSelect: true
     name: lightgbm
     priority: 1
-    version: "3"
+    version: "4"
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: mlserver
   name: kserve-mlserver
 spec:
   annotations:
@@ -265,8 +274,6 @@ spec:
       value: "8080"
     - name: MLSERVER_GRPC_PORT
       value: "9000"
-    - name: MODELS_DIR
-      value: /mnt/models
     image: {{ serving_runtimes__kserve_mlserver }}
     name: kserve-container
     resources:
@@ -322,6 +329,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: paddleserver
   name: kserve-paddleserver
 spec:
   annotations:
@@ -360,6 +369,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: pmmlserver
   name: kserve-pmmlserver
 spec:
   annotations:
@@ -402,6 +413,59 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: predictiveserver
+  name: kserve-predictiveserver
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
+  containers:
+  - args:
+    - --model_name={{.Name}}
+    - --model_dir=/mnt/models
+    - --http_port=8080
+    - --framework={{.Annotations.modelFormat}}
+    - --nthread=1
+    image: kserve/predictiveserver:v0.17.0
+    name: kserve-container
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+  multiModel: false
+  protocolVersions:
+  - v1
+  - v2
+  supportedModelFormats:
+  - autoSelect: false
+    name: sklearn
+    priority: 3
+    version: "1"
+  - autoSelect: false
+    name: xgboost
+    priority: 3
+    version: "2"
+  - autoSelect: false
+    name: lightgbm
+    priority: 3
+    version: "4"
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  annotations:
+    serving.kserve.io/server-type: sklearnserver
   name: kserve-sklearnserver
 spec:
   annotations:
@@ -440,6 +504,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: tensorflow-serving
   name: kserve-tensorflow-serving
 spec:
   annotations:
@@ -487,6 +553,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: torchserve
   name: kserve-torchserve
 spec:
   annotations:
@@ -531,6 +599,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: tritonserver
   name: kserve-tritonserver
 spec:
   annotations:
@@ -591,6 +661,8 @@ spec:
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:
+  annotations:
+    serving.kserve.io/server-type: xgbserver
   name: kserve-xgbserver
 spec:
   annotations:
@@ -625,4 +697,4 @@ spec:
   - autoSelect: true
     name: xgboost
     priority: 1
-    version: "1"
+    version: "2"

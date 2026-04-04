@@ -61,7 +61,7 @@ data:
   ingress: |-
     {
       "enableGatewayApi": {{ enable_gateway_api }},
-      "kserveIngressGateway": "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
+      {% if not local_gateway_name -%}{# i.e.: if and only if in Standard mode -#}
       "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressDomain"  : "{{ ingress_domain}}",
       "ingressClassName" : "istio",
@@ -69,7 +69,9 @@ data:
       "localGateway" : "{{ local_gateway_namespace }}/{{ local_gateway_name }}",
       "localGatewayService" : "{{ local_gateway_service_name }}.{{ ingress_gateway_namespace}}.svc.cluster.local",
       {%- endif %}
-      "urlScheme": "http"
+      "urlScheme": "http",
+      {%- endif %}
+      "kserveIngressGateway": "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}"
     }
   logger: |-
     {

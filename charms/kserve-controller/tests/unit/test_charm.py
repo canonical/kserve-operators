@@ -344,7 +344,7 @@ def test_generate_gateways_context_serverless_no_relation(
     "remote_data",
     ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"}),
 )
-def test_generate_gateways_context_raw_mode_missing_data(
+def test_generate_gateways_context_standard_mode_missing_data(
     remote_data, harness: Harness, mocker, mocked_resource_handler
 ):
     """Assert the unit goes to waiting status if there is incomplete data."""
@@ -398,7 +398,7 @@ def test_generate_gateways_context_serverless_missing_data(
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for local gateway data.")
 
 
-def test_generate_gateways_context_raw_mode_pass(
+def test_generate_gateways_context_standard_mode_pass(
     harness: Harness, mocker, mocked_resource_handler
 ):
     """Assert the gateway context is correct."""
@@ -644,29 +644,29 @@ def test_validate_sdi_interface_success(harness: Harness):
             False,
             ActiveStatus(),
         ),
-        # RawDeployment, can work with either ingress-gateway or gateway-metadata relations
+        # Standard, can work with either ingress-gateway or gateway-metadata relations
         (
-            "rawdeployment",
+            "standard",
             False,
             False,
             BlockedStatus(
-                "RawDeployment mode detected, but no relation to gateway-metadata or ingress-gateway"
+                "Standard mode detected, but no relation to gateway-metadata or ingress-gateway"
             ),
         ),
         (
-            "rawdeployment",
+            "standard",
             False,
             True,
             ActiveStatus(),
         ),
         (
-            "rawdeployment",
+            "standard",
             True,
             True,
             BlockedStatus("Both gateway-metadata and ingress-gateway relations are established"),
         ),
         (
-            "rawdeployment",
+            "standard",
             True,
             False,
             ActiveStatus(),
@@ -722,17 +722,17 @@ def test_deployment_modes_gateway_relations(
 
 
 @patch("charm.KServeControllerCharm._restart_controller_service")
-def test_generate_gateways_context_raw_deployment_mode(
+def test_generate_gateways_context_standard_mode(
     _mocked_restart_controller_service,
     harness: Harness,
     mocker,
     mocked_resource_handler,
 ):
-    """Assert the gateway context is correct in RawDeployment mode."""
+    """Assert the gateway context is correct in Standard mode."""
     harness.begin()
 
-    # Change deployment-mode to serverless
-    harness.update_config({"deployment-mode": "RawDeployment"})
+    # Change deployment-mode to Standard
+    harness.update_config({"deployment-mode": "standard"})
 
     # Add relation with ingress-gateway providers
     harness.add_relation("service-mesh", "istio-beacon-k8s")

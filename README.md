@@ -55,9 +55,9 @@ juju deploy knative-operator --channel ${KNATIVE_CHANNEL} --trust
 juju deploy knative-serving --config namespace="knative-serving" --config istio.gateway.namespace=${MODEL_NAME} --config istio.gateway.name=${DEFAULT_GATEWAY} --channel ${KNATIVE_CHANNEL} --trust
 ```
 
-### Deploy in `RawDeployment` mode
+### Deploy in `Standard` mode
 
-kserve-operators support `RawDeployment` mode to manage `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
+kserve-operators support `Standard` mode to manage `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
 
 1. Deploy `kserver-controller`
 
