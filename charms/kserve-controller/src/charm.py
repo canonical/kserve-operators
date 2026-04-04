@@ -84,7 +84,8 @@ K8S_RESOURCE_FILES = [
     "src/templates/auth_manifests.yaml.j2",
     "src/templates/webhook_manifests.yaml.j2",
     "src/templates/cluster_storage_containers.yaml.j2",
-    "src/templates/llm_inference_service_configs_manifests.yaml.j2"
+    "src/templates/llm_inference_service_configs_manifests.yaml.j2",
+    "src/templates/deployments.yaml.j2"
 ]
 
 # Relation names
