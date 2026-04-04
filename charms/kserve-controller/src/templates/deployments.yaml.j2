@@ -19,6 +19,25 @@ metadata:
   name: llmisvc-controller-manager
   namespace: {{ namespace }}
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    control-plane: llmisvc-controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: llmisvc-controller-manager-service
+  namespace: {{ namespace }}
+spec:
+  ports:
+    - name: https
+      port: 8443
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    control-plane: llmisvc-controller-manager
+    controller-tools.k8s.io: "1.0"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
