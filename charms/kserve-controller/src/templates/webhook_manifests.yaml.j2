@@ -17,6 +17,9 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: kserve
+    app.kubernetes.io/name: kserve
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -74,6 +77,9 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: kserve
+    app.kubernetes.io/name: kserve
   name: inferencegraph.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -102,6 +108,9 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: kserve
+    app.kubernetes.io/name: kserve
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -130,6 +139,9 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: kserve
+    app.kubernetes.io/name: kserve
   name: servingruntime.serving.kserve.io
 webhooks:
   - admissionReviewVersions:
@@ -158,6 +170,9 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: kserve
+    app.kubernetes.io/name: kserve
   name: trainedmodel.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -186,6 +201,9 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: kserve
+    app.kubernetes.io/name: kserve
   name: clusterservingruntime.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -209,3 +227,149 @@ webhooks:
     resources:
     - clusterservingruntimes
   sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kserve/llmisvc-serving-cert
+  creationTimestamp: null
+  name: llminferenceservice.serving.kserve.io
+webhooks:
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: llmisvc-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha2-llminferenceservice
+    failurePolicy: Fail
+    matchPolicy: Exact
+    name: llminferenceservice.kserve-webhook-server.v1alpha2.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - llminferenceservices
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: llmisvc-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha1-llminferenceservice
+    failurePolicy: Fail
+    matchPolicy: Exact
+    name: llminferenceservice.kserve-webhook-server.v1alpha1.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - llminferenceservices
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kserve/llmisvc-serving-cert
+  creationTimestamp: null
+  name: llminferenceserviceconfig.serving.kserve.io
+webhooks:
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: llmisvc-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha2-llminferenceserviceconfig
+    failurePolicy: Fail
+    matchPolicy: Exact
+    name: llminferenceserviceconfig.kserve-webhook-server.v1alpha2.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - llminferenceserviceconfigs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: llmisvc-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha1-llminferenceserviceconfig
+    failurePolicy: Fail
+    matchPolicy: Exact
+    name: llminferenceserviceconfig.kserve-webhook-server.v1alpha1.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - llminferenceserviceconfigs
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kserve/localmodel-serving-cert
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: localmodel
+    app.kubernetes.io/name: kserve
+  name: localmodelcache.serving.kserve.io
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: localmodel-webhook-server-service
+        namespace: {{ namespace }}
+        path: /validate-serving-kserve-io-v1alpha1-localmodelcache
+    failurePolicy: Fail
+    name: localmodelcache.kserve-webhook-server.validator
+    rules:
+      - apiGroups:
+          - serving.kserve.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - localmodelcaches
+    sideEffects: None
