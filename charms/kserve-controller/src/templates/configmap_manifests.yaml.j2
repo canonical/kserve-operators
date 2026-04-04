@@ -8,6 +8,11 @@ data:
         "cpuRequest": "100m",
         "cpuLimit": "1"
     }
+  autoscaler: |-
+    {
+      "scaleUpStabilizationWindowSeconds": "0",
+      "scaleDownStabilizationWindowSeconds": "300"
+    }
   batcher: |-
     {
         "image" : "{{ configmap__batcher }}",
@@ -35,6 +40,7 @@ data:
            "s3UseVirtualBucket": "",
            "s3UseAccelerate": "",
            "s3UseAnonymousCredential": "",
+           "s3CABundleConfigMap": "",
            "s3CABundle": ""
        }
     }
@@ -58,10 +64,14 @@ data:
           "memoryRequest": "2Gi"
         }
     }
+  
   ingress: |-
     {
+      "disableIngressCreation": false,
+      "disableIstioVirtualHost": false,
+      "domainTemplate": {{ '"{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}"' }},
       "enableGatewayApi": {{ enable_gateway_api }},
-      {% if not local_gateway_name -%}{# i.e.: if and only if in Standard mode -#}
+      "kserveIngressGateway": "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressGateway" : "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}",
       "ingressDomain"  : "{{ ingress_domain}}",
       "ingressClassName" : "istio",
@@ -69,9 +79,17 @@ data:
       "localGateway" : "{{ local_gateway_namespace }}/{{ local_gateway_name }}",
       "localGatewayService" : "{{ local_gateway_service_name }}.{{ ingress_gateway_namespace}}.svc.cluster.local",
       {%- endif %}
-      "urlScheme": "http",
-      {%- endif %}
-      "kserveIngressGateway": "{{ ingress_gateway_namespace }}/{{ ingress_gateway_name }}"
+      "urlScheme": "http"
+    }
+  localModel: |-
+    {
+      "enabled": false,
+      "jobNamespace": "kserve-localmodel-jobs",
+      "defaultJobImage" : "{{ configmap__storageInitializer }}",
+      "fsGroup": 1000,
+      "jobTTLSecondsAfterFinished": 3600,
+      "reconcilationFrequencyInSecs": 60,
+      "disableVolumeManagement": false
     }
   logger: |-
     {
@@ -91,7 +109,13 @@ data:
     {
       "scrapeInterval": "5s",
       "metricReceiverEndpoint": "keda-otel-scaler.keda.svc:4317",
-      "metricScalerEndpoint": "keda-otel-scaler.keda.svc:4318"
+      "metricScalerEndpoint": "keda-otel-scaler.keda.svc:4318",
+      "resource": {
+          "cpuLimit": "1",
+          "memoryLimit": "2Gi",
+          "cpuRequest": "200m",
+          "memoryRequest": "512Mi"
+      }
     }
   router: |-
     {
@@ -115,7 +139,6 @@ data:
         "cpuLimit": "1",
         "caBundleConfigMapName": "",
         "caBundleVolumeMountPath": "/etc/ssl/custom-certs",
-        "enableDirectPvcVolumeMount": true,
         "enableModelcar": true,
         "cpuModelcar": "10m",
         "memoryModelcar": "15Mi",
