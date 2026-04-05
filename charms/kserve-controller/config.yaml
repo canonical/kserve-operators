@@ -21,6 +21,8 @@ options:
       configmap__explainers__art : ''
       configmap__logger : ''
       configmap__router : ''
+      deployment__kserve_localmodel_controller_manager: ''
+      deployment__llmisvc_controller_manager: ''
       configmap__storageInitializer : ''
       serving_runtimes__huggingfaceserver: ''
       serving_runtimes__lgbserver : ''

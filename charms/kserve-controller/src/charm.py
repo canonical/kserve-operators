@@ -74,6 +74,7 @@ log = logging.getLogger(__name__)
 
 CLUSTER_RUNTIMES_FILES = ["src/templates/serving_runtimes_manifests.yaml.j2"]
 CONFIG_FILES = ["src/templates/configmap_manifests.yaml.j2"]
+DEPLOYMENT_FILES = ["src/templates/deployment_manifests.yaml.j2"]
 CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 DEFAULT_IMAGES_FILE = "src/default-custom-images.json"
 with open(DEFAULT_IMAGES_FILE, "r") as json_file:
@@ -85,7 +86,6 @@ K8S_RESOURCE_FILES = [
     "src/templates/webhook_manifests.yaml.j2",
     "src/templates/cluster_storage_containers.yaml.j2",
     "src/templates/llm_inference_service_configs_manifests.yaml.j2",
-    "src/templates/deployments.yaml.j2"
 ]
 
 # Relation names
@@ -184,6 +184,7 @@ class KServeControllerCharm(CharmBase):
 
         self._k8s_resource_handler = None
         self._cm_resource_handler = None
+        self._deployment_resource_handler = None
         self._cluster_runtimes_resource_handler = None
         self._secrets_manifests_wrapper = None
         self._service_accounts_manifests_wrapper = None
@@ -299,6 +300,18 @@ class KServeControllerCharm(CharmBase):
                 logger=log,
             )
         return self._cm_resource_handler
+
+    @property
+    def deployment_resource_handler(self):
+        """Returns an instance of the KubernetesResourceHandler."""
+        if not self._deployment_resource_handler:
+            self._deployment_resource_handler = KubernetesResourceHandler(
+                field_manager=self._lightkube_field_manager,
+                template_files=DEPLOYMENT_FILES,
+                context={**self._context, **self.images_context},
+                logger=log,
+            )
+        return self._deployment_resource_handler
 
     @property
     def cluster_runtimes_resource_handler(self):
@@ -681,6 +694,7 @@ class KServeControllerCharm(CharmBase):
         handlers = [
             self.k8s_resource_handler,
             self.cm_resource_handler,
+            self.deployment_resource_handler,
         ]
         try:
             runtimes_manifests = self.cluster_runtimes_resource_handler.render_manifests()
