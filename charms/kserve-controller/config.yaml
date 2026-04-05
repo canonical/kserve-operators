@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 options:
   deployment-mode:
-    default: "standard"
+    default: "serverless"
     description: Deployment mode for kserve. It can only be `standard` or `serverless`, and the latter requires knative-serving to be present in the model, and the local-gateway relation to be established.
     type: string
   domain-name:
