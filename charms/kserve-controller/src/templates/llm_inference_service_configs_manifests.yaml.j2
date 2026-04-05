@@ -11,7 +11,7 @@ spec:
       - serve
       - /mnt/models
       - --served-model-name
-      - '{{ .Spec.Model.Name }}'
+      - {{ '{{ .Spec.Model.Name }}' }}
       - --port
       - "8001"
       - --disable-uvicorn-access-log
