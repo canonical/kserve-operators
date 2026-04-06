@@ -732,7 +732,7 @@ def test_generate_gateways_context_standard_mode(
     harness.begin()
 
     # Change deployment-mode to Standard
-    harness.update_config({"deployment-mode": "standard"})
+    harness.update_config({"deployment-mode": "Standard"})
 
     # Add relation with ingress-gateway providers
     harness.add_relation("service-mesh", "istio-beacon-k8s")
