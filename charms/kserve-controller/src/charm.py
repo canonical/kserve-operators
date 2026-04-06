@@ -614,6 +614,7 @@ class KServeControllerCharm(CharmBase):
             self.reconcile_authorization_policies()
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
+            self.deployment_resource_handler.apply()
             self.send_object_storage_manifests()
             self._upload_certs_to_container(
                 container=self.controller_container,
