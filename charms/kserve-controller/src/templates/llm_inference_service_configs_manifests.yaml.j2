@@ -148,6 +148,7 @@ spec:
       - /bin/bash
       - -c
       - |-
+        {% raw %}
         # In some versions, ZMQ bind doesn't resolve the address through DNS
         DP_ADDRESS=$(getent hosts "${LWS_LEADER_ADDRESS}" | cut -d' ' -f1)
         if [ -z "${DP_ADDRESS}" ]; then
@@ -297,6 +298,7 @@ spec:
           # /var/run/kserve/tls/tls.crt \
           # --ssl-keyfile \
           # /var/run/kserve/tls/tls.key"
+        {% endraw %}
       - --
       env:
       - name: HOME
@@ -429,6 +431,7 @@ spec:
       - /bin/bash
       - -c
       - |-
+        {% raw %}
         # In some versions, ZMQ bind doesn't resolve the address through DNS
         DP_ADDRESS=$(getent hosts "${LWS_LEADER_ADDRESS}" | cut -d' ' -f1)
         if [ -z "${DP_ADDRESS}" ]; then
@@ -578,6 +581,7 @@ spec:
           # /var/run/kserve/tls/tls.crt \
           # --ssl-keyfile \
           # /var/run/kserve/tls/tls.key"
+        {% endraw %}
       - --
       env:
       - name: HOME
@@ -735,6 +739,7 @@ spec:
         - /bin/bash
         - -c
         - |-
+          {% raw %}
           # In some versions, ZMQ bind doesn't resolve the address through DNS
           DP_ADDRESS=$(getent hosts "${LWS_LEADER_ADDRESS}" | cut -d' ' -f1)
           if [ -z "${DP_ADDRESS}" ]; then
@@ -884,6 +889,7 @@ spec:
             # /var/run/kserve/tls/tls.crt \
             # --ssl-keyfile \
             # /var/run/kserve/tls/tls.key"
+          {% endraw %}
         - --
         env:
         - name: HOME
@@ -965,6 +971,7 @@ spec:
         - /bin/bash
         - -c
         - |-
+          {% raw %}
           # In some versions, ZMQ bind doesn't resolve the address through DNS
           DP_ADDRESS=$(getent hosts "${LWS_LEADER_ADDRESS}" | cut -d' ' -f1)
           if [ -z "${DP_ADDRESS}" ]; then
@@ -1114,6 +1121,7 @@ spec:
             # /var/run/kserve/tls/tls.crt \
             # --ssl-keyfile \
             # /var/run/kserve/tls/tls.key"
+          {% endraw %}
         - --
         env:
         - name: HOME
@@ -1495,6 +1503,7 @@ spec:
       - /bin/bash
       - -c
       - |-
+        {% raw %}
         # In some versions, ZMQ bind doesn't resolve the address through DNS
         DP_ADDRESS=$(getent hosts "${LWS_LEADER_ADDRESS}" | cut -d' ' -f1)
         if [ -z "${DP_ADDRESS}" ]; then
@@ -1644,6 +1653,7 @@ spec:
           # /var/run/kserve/tls/tls.crt \
           # --ssl-keyfile \
           # /var/run/kserve/tls/tls.key"
+        {% endraw %}
       - --
       env:
       - name: HOME
@@ -1725,6 +1735,7 @@ spec:
       - /bin/bash
       - -c
       - |-
+        {% raw %}
         # In some versions, ZMQ bind doesn't resolve the address through DNS
         DP_ADDRESS=$(getent hosts "${LWS_LEADER_ADDRESS}" | cut -d' ' -f1)
         if [ -z "${DP_ADDRESS}" ]; then
@@ -1874,6 +1885,7 @@ spec:
           # /var/run/kserve/tls/tls.crt \
           # --ssl-keyfile \
           # /var/run/kserve/tls/tls.key
+        {% endraw %}
       - --
       env:
       - name: HOME
