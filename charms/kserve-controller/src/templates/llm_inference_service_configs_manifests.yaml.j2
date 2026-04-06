@@ -134,7 +134,7 @@ spec:
       name: model-cache
     - name: tls-certs
       secret:
-        secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
 ---
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
@@ -422,7 +422,7 @@ spec:
       name: model-cache
     - name: tls-certs
       secret:
-        secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
   worker:
     containers:
     - command:
@@ -631,7 +631,7 @@ spec:
       name: model-cache
     - name: tls-certs
       secret:
-        secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
 ---
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
@@ -647,7 +647,7 @@ spec:
         - serve
         - /mnt/models
         - --served-model-name
-        - '{{ .Spec.Model.Name }}'
+        - {{ '{{ .Spec.Model.Name }}' }}
         - --port
         - "8000"
         - --disable-uvicorn-access-log
@@ -720,7 +720,7 @@ spec:
         name: model-cache
       - name: tls-certs
         secret:
-          secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+          secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
 ---
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
@@ -958,7 +958,7 @@ spec:
         name: model-cache
       - name: tls-certs
         secret:
-          secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+          secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
     worker:
       containers:
       - command:
@@ -1165,7 +1165,7 @@ spec:
         name: model-cache
       - name: tls-certs
         secret:
-          secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+          secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
 ---
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
@@ -1180,13 +1180,13 @@ spec:
           parentRefs:
           - group: gateway.networking.k8s.io
             kind: Gateway
-            name: '{{ .GlobalConfig.IngressGatewayName }}'
-            namespace: '{{ .GlobalConfig.IngressGatewayNamespace }}'
+            name: {{ '{{ .GlobalConfig.IngressGatewayName }}' }}
+            namespace: {{ '{{ .GlobalConfig.IngressGatewayNamespace }}' }}
           rules:
           - backendRefs:
             - group: inference.networking.k8s.io
               kind: InferencePool
-              name: '{{ ChildName .ObjectMeta.Name `-inference-pool` }}'
+              name: {{ '{{ ChildName .ObjectMeta.Name `-inference-pool` }}' }}
               port: 8000
               weight: 1
             filters:
@@ -1205,7 +1205,7 @@ spec:
           - backendRefs:
             - group: inference.networking.k8s.io
               kind: InferencePool
-              name: '{{ ChildName .ObjectMeta.Name `-inference-pool` }}'
+              name: {{ '{{ ChildName .ObjectMeta.Name `-inference-pool` }}' }}
               port: 8000
               weight: 1
             filters:
@@ -1223,7 +1223,7 @@ spec:
               request: 0s
           - backendRefs:
             - kind: Service
-              name: '{{ ChildName .ObjectMeta.Name `-kserve-workload-svc` }}'
+              name: {{ '{{ ChildName .ObjectMeta.Name `-kserve-workload-svc` }}' }}
               port: 8000
               weight: 1
             filters:
@@ -1253,12 +1253,12 @@ spec:
           endpointPickerRef:
             failureMode: FailOpen
             kind: Service
-            name: '{{ ChildName .ObjectMeta.Name `-epp-service` }}'
+            name: {{ '{{ ChildName .ObjectMeta.Name `-epp-service` }}' }}
             port:
               number: 9002
           selector:
             matchLabels:
-              app.kubernetes.io/name: '{{ .ObjectMeta.Name }}'
+              app.kubernetes.io/name: {{ '{{ .ObjectMeta.Name }}' }}
               app.kubernetes.io/part-of: llminferenceservice
               kserve.io/component: workload
           targetPorts:
@@ -1267,9 +1267,9 @@ spec:
         containers:
         - args:
           - --pool-name
-          - '{{ ChildName .ObjectMeta.Name `-inference-pool` }}'
+          - {{ '{{ ChildName .ObjectMeta.Name `-inference-pool` }}' }}
           - --pool-namespace
-          - '{{ .ObjectMeta.Namespace }}'
+          - {{ '{{ .ObjectMeta.Namespace }}' }}
           - --zap-encoder
           - json
           - --grpc-port
@@ -1390,8 +1390,8 @@ spec:
         volumes:
         - name: tls-certs
           secret:
-            secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs`
-              }}'
+            secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs`
+              }}' }}
         - emptyDir: {}
           name: tokenizer-uds
 ---
@@ -1408,7 +1408,7 @@ spec:
       - serve
       - /mnt/models
       - --served-model-name
-      - '{{ .Spec.Model.Name }}'
+      - {{ '{{ .Spec.Model.Name }}' }}
       - --port
       - "8000"
       - --disable-uvicorn-access-log
@@ -1481,7 +1481,7 @@ spec:
       name: model-cache
     - name: tls-certs
       secret:
-        secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
 ---
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
@@ -1718,7 +1718,7 @@ spec:
       name: model-cache
     - name: tls-certs
       secret:
-        secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
   worker:
     containers:
     - command:
@@ -1925,4 +1925,4 @@ spec:
       name: model-cache
     - name: tls-certs
       secret:
-        secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        secretName: {{ '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}' }}
