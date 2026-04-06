@@ -1206,7 +1206,7 @@ spec:
             matches:
             - path:
                 type: PathPrefix
-                value: /{{ .ObjectMeta.Namespace }}/{{ .ObjectMeta.Name }}/v1/completions
+                value: {{ '/{{ .ObjectMeta.Namespace }}/{{ .ObjectMeta.Name }}/v1/completions' }}
             timeouts:
               backendRequest: 0s
               request: 0s
@@ -1225,7 +1225,7 @@ spec:
             matches:
             - path:
                 type: PathPrefix
-                value: /{{ .ObjectMeta.Namespace }}/{{ .ObjectMeta.Name }}/v1/chat/completions
+                value: {{ '/{{ .ObjectMeta.Namespace }}/{{ .ObjectMeta.Name }}/v1/chat/completions' }}
             timeouts:
               backendRequest: 0s
               request: 0s
@@ -1243,7 +1243,7 @@ spec:
             matches:
             - path:
                 type: PathPrefix
-                value: /{{ .ObjectMeta.Namespace }}/{{ .ObjectMeta.Name }}
+                value: {{ '/{{ .ObjectMeta.Namespace }}/{{ .ObjectMeta.Name }}' }}
             timeouts:
               backendRequest: 0s
               request: 0s
