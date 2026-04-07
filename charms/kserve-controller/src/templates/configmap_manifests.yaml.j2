@@ -81,16 +81,6 @@ data:
       {%- endif %}
       "urlScheme": "http"
     }
-  localModel: |-
-    {
-      "enabled": false,
-      "jobNamespace": "kserve-localmodel-jobs",
-      "defaultJobImage" : "{{ configmap__storageInitializer }}",
-      "fsGroup": 1000,
-      "jobTTLSecondsAfterFinished": 3600,
-      "reconcilationFrequencyInSecs": 60,
-      "disableVolumeManagement": false
-    }
   logger: |-
     {
         "image" : "{{ configmap__logger }}",

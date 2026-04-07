@@ -5,8 +5,6 @@
     "configmap__logger": "kserve/agent:v0.17.0",
     "configmap__router": "kserve/router:v0.17.0",
     "configmap__storageInitializer": "kserve/storage-initializer:v0.17.0",
-    "deployment__kserve_localmodel_controller_manager": "kserve/kserve-localmodel-controller:v0.17.0",
-    "deployment__llmisvc_controller_manager": "kserve/llmisvc-controller:v0.17.0",
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.17.0",
     "serving_runtimes__huggingfaceserver__multinode": "kserve/huggingfaceserver:v0.17.0-gpu",
     "serving_runtimes__lgbserver": "kserve/lgbserver:v0.17.0",
