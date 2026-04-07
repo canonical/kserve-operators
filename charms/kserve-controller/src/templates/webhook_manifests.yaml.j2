@@ -4,7 +4,7 @@ kind: Service
 metadata:
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-webhook-server-service
   namespace: {{ namespace }}
 spec:
@@ -20,7 +20,7 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -80,7 +80,7 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: inferencegraph.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -111,7 +111,7 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: inferenceservice.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -142,7 +142,7 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: servingruntime.serving.kserve.io
 webhooks:
   - admissionReviewVersions:
@@ -173,7 +173,7 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: trainedmodel.serving.kserve.io
 webhooks:
 - admissionReviewVersions:
@@ -204,7 +204,7 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: clusterservingruntime.serving.kserve.io
 webhooks:
 - admissionReviewVersions:

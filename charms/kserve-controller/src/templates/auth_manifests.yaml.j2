@@ -5,7 +5,7 @@ metadata:
   labels:
     app: {{ app_name }}
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-leader-election-role
   namespace: {{ namespace }}
 rules:
@@ -51,7 +51,7 @@ metadata:
   labels:
     app: {{ app_name }}
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-manager-role
 rules:
 - apiGroups:
@@ -285,7 +285,7 @@ metadata:
   labels:
     app: {{ app_name }}
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-proxy-role
 rules:
 - apiGroups:
@@ -398,7 +398,7 @@ metadata:
   labels:
     app: {{ app_name }}
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-leader-election-rolebinding
   namespace: {{ namespace }}
 roleRef:
@@ -416,7 +416,7 @@ metadata:
   labels:
     app: {{ app_name }}
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -433,7 +433,7 @@ metadata:
   labels:
     app: {{ app_name }}
     app.kubernetes.io/component: kserve
-    app.kubernetes.io/name: kserve
+    app.kubernetes.io/name: {{ app_name }}
   name: kserve-proxy-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
