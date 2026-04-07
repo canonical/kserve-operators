@@ -422,10 +422,10 @@ spec:
     prometheus.kserve.io/port: "8080"
   containers:
   - args:
-    - --model_name={{.Name}}
+    - --model_name={{ '{{.Name}}' }}
     - --model_dir=/mnt/models
     - --http_port=8080
-    - --framework={{.Annotations.modelFormat}}
+    - --framework={{ '{{.Annotations.modelFormat}}' }}
     - --nthread=1
     image: {{ serving_runtimes__predictiveserver }}
     name: kserve-container
