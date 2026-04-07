@@ -11,6 +11,7 @@
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
     "serving_runtimes__paddleserver": "kserve/paddleserver:v0.17.0",
     "serving_runtimes__pmmlserver": "kserve/pmmlserver:v0.17.0",
+    "serving_runtimes__predictiveserver": "kserve/predictiveserver:v0.17.0",
     "serving_runtimes__sklearnserver": "kserve/sklearnserver:v0.17.0",
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
     "serving_runtimes__torchserve": "pytorch/torchserve-kfs:0.9.0",

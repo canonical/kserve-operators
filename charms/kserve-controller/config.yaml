@@ -27,6 +27,7 @@ options:
       serving_runtimes__kserve_mlserver : ''
       serving_runtimes__paddleserver : ''
       serving_runtimes__pmmlserver : ''
+      serving_runtimes__predictiveserver: ''
       serving_runtimes__sklearnserver : ''
       serving_runtimes__tensorflow_serving : ''
       serving_runtimes__torchserve : ''

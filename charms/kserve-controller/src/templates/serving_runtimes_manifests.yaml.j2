@@ -427,7 +427,7 @@ spec:
     - --http_port=8080
     - --framework={{.Annotations.modelFormat}}
     - --nthread=1
-    image: kserve/predictiveserver:v0.17.0
+    image: {{ serving_runtimes__predictiveserver }}
     name: kserve-container
     resources:
       limits:
