@@ -43,7 +43,7 @@ juju deploy istio-gateway istio-ingressgateway --config kind="ingress" --channel
 juju relate istio-pilot istio-ingressgateway
 ```
 
-#### Only for Serverless mode
+#### Only for Knative mode
 
 For serverless operations kserve-operators depends on knative-serving. To correctly configure it, you can:
 
@@ -57,7 +57,7 @@ juju deploy knative-serving --config namespace="knative-serving" --config istio.
 
 ### Deploy in `Standard` mode
 
-kserve-operators support `Standard` mode to manage `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
+kserve-operators support `Standard` mode to manage `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Knative` mode.
 
 1. Deploy `kserver-controller`
 
@@ -75,14 +75,14 @@ juju relate istio-pilot:gateway-info kserve-controller:ingress-gateway
 * latest/edge
 * 0.10/stable
 
-### Deploy in `Serverless` mode
+### Deploy in `Knative` mode
 
 kserve-operatos support `Serveless` mode to manage event driven `InferenceService`s, which enables autoscaling on demand, and supports scaling down to zero.
 
 1. Deploy `kserver-controller`
 
 ```
-juju deploy kserve-controller --channel <channel> --config deployment-mode="serverless" --trust
+juju deploy kserve-controller --channel <channel> --config deployment-mode="knative" --trust
 ```
 
 2. Relate `kserve-controller` and `istio-pilot`

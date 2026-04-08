@@ -65,11 +65,11 @@ from tests.integration.utils import (
 ISTIO_INGRESS_GATEWAY = "test-gateway"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 
-# ConfigMap (Serverless)
+# ConfigMap (Knative)
 CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
 CONFIGMAP_DATA_LOCAL_GATEWAY_NAME = "knative-local-gateway"
 CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS = "test-gateway"
+CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_KNATIVE = "test-gateway"
 
 
 logger = logging.getLogger(__name__)
@@ -84,14 +84,14 @@ def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
         **custom_images,
         "configmap__explainers__art__image": explainer_image,
         "configmap__explainers__art__version": explainer_version,
-        "deployment_mode": "Serverless",
+        "deployment_mode": "Knative",
         "enable_gateway_api": "false",
         "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
         "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
         "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
         "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
         "ingress_gateway_namespace": ingress_gateway_namespace,
-        "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_SERVERLESS,
+        "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_KNATIVE,
     }
 
 

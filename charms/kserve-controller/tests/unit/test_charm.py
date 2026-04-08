@@ -300,7 +300,7 @@ def test_on_remove_deletion_failure(harness: Harness, mocker, mocked_resource_ha
     mocked_logger.warning.assert_called()
 
 
-def test_generate_gateways_context_serverless_mode_no_relation(
+def test_generate_gateways_context_knative_mode_no_relation(
     harness: Harness, mocker, mocked_resource_handler
 ):
     """Assert the unit gets blocked if no relation."""
@@ -308,12 +308,12 @@ def test_generate_gateways_context_serverless_mode_no_relation(
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm.on.install.emit()
     assert harness.charm.model.unit.status == BlockedStatus(
-        "Serverless mode detected, but no relation to ingress-gateway"
+        "Knative mode detected, but no relation to ingress-gateway"
     )
 
 
 @patch("charm.KServeControllerCharm._restart_controller_service")
-def test_generate_gateways_context_serverless_no_relation(
+def test_generate_gateways_context_knative_no_relation(
     _mocked_restart_controller_service,
     harness: Harness,
     mocker,
@@ -323,8 +323,8 @@ def test_generate_gateways_context_serverless_no_relation(
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
-    # Change deployment-mode to serverless
-    harness.update_config({"deployment-mode": "serverless"})
+    # Change deployment-mode to knative
+    harness.update_config({"deployment-mode": "knative"})
 
     # Add only ingress-gateway relation
     relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
@@ -366,7 +366,7 @@ def test_generate_gateways_context_standard_mode_missing_data(
     ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"}),
 )
 @patch("charm.KServeControllerCharm._restart_controller_service")
-def test_generate_gateways_context_serverless_missing_data(
+def test_generate_gateways_context_knative_missing_data(
     _mocked_restart_controller_service,
     remote_data,
     harness: Harness,
@@ -377,8 +377,8 @@ def test_generate_gateways_context_serverless_missing_data(
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
-    # Change deployment-mode to serverless
-    harness.update_config({"deployment-mode": "serverless"})
+    # Change deployment-mode to knative
+    harness.update_config({"deployment-mode": "knative"})
 
     # Add ingress-gateway relation
     relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
@@ -436,7 +436,7 @@ def test_generate_gateways_context_standard_mode_pass(
 
 
 @patch("charm.KServeControllerCharm._restart_controller_service")
-def test_generate_gateways_context_serverless_mode_pass(
+def test_generate_gateways_context_knative_mode_pass(
     _mocked_restart_controller_service,
     harness: Harness,
     mocker,
@@ -446,8 +446,8 @@ def test_generate_gateways_context_serverless_mode_pass(
     harness.begin()
     harness.charm._k8s_resource_handler = mocked_resource_handler
 
-    # Change deployment-mode to serverless
-    harness.update_config({"deployment-mode": "serverless"})
+    # Change deployment-mode to knative
+    harness.update_config({"deployment-mode": "knative"})
 
     # Add relation with ingress-gateway providers
     relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
@@ -619,27 +619,27 @@ def test_validate_sdi_interface_success(harness: Harness):
 @pytest.mark.parametrize(
     "deployment_mode, ingress_gateway_relation, gateway_metadata_relation, expected_status",
     [
-        # Serverless, should only work with ingress-gateway relation
+        # Knative, should only work with ingress-gateway relation
         (
-            "serverless",
+            "knative",
             False,
             False,
-            BlockedStatus("Serverless mode detected, but no relation to ingress-gateway"),
+            BlockedStatus("Knative mode detected, but no relation to ingress-gateway"),
         ),
         (
-            "serverless",
+            "knative",
             False,
             True,
-            BlockedStatus("Serverless mode detected, but no relation to ingress-gateway"),
+            BlockedStatus("Knative mode detected, but no relation to ingress-gateway"),
         ),
         (
-            "serverless",
+            "knative",
             True,
             True,
             BlockedStatus("Both gateway-metadata and ingress-gateway relations are established"),
         ),
         (
-            "serverless",
+            "knative",
             True,
             False,
             ActiveStatus(),

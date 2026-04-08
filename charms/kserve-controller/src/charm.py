@@ -220,9 +220,9 @@ class KServeControllerCharm(CharmBase):
         return self._deployment_mode == "standard"
 
     @property
-    def _is_serverless_mode(self) -> bool:
-        """Returns whether the deployment mode is Serverless."""
-        return self._deployment_mode == "serverless"
+    def _is_knative_mode(self) -> bool:
+        """Returns whether the deployment mode is Knative."""
+        return self._deployment_mode == "knative"
 
     @property
     def _has_gateway_metadata_relation(self) -> bool:
@@ -251,13 +251,13 @@ class KServeControllerCharm(CharmBase):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
         deployment_mode = self._deployment_mode
-        if self._is_serverless_mode:
-            deployment_mode = "Serverless"
+        if self._is_knative_mode:
+            deployment_mode = "Knative"
         elif self._is_standard_mode:
             deployment_mode = "Standard"
         else:
             raise ErrorWithStatus(
-                "Please set deployment-mode to either Serverless or Standard",
+                "Please set deployment-mode to either Knative or Standard",
                 BlockedStatus,
             )
 
@@ -580,7 +580,7 @@ class KServeControllerCharm(CharmBase):
         """Create and reconcile the allow-all AuthorizationPolicy.
 
         If in Standard mode then create an allow-all AuthorizationPolicy. Otherwise,
-        in serverless mode, the function will remove any previously created policies.
+        in Knative mode, the function will remove any previously created policies.
         """
         ap_standard = generate_allow_all_authorization_policy(self.app.name, self.model.name)
 
@@ -755,7 +755,7 @@ class KServeControllerCharm(CharmBase):
         deployment mode. Specifically:
         1. If both ingress-gateway and gateway-metadata relations are established, it will
            raise a BlockedStatus error.
-        2. If in Serverless mode and there is no ingress-gateway relation established, it will
+        2. If in Knative mode and there is no ingress-gateway relation established, it will
            raise a BlockedStatus error.
         3. If the Standard mode and there is no gateway-metadata or ingress-gateway relation
            established, it will raise a BlockedStatus error.
@@ -768,10 +768,10 @@ class KServeControllerCharm(CharmBase):
 
         # either ingress-gateway or gateway-metadata relation is established, or none, but not both
         # Standard can work with both ingress-gateway (sdi) relation and gateway-metadata
-        # Serverless can only work with ingress-gateway (sidecar istio)
-        if self._is_serverless_mode and not self._has_ingress_gatway_relation:
+        # Knative can only work with ingress-gateway (sidecar istio)
+        if self._is_knative_mode and not self._has_ingress_gatway_relation:
             raise ErrorWithStatus(
-                "Serverless mode detected, but no relation to ingress-gateway",
+                "Knative mode detected, but no relation to ingress-gateway",
                 BlockedStatus,
             )
 
