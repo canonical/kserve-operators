@@ -77,7 +77,7 @@ def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
         **custom_images,
         "configmap__explainers__art__image": explainer_image,
         "configmap__explainers__art__version": explainer_version,
-        "deployment_mode": "RawDeployment",
+        "deployment_mode": "Standard",
         "enable_gateway_api": "true",
         "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
         "ingress_gateway_namespace": ingress_gateway_namespace,
@@ -102,7 +102,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.deploy(
         charm,
         resources=resources,
-        config={"deployment-mode": "rawdeployment"},
+        config={"deployment-mode": "standard"},
         application_name=APP_NAME,
         trust=True,
     )

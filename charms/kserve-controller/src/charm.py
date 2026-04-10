@@ -215,14 +215,14 @@ class KServeControllerCharm(CharmBase):
         return str(self.model.config["deployment-mode"]).lower()
 
     @property
-    def _is_raw_deployment_mode(self) -> bool:
-        """Returns whether the deployment mode is RawDeployment."""
-        return self._deployment_mode == "rawdeployment"
+    def _is_standard_mode(self) -> bool:
+        """Returns whether the deployment mode is Standard."""
+        return self._deployment_mode == "standard"
 
     @property
-    def _is_serverless_mode(self) -> bool:
-        """Returns whether the deployment mode is Serverless."""
-        return self._deployment_mode == "serverless"
+    def _is_knative_mode(self) -> bool:
+        """Returns whether the deployment mode is Knative."""
+        return self._deployment_mode == "knative"
 
     @property
     def _has_gateway_metadata_relation(self) -> bool:
@@ -251,13 +251,13 @@ class KServeControllerCharm(CharmBase):
         """Context for rendering the inferenceservive-config ConfigMap."""
         # Ensure any input is valid for deployment mode
         deployment_mode = self._deployment_mode
-        if self._is_serverless_mode:
-            deployment_mode = "Serverless"
-        elif self._is_raw_deployment_mode:
-            deployment_mode = "RawDeployment"
+        if self._is_knative_mode:
+            deployment_mode = "Knative"
+        elif self._is_standard_mode:
+            deployment_mode = "Standard"
         else:
             raise ErrorWithStatus(
-                "Please set deployment-mode to either Serverless or RawDeployment",
+                "Please set deployment-mode to either Knative or Standard",
                 BlockedStatus,
             )
 
@@ -266,7 +266,7 @@ class KServeControllerCharm(CharmBase):
             "deployment_mode": deployment_mode,
             "namespace": self.model.name,
             "enable_gateway_api": str(
-                self._is_raw_deployment_mode and self._has_gateway_metadata_relation
+                self._is_standard_mode and self._has_gateway_metadata_relation
             ).lower(),
         }
         # Generate and add gateway context
@@ -579,14 +579,14 @@ class KServeControllerCharm(CharmBase):
     def reconcile_authorization_policies(self):
         """Create and reconcile the allow-all AuthorizationPolicy.
 
-        If in RawDeployment mode then create an allow-all AuthorizationPolicy. Otherwise,
-        in serverless mode, the function will remove any previously created policies.
+        If in Standard mode then create an allow-all AuthorizationPolicy. Otherwise,
+        in Knative mode, the function will remove any previously created policies.
         """
-        ap_raw = generate_allow_all_authorization_policy(self.app.name, self.model.name)
+        ap_standard = generate_allow_all_authorization_policy(self.app.name, self.model.name)
 
         policies = []
-        if self._is_raw_deployment_mode and self._has_gateway_metadata_relation:
-            policies.append(ap_raw)
+        if self._is_standard_mode and self._has_gateway_metadata_relation:
+            policies.append(ap_standard)
 
         self.policy_resource_manager.reconcile([], MeshType.istio, policies)
 
@@ -755,9 +755,9 @@ class KServeControllerCharm(CharmBase):
         deployment mode. Specifically:
         1. If both ingress-gateway and gateway-metadata relations are established, it will
            raise a BlockedStatus error.
-        2. If in Serverless mode and there is no ingress-gateway relation established, it will
+        2. If in Knative mode and there is no ingress-gateway relation established, it will
            raise a BlockedStatus error.
-        3. If the RawDeployment mode and there is no gateway-metadata or ingress-gateway relation
+        3. If the Standard mode and there is no gateway-metadata or ingress-gateway relation
            established, it will raise a BlockedStatus error.
         """
         if self._has_gateway_metadata_relation and self._has_ingress_gatway_relation:
@@ -767,20 +767,20 @@ class KServeControllerCharm(CharmBase):
             )
 
         # either ingress-gateway or gateway-metadata relation is established, or none, but not both
-        # RawDeployment can work with both ingress-gateway (sdi) relation and gateway-metadata
-        # Serverless can only work with ingress-gateway (sidecar istio)
-        if self._is_serverless_mode and not self._has_ingress_gatway_relation:
+        # Standard can work with both ingress-gateway (sdi) relation and gateway-metadata
+        # Knative can only work with ingress-gateway (sidecar istio)
+        if self._is_knative_mode and not self._has_ingress_gatway_relation:
             raise ErrorWithStatus(
-                "Serverless mode detected, but no relation to ingress-gateway",
+                "Knative mode detected, but no relation to ingress-gateway",
                 BlockedStatus,
             )
 
-        # RawDeployment should have a relation to either ingress-gateway or gateway-metadata
-        if self._is_raw_deployment_mode and not (
+        # Standard should have a relation to either ingress-gateway or gateway-metadata
+        if self._is_standard_mode and not (
             self._has_gateway_metadata_relation or self._has_ingress_gatway_relation
         ):
             raise ErrorWithStatus(
-                "RawDeployment mode detected, but no relation to gateway-metadata or ingress-gateway",
+                "Standard mode detected, but no relation to gateway-metadata or ingress-gateway",
                 BlockedStatus,
             )
 
@@ -816,7 +816,7 @@ class KServeControllerCharm(CharmBase):
             "local_gateway_service_name": "",
         }
 
-        if self._is_raw_deployment_mode:
+        if self._is_standard_mode:
             return gateways_context
 
         # Get the local-gateway info

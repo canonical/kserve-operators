@@ -2,9 +2,11 @@ apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterStorageContainer
 metadata:
   name: default
+  namespace: {{ namespace }}
 spec:
   container:
     image: {{ configmap__storageInitializer }}
+    imagePullPolicy: IfNotPresent
     name: storage-initializer
     resources:
       limits:
