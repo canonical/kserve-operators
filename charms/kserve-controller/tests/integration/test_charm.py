@@ -201,6 +201,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         YAMLS_PREFIX + "paddleserver-resnet.yaml",
         YAMLS_PREFIX + "xgbserver.yaml",
         YAMLS_PREFIX + "tensorflow-serving.yaml",
+        YAMLS_PREFIX + "predictionserver-sklearn.yaml",
     ],
 )
 def test_inference_service(
