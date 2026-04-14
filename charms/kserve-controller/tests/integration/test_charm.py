@@ -195,6 +195,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 @pytest.mark.parametrize(
     "inference_file",
     [
+        YAMLS_PREFIX + "predictionserver-sklearn.yaml",
         YAMLS_PREFIX + "sklearn-iris.yaml",
         YAMLS_PREFIX + "lgbserver.yaml",
         YAMLS_PREFIX + "pmml-server.yaml",
