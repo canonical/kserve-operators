@@ -7,7 +7,7 @@
     "configmap__storageInitializer": "docker.io/charmedkubeflow/storage-initializer:0.17.0-140337c",
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.17.0",
     "serving_runtimes__huggingfaceserver__multinode": "kserve/huggingfaceserver:v0.17.0-gpu",
-    "serving_runtimes__lgbserver": "kserve/lgbserver:v0.17.0",
+    "serving_runtimes__lgbserver": "docker.io/charmedkubeflow/lgbserver:0.17.0-1ddb2d3",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
     "serving_runtimes__paddleserver": "docker.io/charmedkubeflow/paddleserver:0.17.0-e671f6f",
     "serving_runtimes__pmmlserver": "docker.io/charmedkubeflow/pmmlserver:0.17.0-271160b",
