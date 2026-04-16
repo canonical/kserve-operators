@@ -3,7 +3,7 @@
     "configmap__batcher": "kserve/agent:v0.17.0",
     "configmap__explainers__art": "kserve/art-explainer:latest",
     "configmap__logger": "kserve/agent:v0.17.0",
-    "configmap__router": "kserve/router:v0.17.0",
+    "configmap__router": "docker.io/charmedkubeflow/kserve-router:0.17.0-85066a1",
     "configmap__storageInitializer": "docker.io/charmedkubeflow/storage-initializer:0.17.0-140337c",
     "serving_runtimes__huggingfaceserver": "kserve/huggingfaceserver:v0.17.0",
     "serving_runtimes__huggingfaceserver__multinode": "kserve/huggingfaceserver:v0.17.0-gpu",
