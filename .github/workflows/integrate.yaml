@@ -59,6 +59,9 @@ jobs:
     strategy:
       matrix:
         charm: [kserve-controller]
+        test-type:
+          - integration
+          - integration-ambient
     steps:
       - name: Maximise GH runner space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
@@ -77,7 +80,7 @@ jobs:
       - name: Test
         run: |
           juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e ${{ matrix.charm }}-integration -- --model kubeflow -vv -s
+          tox -e ${{ matrix.charm }}-${{ matrix.test-type }} -- --model kubeflow -vv -s
 
       - name: Get all
         run: kubectl get all -A
