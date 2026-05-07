@@ -4,7 +4,7 @@
     "configmap__explainers__art": "docker.io/charmedkubeflow/artexplainer:0.17.0-4141660",
     "configmap__logger": "docker.io/charmedkubeflow/kserve-agent:0.17.0-e104c72",
     "configmap__router": "docker.io/charmedkubeflow/kserve-router:0.17.0-85066a1",
-    "configmap__storageInitializer": "docker.io/charmedkubeflow/storage-initializer:0.17.0-07d37fb",
+    "configmap__storageInitializer": "docker.io/charmedkubeflow/storage-initializer:0.15.2-8ecbed2",
     "serving_runtimes__huggingfaceserver": "docker.io/charmedkubeflow/huggingfaceserver-cpu:0.17.0-c88de31",
     "serving_runtimes__huggingfaceserver__multinode": "ghcr.io/canonical/huggingfaceserver:0.17.0-c93640e-gpu",
     "serving_runtimes__lgbserver": "docker.io/charmedkubeflow/lgbserver:0.17.0-1ddb2d3",
