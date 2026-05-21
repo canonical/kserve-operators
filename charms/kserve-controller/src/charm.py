@@ -214,12 +214,12 @@ class KServeControllerCharm(CharmBase):
         """Returns the deployment mode."""
         _mode = str(self.model.config["deployment-mode"]).lower()
         if _mode == "rawdeployment":
-            log.warn(
+            log.warning(
                 "Usage of deployment_mode=RawDeployment is deprecated. Please consider to switch to use 'deployment_mode=standard'"
             )
             return "standard"
         if _mode == "serverless":
-            log.warn(
+            log.warning(
                 "Usage of deployment_mode=Serverless is deprecated. Please consider to switch to use 'deployment_mode=knative'"
             )
             return "knative"
