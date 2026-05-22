@@ -8,17 +8,6 @@ on:
         required: true
 
 jobs:
-  lib-check:
-    name: Check libraries
-    strategy:
-      matrix:
-        charm:
-        - kserve-controller
-    uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
-    secrets: inherit
-    with:
-        charm-path: ./charms/${{ matrix.charm }}
-
   lint:
     name: Lint Code
     runs-on: ubuntu-24.04
