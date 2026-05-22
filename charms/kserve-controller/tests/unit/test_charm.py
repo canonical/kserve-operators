@@ -756,3 +756,58 @@ def test_generate_gateways_context_standard_mode(
     assert gateway_context["ingress_gateway_name"] == "test-gateway"
     assert gateway_context["ingress_gateway_namespace"] == "test-namespace"
     assert gateway_context["ingress_gateway_service_name"] == "test-deployment"
+
+
+@pytest.mark.parametrize(
+    "deployment_mode, expected_status",
+    [
+        (
+            "Standard",
+            ActiveStatus(),
+        ),
+        (
+            "Knative",
+            ActiveStatus(),
+        ),
+        (
+            "RawDeployment",
+            ActiveStatus(),
+        ),
+        (
+            "Serverless",
+            ActiveStatus(),
+        ),
+        (
+            "NotAllowed",
+            BlockedStatus("Please set deployment-mode to either Knative or Standard"),
+        ),
+    ],
+)
+def test_deployment_modes_values(
+    mocked_resource_handler,
+    mocker,
+    harness: Harness,
+    deployment_mode: str,
+    expected_status: StatusBase,
+):
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    relation_id_ingress = harness.add_relation("ingress-gateway", "istio-pilot")
+    relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+
+    # Updated the data bag with ingress-gateway
+    remote_ingress_data = {
+        "gateway_name": "test-ingress-name",
+        "gateway_namespace": "test-ingress-namespace",
+    }
+    remote_local_data = {
+        "gateway_name": "test-local-name",
+        "gateway_namespace": "test-local-namespace",
+    }
+    harness.update_relation_data(relation_id_ingress, "istio-pilot", remote_ingress_data)
+    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
+
+    harness.update_config({"deployment-mode": deployment_mode})
+
+    assert harness.charm.model.unit.status == expected_status
