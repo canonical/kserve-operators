@@ -5,8 +5,8 @@ import logging
 
 import lightkube
 import pytest
-from _pytest.config.argparsing import Parser
 import tenacity
+from _pytest.config.argparsing import Parser
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Namespace
 
