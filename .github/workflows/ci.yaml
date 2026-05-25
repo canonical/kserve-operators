@@ -6,6 +6,8 @@ concurrency:
 
 on:
   pull_request:
+  schedule:
+    - cron: '0 8 * * TUE'
   # Triggered on push by .github/workflows/release.yaml
   workflow_call:
     outputs:
@@ -97,10 +99,13 @@ jobs:
     name: Build charm | ${{ matrix.charm }}
     needs:
       - get-charm-paths-track
-    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v38.0.0
+    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v49.0.1
     with:
       path-to-charm-directory: ${{ matrix.charm }}
       cache: true
+    permissions:
+      actions: read  # Needed for GitHub API call to get workflow version (for private repositories)
+      contents: read
 
   integration:
     name: Integration tests
@@ -179,10 +184,13 @@ jobs:
     needs:
       - get-charm-paths-track
       - build
-    uses: canonical/data-platform-workflows/.github/workflows/release_charm_pr.yaml@v38.0.0
+    uses: canonical/data-platform-workflows/.github/workflows/release_charm_pr.yaml@v49.0.1
     with:
       track: ${{ needs.get-charm-paths-track.outputs.track }}
       artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
       path-to-charm-directory: ${{ matrix.charm }}
     secrets:
       charmhub-token: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
+    permissions:
+      actions: read  # Needed for GitHub API call to get workflow version (for private repositories)
+      contents: read
