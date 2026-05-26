@@ -172,7 +172,7 @@ jobs:
         if: always()
 
       - name: Get application logs
-        run: kubectl logs -n kubeflow --tail 1000 -ljuju-app=${{ matrix.charm }}
+        run: kubectl logs -n kubeflow --tail 1000 -l app.kubernetes.io/name=${{ matrix.charm }} --all-containers
         if: failure()
 
   release:
