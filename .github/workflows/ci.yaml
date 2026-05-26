@@ -169,7 +169,7 @@ jobs:
 
       - name: Get juju status
         run: juju status
-        if: failure()
+        if: always()
 
       - name: Get application logs
         run: kubectl logs -n kubeflow --tail 1000 -ljuju-app=${{ matrix.charm }}
