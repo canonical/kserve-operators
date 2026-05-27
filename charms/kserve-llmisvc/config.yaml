@@ -1,0 +1,13 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  custom_images:
+    type: string
+    default: |
+      llmisvc_controller: ''
+      llm_scheduler: ''
+      llm_workload: ''
+    description: >
+      YAML or JSON formatted input defining image overrides for llmisvc controller,
+      scheduler, and workload templates.

@@ -1,0 +1,118 @@
+# Source kserve/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ webhook_service_name }}
+  namespace: {{ namespace }}
+spec:
+  ports:
+  - port: 443
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/name: {{ app_name }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: llminferenceservice.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: {{ webhook_service_name }}
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha2-llminferenceservice
+  failurePolicy: Fail
+  matchPolicy: Exact
+  name: llminferenceservice.kserve-webhook-server.v1alpha2.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - llminferenceservices
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: {{ webhook_service_name }}
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha1-llminferenceservice
+  failurePolicy: Fail
+  matchPolicy: Exact
+  name: llminferenceservice.kserve-webhook-server.v1alpha1.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - llminferenceservices
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: llminferenceserviceconfig.serving.kserve.io
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: {{ webhook_service_name }}
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha2-llminferenceserviceconfig
+  failurePolicy: Fail
+  matchPolicy: Exact
+  name: llminferenceserviceconfig.kserve-webhook-server.v1alpha2.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - llminferenceserviceconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    caBundle: {{ cert }}
+    service:
+      name: {{ webhook_service_name }}
+      namespace: {{ namespace }}
+      path: /validate-serving-kserve-io-v1alpha1-llminferenceserviceconfig
+  failurePolicy: Fail
+  matchPolicy: Exact
+  name: llminferenceserviceconfig.kserve-webhook-server.v1alpha1.validator
+  rules:
+  - apiGroups:
+    - serving.kserve.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - llminferenceserviceconfigs
+  sideEffects: None

@@ -1,0 +1,37 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: kserve-llmisvc
+description: |
+  KServe LLMInferenceService Controller.
+summary: |
+  KServe llmisvc controller charm.
+charm-user: non-root
+containers:
+  llmisvc-controller:
+    resource: llmisvc-controller-image
+    uid: 584792
+    gid: 584792
+  metrics-proxy:
+    resource: metrics-proxy-image
+resources:
+  llmisvc-controller-image:
+    type: oci-image
+    description: OCI image for llmisvc controller
+    upstream-source: kserve/llmisvc-controller:v0.17.0
+  metrics-proxy-image:
+    type: oci-image
+    description: |
+      OCI image for the metrics-k8s-proxy that aggregates Prometheus metrics
+      from LLMInferenceService workload pods discovered via pod label selector.
+    upstream-source: docker.io/ubuntu/metrics-proxy:0.1.1-22.04_stable
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+requires:
+  kserve-controller:
+    interface: kserve-controller-sync
+    limit: 1
+  logging:
+    interface: loki_push_api
+    optional: true
