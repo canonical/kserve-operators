@@ -233,7 +233,7 @@ def lightkube_client() -> lightkube.Client:
 
 @pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
+async def test_build_and_deploy(ops_test: OpsTest, request):
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
@@ -433,6 +433,28 @@ async def test_deploy_knative_dependencies(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
+<<<<<<< HEAD
+=======
+    # build and deploy charm from local source folder
+    entity_url = (
+        await ops_test.build_charm(".")
+        if not (entity_url := request.config.getoption("--charm-path"))
+        else entity_url
+    )
+    resources = {
+        "kserve-controller-image": METADATA["resources"]["kserve-controller-image"][
+            "upstream-source"
+        ]
+    }
+    await ops_test.model.deploy(
+        entity_url,
+        resources=resources,
+        application_name=APP_NAME,
+        trust=True,
+    )
+
+    await ops_test.model.integrate(ISTIO_PILOT.charm, APP_NAME)
+>>>>>>> cc9925d (chore: Update CI to use charmcraftcache (#463))
     # Relate kserve-controller and knative-serving
     await ops_test.model.integrate(KNATIVE_SERVING.charm, APP_NAME)
 
