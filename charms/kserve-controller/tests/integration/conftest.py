@@ -6,12 +6,20 @@ import logging
 import lightkube
 import pytest
 import tenacity
+from _pytest.config.argparsing import Parser
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Namespace
 
 TESTING_NAMESPACE_NAME = "kserve-testing"
 
 logger = logging.getLogger(__name__)
+
+
+def pytest_addoption(parser: Parser):
+    parser.addoption(
+        "--charm-path",
+        help="Path to charm file for performing tests on.",
+    )
 
 
 @pytest.fixture(scope="session")
