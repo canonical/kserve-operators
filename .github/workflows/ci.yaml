@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller]
+        charm: [kserve-controller, kserve-llmisvc]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller]
+        charm: [kserve-controller, kserve-llmisvc]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
