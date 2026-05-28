@@ -4,7 +4,7 @@
 """Tests for the kserve-controller relation gating."""
 
 import pytest
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Relation, State
 
 from .helpers import assert_status
@@ -13,7 +13,7 @@ from .helpers import assert_status
 @pytest.mark.parametrize(
     "remote_app_data, expected_status, expected_msg_substr",
     [
-        (None, WaitingStatus, "kserve-controller"),
+        (None, BlockedStatus, "Please relate"),
         ({}, WaitingStatus, "kserve-controller"),
         ({"ready": "false"}, WaitingStatus, "kserve-controller"),
         ({"ready": "true"}, ActiveStatus, None),
@@ -38,8 +38,8 @@ def test_relation_state_drives_status(
     assert_status(out, expected_status, expected_msg_substr)
 
 
-def test_relation_broken_returns_to_waiting(ctx, ready_state):
-    """When the kserve-controller relation is broken, status should revert to Waiting."""
+def test_relation_broken_returns_to_blocked(ctx, ready_state):
+    """When the kserve-controller relation is broken, status should revert to Blocked."""
     rel = next(iter(ready_state.relations))
     out = ctx.run(ctx.on.relation_broken(rel), ready_state)
-    assert_status(out, WaitingStatus, "kserve-controller")
+    assert_status(out, BlockedStatus, "Please relate")

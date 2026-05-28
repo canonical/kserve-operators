@@ -1,4 +1,4 @@
-# Source: kserve/config/llmisvcconfig/config-llm-decode-template.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-decode-template.yaml
 {% raw %}apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -140,7 +140,7 @@ spec:
       secret:
         secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-decode-worker-data-parallel.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-decode-worker-data-parallel.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -530,7 +530,7 @@ spec:
       secret:
         secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-prefill-template.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-prefill-template.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -619,7 +619,7 @@ spec:
         secret:
           secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-prefill-worker-data-parallel.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-prefill-worker-data-parallel.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -957,7 +957,7 @@ spec:
         secret:
           secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-router-route.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-router-route.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -1031,7 +1031,7 @@ spec:
               backendRequest: 0s
               request: 0s
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-scheduler.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-scheduler.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -1131,7 +1131,7 @@ spec:
           secret:
             secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-template.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-template.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
@@ -1223,7 +1223,7 @@ spec:
       secret:
         secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
 ---
-# Source: kserve/config/llmisvcconfig/config-llm-worker-data-parallel.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/config/llmisvcconfig/config-llm-worker-data-parallel.yaml
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:

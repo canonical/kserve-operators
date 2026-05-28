@@ -5,9 +5,9 @@ options:
   custom_images:
     type: string
     default: |
-      llmisvc_controller: ''
+      llm_routing_sidecar: ''
       llm_scheduler: ''
       llm_workload: ''
     description: >
-      YAML or JSON formatted input defining image overrides for llmisvc controller,
+      YAML or JSON formatted input defining image overrides for routing sidecar,
       scheduler, and workload templates.

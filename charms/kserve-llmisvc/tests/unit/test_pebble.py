@@ -5,7 +5,8 @@
 
 import dataclasses
 
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, MaintenanceStatus
+from ops.testing import Relation, State
 
 from charm import (
     METRICS_PORT,
@@ -98,10 +99,9 @@ def test_controller_container_unreachable_blocks_layer(
     )
 
     out = ctx.run(ctx.on.install(), state_in)
-    # Status should be the maintenance reported by _check_container_connection.
-    assert isinstance(out.unit_status, (ActiveStatus, WaitingStatus)) or "complete" in str(
-        out.unit_status
-    )
+    # Depending on mocked handler behavior, reconcile can remain in maintenance
+    # or complete and become active; either way the controller layer must not be added.
+    assert isinstance(out.unit_status, (ActiveStatus, MaintenanceStatus))
     plan = get_layer(out, "llmisvc-controller")
     assert "llmisvc-controller" not in plan.services
 
@@ -115,8 +115,6 @@ def test_metrics_endpoint_relation_data_has_both_jobs(
     ctx, both_containers, controller_relation_ready
 ):
     """The metrics-endpoint relation should advertise both scrape jobs."""
-    from ops.testing import Relation, State
-
     metrics_rel = Relation(endpoint="metrics-endpoint", interface="prometheus_scrape")
     state_in = State(
         leader=True,

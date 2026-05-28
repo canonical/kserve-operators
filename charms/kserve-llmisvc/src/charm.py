@@ -288,14 +288,29 @@ class KServeLLMISVCCharm(CharmBase):
         ready = app_data.get("ready", "false").lower() == "true"
         return ready
 
+    def _validate_kserve_controller_relation(self) -> None:
+        """Validate relation presence and readiness from kserve-controller.
+
+        Missing relation is a user-actionable misconfiguration (Blocked).
+        Present relation without ready=true is a convergence state (Waiting).
+        """
+        relation = self.model.get_relation(CONTROLLER_SYNC_RELATION)
+        if relation is None or relation.app is None:
+            raise ErrorWithStatus(
+                "Please relate to kserve-controller:kserve-controller",
+                BlockedStatus,
+            )
+
+        if not self._kserve_controller_is_ready():
+            raise ErrorWithStatus(
+                "Waiting for relation to kserve-controller to report ready=true",
+                WaitingStatus,
+            )
+
     def _on_event(self, event):
         """Main reconcile loop for llmisvc charm."""
         try:
-            if not self._kserve_controller_is_ready():
-                raise ErrorWithStatus(
-                    "Waiting for relation to kserve-controller to report ready=true",
-                    WaitingStatus,
-                )
+            self._validate_kserve_controller_relation()
 
             self.custom_images = parse_images_config(self.model.config["custom_images"])
             self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)

@@ -8,7 +8,7 @@ import yaml
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import State
 
-from charm import parse_images_config
+from charm import KServeLLMISVCCharm, parse_images_config
 
 from .helpers import assert_status, build_custom_images_config
 
@@ -28,6 +28,11 @@ def test_parse_images_config_null_yaml_returns_empty():
 def test_parse_images_config_valid_yaml_returns_dict():
     result = parse_images_config("llm_scheduler: foo/scheduler:1")
     assert result == {"llm_scheduler": "foo/scheduler:1"}
+
+
+def test_parse_images_config_routing_sidecar_key_returns_dict():
+    result = parse_images_config("llm_routing_sidecar: foo/routing-sidecar:2")
+    assert result == {"llm_routing_sidecar": "foo/routing-sidecar:2"}
 
 
 def test_parse_images_config_invalid_yaml_raises_blocked():
@@ -75,6 +80,15 @@ def test_valid_custom_images_keeps_active(ctx, both_containers, controller_relat
     )
     out = ctx.run(ctx.on.config_changed(), state_in)
     assert_status(out, ActiveStatus)
+
+
+def test_get_images_merges_routing_sidecar_override():
+    merged = KServeLLMISVCCharm.get_images(
+        None,
+        default_images={"llm_routing_sidecar": "ghcr.io/default:1"},
+        custom_images={"llm_routing_sidecar": "ghcr.io/override:2"},
+    )
+    assert merged["llm_routing_sidecar"] == "ghcr.io/override:2"
 
 
 def test_unknown_custom_image_key_warns_but_active(

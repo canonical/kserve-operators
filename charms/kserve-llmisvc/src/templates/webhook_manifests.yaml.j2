@@ -1,4 +1,4 @@
-# Source kserve/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,6 +11,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ app_name }}
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -63,6 +64,7 @@ webhooks:
     - llminferenceservices
   sideEffects: None
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:

@@ -1,10 +1,11 @@
-# Source kserve/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: llmisvc-controller-manager
   namespace: {{ namespace }}
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -23,6 +24,7 @@ rules:
   - list
   - update
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -206,6 +208,7 @@ rules:
   - patch
   - update
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -222,6 +225,7 @@ roleRef:
   kind: Role
   name: llmisvc-leader-election-role
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-llmisvc-resources/files/llmisvc/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

@@ -9,15 +9,15 @@ sibling files (``test_handlers.py``, ``test_pebble.py``, ...).
 
 import dataclasses
 
-from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 from .helpers import assert_status
 
 
-def test_install_without_relation_waits(ctx, base_state):
-    """Without the kserve-controller relation, the unit should wait."""
+def test_install_without_relation_blocks(ctx, base_state):
+    """Without the kserve-controller relation, the unit should block for user action."""
     out = ctx.run(ctx.on.install(), base_state)
-    assert_status(out, WaitingStatus, msg_substr="kserve-controller")
+    assert_status(out, BlockedStatus, msg_substr="Please relate")
 
 
 def test_install_with_relation_ready_becomes_active(ctx, ready_state):
