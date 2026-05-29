@@ -1,0 +1,29 @@
+name: lws-controller-tester
+
+type: charm
+
+summary: |
+  Test charm that publishes lws-controller readiness relation data.
+
+description: |
+  Minimal provider charm for integration tests that publishes a fixed
+  ``ready=true`` payload over the ``lws-controller`` relation (interface
+  ``lws-controller-sync``) so dependent charms can be exercised without
+  deploying the real ``lws-controller`` charm.
+
+platforms:
+  ubuntu@24.04:amd64:
+
+parts:
+  charm:
+    plugin: charm
+    source: .
+    charm-python-packages: [setuptools, pip]
+    override-build: |
+      craftctl default
+      chmod +x "${CRAFT_PART_INSTALL}/src/charm.py"
+
+provides:
+  lws-controller:
+    interface: lws-controller-sync
+    limit: 1

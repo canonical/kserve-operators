@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+minversion = "6.0"
+
+[tool.ruff]
+line-length = 99
+lint.select = ["E", "W", "F", "C", "N", "D", "I001"]

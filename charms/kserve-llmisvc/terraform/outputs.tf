@@ -11,6 +11,7 @@ output "provides" {
 output "requires" {
   value = {
     kserve_controller = "kserve-controller"
+    lws_controller    = "lws-controller"
     logging           = "logging"
   }
 }

@@ -32,6 +32,9 @@ requires:
   kserve-controller:
     interface: kserve-controller-sync
     limit: 1
+  lws-controller:
+    interface: lws-controller-sync
+    limit: 1
   logging:
     interface: loki_push_api
     optional: true

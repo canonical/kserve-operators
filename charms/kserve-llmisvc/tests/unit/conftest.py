@@ -23,6 +23,7 @@ from ops.testing import Container, Context, Relation, State
 
 from charm import (
     CONTROLLER_SYNC_RELATION,
+    LWS_SYNC_RELATION,
     METRICS_PROXY_CONTAINER,
     KServeLLMISVCCharm,
 )
@@ -179,6 +180,28 @@ def controller_relation_not_ready():
     )
 
 
+@pytest.fixture
+def lws_relation_ready():
+    """lws-controller sync relation with ``ready=true`` published."""
+    return Relation(
+        endpoint=LWS_SYNC_RELATION,
+        interface="lws-controller-sync",
+        remote_app_name="lws-controller",
+        remote_app_data={"ready": "true"},
+    )
+
+
+@pytest.fixture
+def lws_relation_not_ready():
+    """lws-controller sync relation without the readiness flag."""
+    return Relation(
+        endpoint=LWS_SYNC_RELATION,
+        interface="lws-controller-sync",
+        remote_app_name="lws-controller",
+        remote_app_data={},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Pre-built State fixtures.
 # ---------------------------------------------------------------------------
@@ -191,12 +214,12 @@ def base_state(both_containers):
 
 
 @pytest.fixture
-def ready_state(both_containers, controller_relation_ready):
-    """Leader unit, both containers, controller relation reporting ready."""
+def ready_state(both_containers, controller_relation_ready, lws_relation_ready):
+    """Leader unit, both containers, both sync relations reporting ready."""
     return State(
         leader=True,
         containers=both_containers,
-        relations=[controller_relation_ready],
+        relations=[controller_relation_ready, lws_relation_ready],
     )
 
 

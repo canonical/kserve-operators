@@ -27,13 +27,16 @@ def test_certs_skipped_when_container_unreachable(
     ctx,
     base_state,
     controller_relation_ready,
+    lws_relation_ready,
     controller_container_disconnected,
 ):
     """When the controller container can't be reached, push must be skipped (no raise)."""
     containers = [c for c in base_state.containers if c.name != "llmisvc-controller"]
     containers.append(controller_container_disconnected)
     state_in = dataclasses.replace(
-        base_state, containers=containers, relations=[controller_relation_ready]
+        base_state,
+        containers=containers,
+        relations=[controller_relation_ready, lws_relation_ready],
     )
 
     # Reconcile must complete without raising even though the container is unreachable.

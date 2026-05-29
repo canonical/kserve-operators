@@ -56,24 +56,28 @@ def test_parse_images_config_non_dict_raises_blocked():
 # ---------------------------------------------------------------------------
 
 
-def test_invalid_custom_images_sets_blocked(ctx, both_containers, controller_relation_ready):
+def test_invalid_custom_images_sets_blocked(
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
+):
     """Invalid YAML in custom_images should produce BlockedStatus."""
     state_in = State(
         leader=True,
         containers=both_containers,
-        relations=[controller_relation_ready],
+        relations=[controller_relation_ready, lws_relation_ready],
         config={"custom_images": "foo: [unclosed"},
     )
     out = ctx.run(ctx.on.config_changed(), state_in)
     assert_status(out, BlockedStatus)
 
 
-def test_valid_custom_images_keeps_active(ctx, both_containers, controller_relation_ready):
+def test_valid_custom_images_keeps_active(
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
+):
     """A valid override for a known image key should keep the charm Active."""
     state_in = State(
         leader=True,
         containers=both_containers,
-        relations=[controller_relation_ready],
+        relations=[controller_relation_ready, lws_relation_ready],
         config={
             "custom_images": build_custom_images_config(llm_scheduler="example.com/scheduler:dev")
         },
@@ -92,13 +96,13 @@ def test_get_images_merges_routing_sidecar_override():
 
 
 def test_unknown_custom_image_key_warns_but_active(
-    ctx, both_containers, controller_relation_ready, caplog
+    ctx, both_containers, controller_relation_ready, lws_relation_ready, caplog
 ):
     """Unknown keys in custom_images should be logged as warnings and ignored."""
     state_in = State(
         leader=True,
         containers=both_containers,
-        relations=[controller_relation_ready],
+        relations=[controller_relation_ready, lws_relation_ready],
         config={"custom_images": yaml.safe_dump({"not_a_real_image": "foo:bar"})},
     )
     out = ctx.run(ctx.on.config_changed(), state_in)

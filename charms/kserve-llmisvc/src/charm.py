@@ -50,6 +50,7 @@ BASE_RESOURCE_FILES = [
 SCHEDULER_CONFIG_FILES = ["src/templates/llmisvc_configs_manifests.yaml.j2"]
 CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 CONTROLLER_SYNC_RELATION = "kserve-controller"
+LWS_SYNC_RELATION = "lws-controller"
 METRICS_PORT = 8080
 METRICS_PROXY_CONTAINER = "metrics-proxy"
 METRICS_PROXY_PORT = 15090
@@ -117,6 +118,9 @@ class KServeLLMISVCCharm(CharmBase):
             self.on[CONTROLLER_SYNC_RELATION].relation_changed,
             self.on[CONTROLLER_SYNC_RELATION].relation_joined,
             self.on[CONTROLLER_SYNC_RELATION].relation_broken,
+            self.on[LWS_SYNC_RELATION].relation_changed,
+            self.on[LWS_SYNC_RELATION].relation_joined,
+            self.on[LWS_SYNC_RELATION].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
@@ -307,10 +311,39 @@ class KServeLLMISVCCharm(CharmBase):
                 WaitingStatus,
             )
 
+    def _lws_controller_is_ready(self) -> bool:
+        """Return True when sync relation indicates lws-controller is ready."""
+        relation = self.model.get_relation(LWS_SYNC_RELATION)
+        if relation is None or relation.app is None:
+            return False
+
+        app_data = relation.data.get(relation.app, {})
+        return app_data.get("ready", "false").lower() == "true"
+
+    def _validate_lws_controller_relation(self) -> None:
+        """Validate relation presence and readiness from lws-controller.
+
+        Missing relation is a user-actionable misconfiguration (Blocked).
+        Present relation without ready=true is a convergence state (Waiting).
+        """
+        relation = self.model.get_relation(LWS_SYNC_RELATION)
+        if relation is None or relation.app is None:
+            raise ErrorWithStatus(
+                "Please relate to lws-controller:lws-controller",
+                BlockedStatus,
+            )
+
+        if not self._lws_controller_is_ready():
+            raise ErrorWithStatus(
+                "Waiting for relation to lws-controller to report ready=true",
+                WaitingStatus,
+            )
+
     def _on_event(self, event):
         """Main reconcile loop for llmisvc charm."""
         try:
             self._validate_kserve_controller_relation()
+            self._validate_lws_controller_relation()
 
             self.custom_images = parse_images_config(self.model.config["custom_images"])
             self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)

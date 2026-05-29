@@ -67,13 +67,19 @@ def test_metrics_proxy_layer_environment(ctx, ready_state):
 
 
 def test_metrics_proxy_layer_skipped_when_container_unreachable(
-    ctx, base_state, controller_relation_ready, metrics_proxy_container_disconnected
+    ctx,
+    base_state,
+    controller_relation_ready,
+    lws_relation_ready,
+    metrics_proxy_container_disconnected,
 ):
     """If metrics-proxy can't be reached yet, no layer should be added but reconcile continues."""
     containers = [c for c in base_state.containers if c.name != METRICS_PROXY_CONTAINER]
     containers.append(metrics_proxy_container_disconnected)
     state_in = dataclasses.replace(
-        base_state, containers=containers, relations=[controller_relation_ready]
+        base_state,
+        containers=containers,
+        relations=[controller_relation_ready, lws_relation_ready],
     )
 
     out = ctx.run(ctx.on.install(), state_in)
@@ -89,13 +95,19 @@ def test_metrics_proxy_layer_skipped_when_container_unreachable(
 
 
 def test_controller_container_unreachable_blocks_layer(
-    ctx, base_state, controller_relation_ready, controller_container_disconnected
+    ctx,
+    base_state,
+    controller_relation_ready,
+    lws_relation_ready,
+    controller_container_disconnected,
 ):
     """If the controller container is unreachable, cert push short-circuits and no layer."""
     containers = [c for c in base_state.containers if c.name != "llmisvc-controller"]
     containers.append(controller_container_disconnected)
     state_in = dataclasses.replace(
-        base_state, containers=containers, relations=[controller_relation_ready]
+        base_state,
+        containers=containers,
+        relations=[controller_relation_ready, lws_relation_ready],
     )
 
     out = ctx.run(ctx.on.install(), state_in)
@@ -112,14 +124,14 @@ def test_controller_container_unreachable_blocks_layer(
 
 
 def test_metrics_endpoint_relation_data_has_both_jobs(
-    ctx, both_containers, controller_relation_ready
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
 ):
     """The metrics-endpoint relation should advertise both scrape jobs."""
     metrics_rel = Relation(endpoint="metrics-endpoint", interface="prometheus_scrape")
     state_in = State(
         leader=True,
         containers=both_containers,
-        relations=[controller_relation_ready, metrics_rel],
+        relations=[controller_relation_ready, lws_relation_ready, metrics_rel],
     )
 
     out = ctx.run(ctx.on.relation_joined(metrics_rel), state_in)

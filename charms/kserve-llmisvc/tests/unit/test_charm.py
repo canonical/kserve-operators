@@ -27,10 +27,12 @@ def test_install_with_relation_ready_becomes_active(ctx, ready_state):
 
 
 def test_install_with_relation_missing_ready_key_waits(
-    ctx, base_state, controller_relation_not_ready
+    ctx, base_state, controller_relation_not_ready, lws_relation_ready
 ):
     """A controller relation without ready=true should keep the unit waiting."""
-    state_in = dataclasses.replace(base_state, relations=[controller_relation_not_ready])
+    state_in = dataclasses.replace(
+        base_state, relations=[controller_relation_not_ready, lws_relation_ready]
+    )
     out = ctx.run(ctx.on.install(), state_in)
     assert_status(out, WaitingStatus)
 
