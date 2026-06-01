@@ -256,7 +256,10 @@ class KServeLLMISVCCharm(CharmBase):
                     self._controller_container_name: {
                         "override": "replace",
                         "summary": "KServe LLMInferenceService Controller",
-                        "command": f"/manager --metrics-addr=:{METRICS_PORT} --leader-elect",
+                        "command": (
+                            f"/manager --metrics-addr=:{METRICS_PORT} "
+                            "--metrics-secure=false --leader-elect"
+                        ),
                         "startup": "enabled",
                         "environment": {
                             "POD_NAMESPACE": self.model.name,

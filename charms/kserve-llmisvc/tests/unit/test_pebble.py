@@ -30,7 +30,10 @@ def test_controller_layer_has_expected_service(ctx, ready_state):
 
     assert "llmisvc-controller" in plan.services
     svc = plan.services["llmisvc-controller"]
-    assert svc.command == f"/manager --metrics-addr=:{METRICS_PORT} --leader-elect"
+    assert (
+        svc.command
+        == f"/manager --metrics-addr=:{METRICS_PORT} --metrics-secure=false --leader-elect"
+    )
     assert svc.startup == "enabled"
     assert svc.environment["POD_NAMESPACE"]  # rendered from model.name
 
