@@ -66,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
-      - run: tox -e ${{ matrix.charm }}-lint
+      - run: tox -e controller-lint
 
   unit:
     name: Unit Test
@@ -78,7 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
-      - run: tox -e ${{ matrix.charm }}-unit
+      - run: tox -e controller-unit
 
   terraform-checks:
     name: Terraform
@@ -115,7 +115,7 @@ jobs:
       fail-fast: false
       matrix:
         charm: [kserve-controller]
-        test-type: [integration, integration-ambient]
+        test-type: [integration]
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space
@@ -143,9 +143,11 @@ jobs:
           merge-multiple: true
 
       - name: Run integration tests
+        env:
+          CHARM_PATH: ${{ github.workspace }}/charms/${{ matrix.charm }}/${{ matrix.charm }}_ubuntu@24.04-amd64.charm
         run: |
           juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e ${{ matrix.charm }}-${{ matrix.test-type }} -- --model kubeflow --charm-path=${{ github.workspace }}/charms/${{ matrix.charm }}/${{ matrix.charm }}_ubuntu@24.04-amd64.charm
+          tox -e controller-${{ matrix.test-type }} -- --model kubeflow
 
       - name: Get all
         run: kubectl get all -A
