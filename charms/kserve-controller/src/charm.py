@@ -94,6 +94,7 @@ SDI_INGRESS_GATEWAY_RELATION = "ingress-gateway"
 SDI_LOCAL_GATEWAY_RELATION = "local-gateway"
 GATEWAY_METADATA_RELATION = "gateway-metadata"
 LLMISVC_SYNC_RELATION = "kserve-controller"
+SERVICE_MESH_RELATION = "service-mesh"
 
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
 S3_USEANONCREDENTIALS = "false"
@@ -181,7 +182,6 @@ class KServeControllerCharm(CharmBase):
             self.on[SDI_INGRESS_GATEWAY_RELATION].relation_broken,
             self.on[SDI_LOCAL_GATEWAY_RELATION].relation_broken,
             self.on[GATEWAY_METADATA_RELATION].relation_broken,
-            self.on[LLMISVC_SYNC_RELATION].relation_joined,
             self.on[LLMISVC_SYNC_RELATION].relation_changed,
             self.on[LLMISVC_SYNC_RELATION].relation_broken,
         ]:
@@ -255,7 +255,7 @@ class KServeControllerCharm(CharmBase):
     @property
     def _has_service_mesh_relation(self) -> bool:
         """Returns whether the service-mesh relation is established."""
-        return self.model.get_relation("service-mesh") is not None
+        return self.model.get_relation(SERVICE_MESH_RELATION) is not None
 
     @property
     def _context(self):
@@ -628,7 +628,8 @@ class KServeControllerCharm(CharmBase):
         # Skip reconciliation if no service-mesh relation (would lack RBAC permissions)
         if not self._has_service_mesh_relation:
             log.debug(
-                "service-mesh relation not established, skipping AuthorizationPolicy reconciliation"
+                "%s relation not established, skipping AuthorizationPolicy reconciliation",
+                SERVICE_MESH_RELATION,
             )
             return
 
@@ -746,30 +747,15 @@ class KServeControllerCharm(CharmBase):
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
 
-        # remove AuthorizationPolicies (only if service-mesh relation exists)
-        if self._has_service_mesh_relation:
-            self.policy_resource_manager.reconcile([], MeshType.istio, [])
+        self._reconcile_authorization_policies_on_remove()
 
         handlers = [
             self.k8s_resource_handler,
             self.cm_resource_handler,
         ]
         try:
-            runtimes_manifests = self._sync_handler_resource_types(
-                self.cluster_runtimes_resource_handler
-            )
-            if runtimes_manifests:
-                self.cluster_runtimes_resource_handler.delete(ignore_missing=True)
-            for runtime_name, runtime_kind in _extract_runtimes_names(runtimes_manifests).items():
-                self.ensure_resource_is_deleted(
-                    client=self.cluster_runtimes_resource_handler.lightkube_client,
-                    resource_kind=runtime_kind,
-                    resource_name=runtime_name,
-                )
-            for handler in handlers:
-                manifests = self._sync_handler_resource_types(handler)
-                if manifests:
-                    handler.delete(ignore_missing=True)
+            self._remove_cluster_runtimes_resources()
+            self._delete_managed_resources(handlers)
         except ApiError as e:
             if e.status.code != 404:
                 log.warning(f"Failed to delete resources, with error: {e}")
@@ -781,6 +767,40 @@ class KServeControllerCharm(CharmBase):
             )
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
+
+    def _reconcile_authorization_policies_on_remove(self) -> None:
+        """Best-effort AuthorizationPolicy teardown during remove hook."""
+
+        # Always attempt to remove AuthorizationPolicies during teardown.
+        # The service-mesh relation may already be gone before this hook runs.
+        try:
+            self.policy_resource_manager.reconcile([], MeshType.istio, [])
+        except ApiError as e:
+            if e.status.code in (403, 404):
+                log.warning("Failed to reconcile AuthorizationPolicies during remove hook: %s", e)
+            else:
+                raise
+
+    def _remove_cluster_runtimes_resources(self) -> None:
+        """Delete ClusterServingRuntime resources and wait until they are gone."""
+        runtimes_manifests = self._sync_handler_resource_types(
+            self.cluster_runtimes_resource_handler
+        )
+        if runtimes_manifests:
+            self.cluster_runtimes_resource_handler.delete(ignore_missing=True)
+        for runtime_name, runtime_kind in _extract_runtimes_names(runtimes_manifests).items():
+            self.ensure_resource_is_deleted(
+                client=self.cluster_runtimes_resource_handler.lightkube_client,
+                resource_kind=runtime_kind,
+                resource_name=runtime_name,
+            )
+
+    def _delete_managed_resources(self, handlers: list[KubernetesResourceHandler]) -> None:
+        """Delete manifests managed by standard handlers, if present."""
+        for handler in handlers:
+            manifests = self._sync_handler_resource_types(handler)
+            if manifests:
+                handler.delete(ignore_missing=True)
 
     @tenacity.retry(stop=tenacity.stop_after_delay(300), wait=tenacity.wait_fixed(5), reraise=True)
     def ensure_resource_is_deleted(self, client: Client, resource_kind, resource_name: str):

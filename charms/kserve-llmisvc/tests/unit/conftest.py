@@ -52,8 +52,8 @@ def mock_load_generic_resources():
 
 @pytest.fixture(autouse=True)
 def mock_service_patcher():
-    """Replace KubernetesServicePatch so charm init does not patch the cluster Service."""
-    with patch("charm.KubernetesServicePatch") as m:
+    """Stub Unit.set_ports so charm init does not call Juju backend in tests."""
+    with patch("ops.model.Unit.set_ports") as m:
         yield m
 
 
