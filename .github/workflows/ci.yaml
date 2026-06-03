@@ -143,11 +143,9 @@ jobs:
           merge-multiple: true
 
       - name: Run integration tests
-        env:
-          CHARM_PATH: ${{ github.workspace }}/charms/${{ matrix.charm }}/${{ matrix.charm }}_ubuntu@24.04-amd64.charm
         run: |
           juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e controller-${{ matrix.test-type }} -- --model kubeflow
+          tox -e controller-${{ matrix.test-type }} -- --model kubeflow --charm-path=${{ github.workspace }}/charms/${{ matrix.charm }}/${{ matrix.charm }}_ubuntu@24.04-amd64.charm
 
       - name: Get all
         run: kubectl get all -A
