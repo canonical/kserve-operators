@@ -52,13 +52,6 @@ KSERVE_CONTROLLER_EXPECTED_LAYER = {
 }
 
 
-class _FakeObjectStillExistsError(ObjectStillExistsError):
-    """Used to simulate an ObjectStillExistsError during testing."""
-
-    def __init__(self, resource_name="a-resource"):
-        super().__init__(resource_name=resource_name)
-
-
 class _FakeResponse:
     """Used to fake an httpx response during testing only."""
 
@@ -258,22 +251,26 @@ def test_on_kserve_controller_ready_no_relation_blocked(
 
 
 def test_on_remove_success(harness: Harness, mocker, mocked_resource_handler):
-    mocked_delete_many = mocker.patch("charm.delete_many")
     harness.begin()
+    fake_resource = MagicMock()
+    fake_resource.metadata.name = "dummy"
+    mocked_resource_handler.render_manifests.side_effect = [[], [fake_resource], [fake_resource]]
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
     harness.charm._cluster_runtimes_resource_handler = mocked_resource_handler
     harness.charm.on.remove.emit()
-    mocked_delete_many.assert_called()
+    assert mocked_resource_handler.delete.call_count == 2
     assert isinstance(harness.charm.model.unit.status, MaintenanceStatus)
 
 
 def test_on_remove_api_failure(harness: Harness, mocker, mocked_resource_handler):
     harness.begin()
-
-    mocked_delete_many = mocker.patch("charm.delete_many")
-    mocked_delete_many.side_effect = _FakeObjectStillExistsError()
+    mocked_ensure_deleted = mocker.patch("charm.KServeControllerCharm.ensure_resource_is_deleted")
+    mocked_ensure_deleted.side_effect = ObjectStillExistsError("a-resource")
     mocked_logger = mocker.patch("charm.log")
+    fake_runtime = MagicMock()
+    fake_runtime.metadata.name = "runtime-1"
+    mocked_resource_handler.render_manifests.side_effect = [[fake_runtime]]
 
     harness.charm._k8s_resource_handler = mocked_resource_handler
     harness.charm._cm_resource_handler = mocked_resource_handler
@@ -286,9 +283,10 @@ def test_on_remove_api_failure(harness: Harness, mocker, mocked_resource_handler
 
 def test_on_remove_deletion_failure(harness: Harness, mocker, mocked_resource_handler):
     harness.begin()
-
-    mocked_delete_many = mocker.patch("charm.delete_many")
-    mocked_delete_many.side_effect = _FakeApiError()
+    fake_resource = MagicMock()
+    fake_resource.metadata.name = "dummy"
+    mocked_resource_handler.render_manifests.side_effect = [[], [fake_resource]]
+    mocked_resource_handler.delete.side_effect = _FakeApiError()
     mocked_logger = mocker.patch("charm.log")
 
     harness.charm._k8s_resource_handler = mocked_resource_handler

@@ -1,0 +1,27 @@
+name: gateway-metadata-provider-tester
+
+type: charm
+
+summary: |
+  Test charm that publishes gateway metadata relation data.
+
+description: |
+  Minimal provider charm for integration tests that publishes fixed
+  gateway metadata over the gateway-metadata relation.
+
+platforms:
+  ubuntu@24.04:amd64:
+
+parts:
+  charm:
+    plugin: charm
+    source: .
+    charm-python-packages: [setuptools, pip]
+    override-build: |
+      craftctl default
+      chmod +x "${CRAFT_PART_INSTALL}/src/charm.py"
+
+provides:
+  gateway-metadata:
+    interface: gateway_metadata
+    limit: 1
