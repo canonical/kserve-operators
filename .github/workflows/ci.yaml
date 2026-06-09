@@ -107,6 +107,22 @@ jobs:
       actions: read  # Needed for GitHub API call to get workflow version (for private repositories)
       contents: read
 
+  build-test-charms:
+    name: Build charm | ${{ matrix.charm }}
+    strategy:
+      fail-fast: false
+      matrix:
+        charm:
+          - tests/integration/lws-controller-tester
+          - tests/integration/gateway-metadata-provider-tester
+    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v49.0.1
+    with:
+      path-to-charm-directory: ${{ matrix.charm }}
+      cache: true
+    permissions:
+      actions: read
+      contents: read
+
   integration:
     name: Integration tests
     needs:
@@ -179,6 +195,7 @@ jobs:
     name: Bundle integration tests
     needs:
       - build
+      - build-test-charms
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space
@@ -204,6 +221,14 @@ jobs:
         with:
           pattern: ${{ needs.build.outputs.artifact-prefix }}-*
           merge-multiple: true
+
+      - name: Download packed test charm(s)
+        timeout-minutes: 5
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ needs.build-test-charms.outputs.artifact-prefix }}-*
+          merge-multiple: true
+          path: ${{ github.workspace }}/tests/integration/
 
       - name: Run bundle integration tests
         run: |
