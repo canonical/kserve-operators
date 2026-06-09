@@ -5,6 +5,7 @@
 import json
 import logging
 import subprocess
+import time
 from contextlib import suppress
 
 import requests
@@ -167,6 +168,62 @@ def install_envoy_ai_gateway(envoy_ai_gateway_version: str):
             "--timeout=300s",
         ]
     )
+
+
+def install_lws(version: str):
+    """Install LeaderWorkerSet CRDs/controller via Helm with a small retry budget."""
+    logger.info("Installing LWS via Helm (version %s)...", version)
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            run_command(
+                [
+                    "helm",
+                    "upgrade",
+                    "-i",
+                    "lws",
+                    "oci://registry.k8s.io/lws/charts/lws",
+                    "--version",
+                    version,
+                    "--namespace",
+                    "lws-system",
+                    "--create-namespace",
+                    "--wait",
+                    "--timeout",
+                    "300s",
+                ]
+            )
+            break
+        except subprocess.CalledProcessError as err:
+            last_error = err
+            logger.warning("LWS install attempt %s/3 failed, retrying", attempt)
+            if attempt < 3:
+                time.sleep(10)
+    else:
+        raise RuntimeError("Failed to install LWS via Helm after 3 attempts") from last_error
+
+    run_command(
+        [
+            "kubectl",
+            "-n",
+            "lws-system",
+            "rollout",
+            "status",
+            "deploy/lws-controller-manager",
+            "--timeout=300s",
+        ]
+    )
+
+    run_command(
+        [
+            "kubectl",
+            "wait",
+            "--for=condition=Established",
+            "crd/leaderworkersets.leaderworkerset.x-k8s.io",
+            "--timeout=120s",
+        ]
+    )
+    logger.info("LWS installed")
 
 
 def ensure_gateway(kserve_namespace: str, gateway_name: str, gateway_namespace: str):

@@ -22,6 +22,7 @@ from .helpers.bundle_ops import (
     install_envoy_gateway,
     install_gateway_api_crds,
     install_gie_crds,
+    install_lws,
 )
 from .helpers.charm_paths import (
     resolve_charm_path,
@@ -33,6 +34,7 @@ GATEWAY_API_VERSION = "v1.4.1"
 GIE_VERSION = "v1.3.0"
 ENVOY_GATEWAY_VERSION = "v1.6.3"
 ENVOY_AI_GATEWAY_VERSION = "v0.5.0"
+LWS_VERSION = "v0.7.0"
 KSERVE_NAMESPACE = "kubeflow"
 GATEWAY_NAME = "kserve-ingress-gateway"
 GATEWAY_NAMESPACE = "kubeflow"
@@ -84,10 +86,13 @@ def test_bundle_deploy_and_predict(juju: jubilant.Juju, request: pytest.FixtureR
             gateway_namespace=GATEWAY_NAMESPACE,
         )
 
-        logger.info("Step 6: Deploying lws-controller tester charm")
+        logger.info("Step 6: Installing LWS Helm chart")
+        install_lws(version=LWS_VERSION)
+
+        logger.info("Step 7: Deploying lws-controller tester charm")
         juju.deploy(charm=str(lws_charm))
 
-        logger.info("Step 7: Deploying kserve-controller charm")
+        logger.info("Step 8: Deploying kserve-controller charm")
         juju.deploy(
             charm=str(controller_charm),
             resources=controller_resources,
@@ -101,13 +106,13 @@ def test_bundle_deploy_and_predict(juju: jubilant.Juju, request: pytest.FixtureR
         logger.info("Waiting for kserve-controller to block on missing gateway-metadata relation")
         juju.wait(lambda status: status.apps["kserve-controller"].is_blocked, successes=1)
 
-        logger.info("Step 8: Deploying gateway metadata provider test charm")
+        logger.info("Step 9: Deploying gateway metadata provider test charm")
         juju.deploy(charm=str(gateway_metadata_charm))
 
         logger.info("Waiting for gateway metadata provider application to appear")
         juju.wait(lambda status: GATEWAY_METADATA_PROVIDER_CHARM in status.apps, successes=1)
 
-        logger.info("Step 9: Relating gateway metadata provider to kserve-controller")
+        logger.info("Step 10: Relating gateway metadata provider to kserve-controller")
         juju.integrate(
             "kserve-controller:gateway-metadata",
             f"{GATEWAY_METADATA_PROVIDER_CHARM}:gateway-metadata",
@@ -120,7 +125,7 @@ def test_bundle_deploy_and_predict(juju: jubilant.Juju, request: pytest.FixtureR
             successes=1,
         )
 
-        logger.info("Step 10: Deploying kserve-llmisvc charm")
+        logger.info("Step 11: Deploying kserve-llmisvc charm")
         juju.deploy(
             charm=str(llmisvc_charm),
             resources=llmisvc_resources,
@@ -130,26 +135,26 @@ def test_bundle_deploy_and_predict(juju: jubilant.Juju, request: pytest.FixtureR
         logger.info("Waiting for kserve-llmisvc application to appear")
         juju.wait(lambda status: "kserve-llmisvc" in status.apps, successes=1)
 
-        logger.info("Step 11: Relating charms")
+        logger.info("Step 12: Relating charms")
         juju.integrate("kserve-controller:kserve-controller", "kserve-llmisvc:kserve-controller")
-        juju.integrate("lws-controller:lws-controller", "kserve-llmisvc:lws-controller")
+        juju.integrate("lws-controller-tester:lws-controller", "kserve-llmisvc:lws-controller")
         logger.info("Waiting for all charms to be active after relations")
         juju.wait(jubilant.all_active, successes=1)
 
-        logger.info("Step 12: Waiting for Gateway to be programmed")
+        logger.info("Step 13: Waiting for Gateway to be programmed")
         assert_gateway_programmed(gateway_name=GATEWAY_NAME, gateway_namespace=GATEWAY_NAMESPACE)
 
-        logger.info("Step 13: Applying LLMInferenceService example")
+        logger.info("Step 14: Applying LLMInferenceService example")
         apply_llmisvc_example(manifest_path=str(LLMISVC_EXAMPLE_PATH))
 
-        logger.info("Step 14: Verifying generated resources")
+        logger.info("Step 15: Verifying generated resources")
         assert_route_programmed()
         assert_inferencepool_and_workload_resources()
 
-        logger.info("Step 15: Verifying llmisvc observability metrics endpoints")
+        logger.info("Step 16: Verifying llmisvc observability metrics endpoints")
         assert_llmisvc_metrics_endpoints(namespace=KSERVE_NAMESPACE)
 
-        logger.info("Step 16: Testing prediction endpoint")
+        logger.info("Step 17: Testing prediction endpoint")
         assert_prediction(gateway_name=GATEWAY_NAME)
 
         logger.info("All bundle integration tests passed!")
@@ -168,13 +173,13 @@ def test_bundle_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
         juju.remove_application("kserve-llmisvc", force=True)
         juju.remove_application(GATEWAY_METADATA_PROVIDER_CHARM, force=True)
         juju.remove_application("kserve-controller", force=True)
-        juju.remove_application("lws-controller", force=True)
+        juju.remove_application(LWS_CONTROLLER_TESTER_CHARM, force=True)
 
         logger.info("Waiting for charm applications to disappear from Juju model")
         juju.wait(
             lambda status: "kserve-controller" not in status.apps
             and "kserve-llmisvc" not in status.apps
-            and "lws-controller" not in status.apps,
+            and LWS_CONTROLLER_TESTER_CHARM not in status.apps,
             # gateway metadata provider is a test harness charm and must be removed too
             # to avoid leaking applications between runs.
             successes=1,
