@@ -37,7 +37,9 @@ LWS_VERSION = "v0.7.0"
 KSERVE_NAMESPACE = "kubeflow"
 GATEWAY_NAME = "kserve-ingress-gateway"
 GATEWAY_NAMESPACE = "kubeflow"
-LLMISVC_EXAMPLE_PATH = Path(__file__).parent / "test_data" / "llmisvc_test_llm_scheduler.yaml"
+LLMISVC_EXAMPLE_PATH = (
+    Path(__file__).parent / "test_data" / "llmisvc_test_llm_scheduler_small.yaml"
+)
 GATEWAY_METADATA_PROVIDER_CHARM = "gateway-metadata-provider-tester"
 LWS_CONTROLLER_TESTER_CHARM = "lws-controller-tester"
 

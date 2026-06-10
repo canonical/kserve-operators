@@ -39,6 +39,8 @@ spec:
         env:
           - name: VLLM_LOGGING_LEVEL
             value: INFO
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "1"
         volumeMounts:
           - name: kserve-pvc-source
             mountPath: /mnt/models
@@ -46,7 +48,7 @@ spec:
         resources:
           requests:
             cpu: "500m"
-            memory: "2Gi"
+            memory: "3Gi"
           limits:
             cpu: "2"
-            memory: "4Gi"
+            memory: "8Gi"

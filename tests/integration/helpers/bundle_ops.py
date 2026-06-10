@@ -20,6 +20,8 @@ from .retry import (
 logger = logging.getLogger(__name__)
 
 LLMISVC_APP_NAME = "kserve-llmisvc"
+LLMISVC_NAME = "test-llm-scheduler-small"
+LLMISVC_MODEL_NAME = "EleutherAI/pythia-70m"
 LLMISVC_CONTROLLER_METRICS_PORT = 8080
 LLMISVC_AGGREGATED_METRICS_PORT = 15090
 LOCAL_CONTROLLER_METRICS_PORT = 28080
@@ -359,7 +361,7 @@ def apply_llmisvc_example(manifest_path: str):
                     "default",
                     "get",
                     "llminferenceservice",
-                    "test-llm-scheduler",
+                    LLMISVC_NAME,
                     "-o",
                     "json",
                 ]
@@ -396,7 +398,7 @@ def assert_route_programmed():
             "default",
             "describe",
             "httproute",
-            "test-llm-scheduler-kserve-route",
+            f"{LLMISVC_NAME}-kserve-route",
         ]
     )
     assert "Accepted" in output
@@ -405,7 +407,7 @@ def assert_route_programmed():
 
 def assert_inferencepool_and_workload_resources():
     inferencepools = run_command(["kubectl", "-n", "default", "get", "inferencepool"])
-    assert "test-llm-scheduler" in inferencepools
+    assert LLMISVC_NAME in inferencepools
 
     services = run_command(["kubectl", "-n", "default", "get", "svc"])
     assert "test-llm" in services
@@ -549,7 +551,7 @@ def _gateway_service_name(gateway_name: str) -> str:
 def assert_prediction(gateway_name: str):
     gw_ip = _gateway_ip(gateway_name)
     payload = {
-        "model": "facebook/opt-125m",
+        "model": LLMISVC_MODEL_NAME,
         "prompt": "Say hello in one short sentence.",
         "max_tokens": 32,
         "temperature": 0.2,
@@ -557,7 +559,7 @@ def assert_prediction(gateway_name: str):
 
     if gw_ip:
         response = requests.post(
-            f"http://{gw_ip}/default/test-llm-scheduler/v1/completions",
+            f"http://{gw_ip}/default/{LLMISVC_NAME}/v1/completions",
             headers={"Content-Type": "application/json"},
             json=payload,
             timeout=120,
@@ -586,7 +588,7 @@ def assert_prediction(gateway_name: str):
         for _ in RETRY_FOR_TEN_MINUTES:
             with _:
                 response = requests.post(
-                    "http://127.0.0.1:8080/default/test-llm-scheduler/v1/completions",
+                    f"http://127.0.0.1:8080/default/{LLMISVC_NAME}/v1/completions",
                     headers={"Content-Type": "application/json"},
                     json=payload,
                     timeout=120,
