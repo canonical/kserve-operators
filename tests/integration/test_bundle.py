@@ -16,6 +16,7 @@ from .helpers.bundle_ops import (
     assert_no_charm_resources_left,
     assert_prediction,
     assert_route_programmed,
+    delete_llmisvc_example,
     ensure_gateway,
     install_envoy_ai_gateway,
     install_envoy_gateway,
@@ -37,9 +38,7 @@ LWS_VERSION = "v0.7.0"
 KSERVE_NAMESPACE = "kubeflow"
 GATEWAY_NAME = "kserve-ingress-gateway"
 GATEWAY_NAMESPACE = "kubeflow"
-LLMISVC_EXAMPLE_PATH = (
-    Path(__file__).parent / "test_data" / "llmisvc_test_llm_scheduler_small.yaml"
-)
+LLMISVC_EXAMPLE_PATH = Path(__file__).parent / "test_data" / "llmisvc_test_llm_scheduler_small.yaml"
 GATEWAY_METADATA_PROVIDER_CHARM = "gateway-metadata-provider-tester"
 LWS_CONTROLLER_TESTER_CHARM = "lws-controller-tester"
 
@@ -169,6 +168,12 @@ def test_bundle_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
 
     logger.info("Starting bundle cleanup test")
     try:
+        logger.info("Deleting LLMInferenceService example before removing charms")
+        # Must happen while kserve-controller is still up so the controller can
+        # clear the LLMInferenceService finalizer; otherwise the custom resource
+        # (and its CRD) get stuck terminating and leak charm-owned resources.
+        delete_llmisvc_example(manifest_path=str(LLMISVC_EXAMPLE_PATH))
+
         logger.info("Removing charm applications from Juju model")
         juju.remove_application("kserve-llmisvc", force=True)
         juju.remove_application(GATEWAY_METADATA_PROVIDER_CHARM, force=True)

@@ -390,6 +390,50 @@ def apply_llmisvc_example(manifest_path: str):
             )
 
 
+def delete_llmisvc_example(manifest_path: str):
+    """Delete the LLMInferenceService example and wait for it to be fully gone.
+
+    This must run while the kserve controller is still deployed. The
+    LLMInferenceService carries a controller-managed finalizer
+    (``serving.kserve.io/llmisvc-finalizer``); if the charm (and therefore the
+    controller) is removed first, nothing clears the finalizer, the custom
+    resource is stuck, and the ``llminferenceservices.serving.kserve.io`` CRD
+    can never finish terminating -- leaving charm-owned resources behind.
+    """
+    logger.info("Deleting LLMInferenceService example from %s...", manifest_path)
+    subprocess.run(
+        ["kubectl", "delete", "-f", manifest_path, "--ignore-not-found", "--wait=false"],
+        check=True,
+        text=True,
+    )
+
+    logger.info("Waiting for LLMInferenceService '%s' to be fully removed...", LLMISVC_NAME)
+    for attempt in RETRY_FOR_TEN_MINUTES:
+        with attempt:
+            result = subprocess.run(
+                [
+                    "kubectl",
+                    "-n",
+                    "default",
+                    "get",
+                    "llminferenceservice",
+                    LLMISVC_NAME,
+                    "--ignore-not-found",
+                    "-o",
+                    "name",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            if result.stdout.strip():
+                raise AssertionError(
+                    f"LLMInferenceService '{LLMISVC_NAME}' still present "
+                    "(finalizer not cleared yet)"
+                )
+    logger.info("LLMInferenceService '%s' fully removed", LLMISVC_NAME)
+
+
 def assert_route_programmed():
     output = run_command(
         [
@@ -735,8 +779,7 @@ def assert_no_charm_resources_left():
             if leftovers:
                 details = [f"{check_name}: {found}" for check_name, found in leftovers]
                 raise AssertionError(
-                    "Charm resources still present after remove-application: "
-                    + " | ".join(details)
+                    "Charm resources still present after remove-application: " + " | ".join(details)
                 )
 
     logger.info("No charm-owned resources left in the cluster")

@@ -4,6 +4,7 @@
 
 import json
 import logging
+import time
 from base64 import b64encode
 from typing import Dict
 
@@ -13,12 +14,16 @@ from charmed_kubeflow_chisme.kubernetes import (
     KubernetesResourceHandler,
     create_charm_default_labels,
 )
+from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import ApiError
 from lightkube.core.exceptions import LoadResourceError
-from lightkube.generic_resource import load_in_cluster_generic_resources
+from lightkube.generic_resource import (
+    create_namespaced_resource,
+    load_in_cluster_generic_resources,
+)
 from ops import main
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -61,6 +66,18 @@ WORKLOAD_POD_LABEL_SELECTOR = "app.kubernetes.io/part-of=llminferenceservice"
 
 KRH_SCOPE_BASE = "kserve-llmisvc-base"
 KRH_SCOPE_SCHEDULER_CONFIG = "kserve-llmisvc-scheduler-config"
+
+# LLMInferenceService custom resource coordinates. The charm-managed controller
+# attaches the `serving.kserve.io/llmisvc-finalizer` to these CRs, so they must
+# be deleted (and their finalizers cleared by the running controller) before the
+# CRD itself is removed. v1alpha2 is the CRD storage version.
+LLMISVC_GROUP = "serving.kserve.io"
+LLMISVC_VERSION = "v1alpha2"
+LLMISVC_KIND = "LLMInferenceService"
+LLMISVC_PLURAL = "llminferenceservices"
+# How long to wait for the controller to clear finalizers during removal.
+LLMISVC_DELETION_TIMEOUT = 300
+LLMISVC_DELETION_POLL_INTERVAL = 5
 
 
 def parse_images_config(config: str) -> Dict:
@@ -402,9 +419,62 @@ class KServeLLMISVCCharm(CharmBase):
             log.exception("Kubernetes API error during reconcile")
             raise
 
+    def _delete_llm_inference_services(self) -> None:
+        """Delete all LLMInferenceService CRs and wait for finalizers to clear.
+
+        This must run while the controller workload is still alive so it can
+        process the ``serving.kserve.io/llmisvc-finalizer`` on each CR. If the
+        CRs were left in place, deleting the CRD would leave them (and the CRD)
+        stuck terminating once the controller pod is gone.
+        """
+        llm_isvc_resource = create_namespaced_resource(
+            group=LLMISVC_GROUP,
+            version=LLMISVC_VERSION,
+            kind=LLMISVC_KIND,
+            plural=LLMISVC_PLURAL,
+        )
+        client = self.base_resource_handler.lightkube_client
+
+        try:
+            existing = list(client.list(llm_isvc_resource, namespace="*"))
+        except ApiError as e:
+            if e.status.code == 404:
+                # CRD is already gone, so there are no CRs to clean up.
+                return
+            raise
+
+        if not existing:
+            return
+
+        delete_many(client=client, objs=existing, ignore_missing=True, logger=log)
+
+        deadline = time.monotonic() + LLMISVC_DELETION_TIMEOUT
+        remaining = existing
+        while time.monotonic() < deadline:
+            remaining = list(client.list(llm_isvc_resource, namespace="*"))
+            if not remaining:
+                log.info("All LLMInferenceService resources removed")
+                return
+            time.sleep(LLMISVC_DELETION_POLL_INTERVAL)
+
+        remaining_names = [f"{cr.metadata.namespace}/{cr.metadata.name}" for cr in remaining]
+        log.warning(
+            "Timed out waiting for LLMInferenceService resources to be removed: %s",
+            remaining_names,
+        )
+
     def _on_remove(self, _):
         """Delete resources rendered by llmisvc handlers."""
         self.unit.status = MaintenanceStatus("Removing k8s resources")
+
+        # Delete user-created LLMInferenceService CRs first, while the controller
+        # is still running to clear their finalizers. Otherwise the CRD deletion
+        # below would get stuck terminating.
+        try:
+            self._delete_llm_inference_services()
+        except ApiError as e:
+            log.warning("Failed to delete LLMInferenceService resources: %s", e)
+
         sync_order = [
             self.base_resource_handler,
             self.scheduler_config_resource_handler,
