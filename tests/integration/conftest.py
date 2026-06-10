@@ -60,29 +60,14 @@ def juju(request: pytest.FixtureRequest):
     keep_models = bool(request.config.getoption("--keep-models"))
     model_name = request.config.getoption("--model")
 
-    def print_debug_log(juju_instance: jubilant.Juju):
-        if request.session.testsfailed:
-            try:
-                print(f"[DEBUG] Fetching debug log for model: {juju_instance.model}")
-                log = juju_instance.debug_log(limit=2000)
-                print(log, end="")
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Failed to fetch Juju debug log: %s", exc)
-
     if model_name:
         juju_instance = jubilant.Juju(model=model_name)
         juju_instance.wait_timeout = WAIT_TIMEOUT
-        try:
-            yield juju_instance
-        finally:
-            print_debug_log(juju_instance)
+        yield juju_instance
     else:
         with jubilant.temp_model(keep=keep_models) as juju_instance:
             juju_instance.wait_timeout = WAIT_TIMEOUT
-            try:
-                yield juju_instance
-            finally:
-                print_debug_log(juju_instance)
+            yield juju_instance
 
 
 @pytest.fixture(scope="session")
