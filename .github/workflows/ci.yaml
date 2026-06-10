@@ -235,6 +235,13 @@ jobs:
           juju add-model kubeflow --config automatically-retry-hooks=false
           tox -e bundle-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/
 
+      - name: Start tmate session for debugging
+        if: failure()
+        timeout-minutes: 360
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
       - name: Get all
         run: kubectl get all -A
         if: failure()

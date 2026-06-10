@@ -16,7 +16,6 @@ from .helpers.bundle_ops import (
     assert_no_charm_resources_left,
     assert_prediction,
     assert_route_programmed,
-    dump_debug_state,
     ensure_gateway,
     install_envoy_ai_gateway,
     install_envoy_gateway,
@@ -159,7 +158,6 @@ def test_bundle_deploy_and_predict(juju: jubilant.Juju, request: pytest.FixtureR
 
         logger.info("All bundle integration tests passed!")
     except Exception:
-        dump_debug_state()
         raise
 
 
@@ -195,5 +193,4 @@ def test_bundle_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
 
         logger.info("Bundle cleanup test passed: no charm-owned resources left")
     except Exception:
-        dump_debug_state()
         raise
