@@ -5,13 +5,32 @@ metadata:
   namespace: default
 spec:
   model:
-    uri: hf://facebook/opt-125m
-    name: facebook/opt-125m
+    uri: hf://EleutherAI/pythia-70m
+    name: EleutherAI/pythia-70m
+  storageInitializer:
+    enabled: false
   replicas: 1
   router:
     scheduler: {}
     route: {}
   template:
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: docker.io/kserve/storage-initializer:v0.17.0
+        args:
+          - hf://EleutherAI/pythia-70m
+          - /mnt/models
+        env:
+          - name: HF_HUB_DISABLE_XET
+            value: "1"
+          - name: HF_HUB_ENABLE_HF_TRANSFER
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
     containers:
       - name: main
         image: quay.io/pierdipi/vllm-cpu:latest
@@ -24,6 +43,10 @@ spec:
         env:
           - name: VLLM_LOGGING_LEVEL
             value: INFO
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
         resources:
           requests:
             cpu: "500m"
@@ -34,6 +57,23 @@ spec:
   prefill:
     replicas: 1
     template:
+      volumes:
+        - name: kserve-pvc-source
+          emptyDir: {}
+      initContainers:
+        - name: storage-initializer
+          image: docker.io/kserve/storage-initializer:v0.17.0
+          args:
+            - hf://EleutherAI/pythia-70m
+            - /mnt/models
+          env:
+            - name: HF_HUB_DISABLE_XET
+              value: "1"
+            - name: HF_HUB_ENABLE_HF_TRANSFER
+              value: "1"
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
       containers:
         - name: main
           image: quay.io/pierdipi/vllm-cpu:latest
@@ -44,6 +84,10 @@ spec:
           env:
             - name: VLLM_LOGGING_LEVEL
               value: INFO
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+              readOnly: true
           resources:
             requests:
               cpu: "500m"

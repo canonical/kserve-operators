@@ -329,7 +329,7 @@ def assert_gateway_programmed(gateway_name: str, gateway_namespace: str):
             raise AssertionError("Gateway not yet programmed")
 
 
-def apply_llmisvc_example(manifest_path: str):
+def apply_llmisvc_example(manifest_path: str, name: str = LLMISVC_NAME):
     logger.info("Applying LLMInferenceService example from %s...", manifest_path)
     for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
@@ -361,7 +361,7 @@ def apply_llmisvc_example(manifest_path: str):
                     "default",
                     "get",
                     "llminferenceservice",
-                    LLMISVC_NAME,
+                    name,
                     "-o",
                     "json",
                 ]
@@ -390,7 +390,7 @@ def apply_llmisvc_example(manifest_path: str):
             )
 
 
-def delete_llmisvc_example(manifest_path: str):
+def delete_llmisvc_example(manifest_path: str, name: str = LLMISVC_NAME):
     """Delete the LLMInferenceService example and wait for it to be fully gone.
 
     This must run while the kserve controller is still deployed. The
@@ -407,7 +407,7 @@ def delete_llmisvc_example(manifest_path: str):
         text=True,
     )
 
-    logger.info("Waiting for LLMInferenceService '%s' to be fully removed...", LLMISVC_NAME)
+    logger.info("Waiting for LLMInferenceService '%s' to be fully removed...", name)
     for attempt in RETRY_FOR_TEN_MINUTES:
         with attempt:
             result = subprocess.run(
@@ -417,7 +417,7 @@ def delete_llmisvc_example(manifest_path: str):
                     "default",
                     "get",
                     "llminferenceservice",
-                    LLMISVC_NAME,
+                    name,
                     "--ignore-not-found",
                     "-o",
                     "name",
@@ -428,13 +428,12 @@ def delete_llmisvc_example(manifest_path: str):
             )
             if result.stdout.strip():
                 raise AssertionError(
-                    f"LLMInferenceService '{LLMISVC_NAME}' still present "
-                    "(finalizer not cleared yet)"
+                    f"LLMInferenceService '{name}' still present " "(finalizer not cleared yet)"
                 )
-    logger.info("LLMInferenceService '%s' fully removed", LLMISVC_NAME)
+    logger.info("LLMInferenceService '%s' fully removed", name)
 
 
-def assert_route_programmed():
+def assert_route_programmed(name: str = LLMISVC_NAME):
     output = run_command(
         [
             "kubectl",
@@ -442,22 +441,22 @@ def assert_route_programmed():
             "default",
             "describe",
             "httproute",
-            f"{LLMISVC_NAME}-kserve-route",
+            f"{name}-kserve-route",
         ]
     )
     assert "Accepted" in output
     assert "ResolvedRefs" in output or "Programmed" in output
 
 
-def assert_inferencepool_and_workload_resources():
+def assert_inferencepool_and_workload_resources(name: str = LLMISVC_NAME):
     inferencepools = run_command(["kubectl", "-n", "default", "get", "inferencepool"])
-    assert LLMISVC_NAME in inferencepools
+    assert name in inferencepools
 
     services = run_command(["kubectl", "-n", "default", "get", "svc"])
-    assert "test-llm" in services
+    assert name in services
 
     pods = run_command(["kubectl", "-n", "default", "get", "pods", "-o", "wide"])
-    assert "test-llm" in pods
+    assert name in pods
 
 
 def _assert_service_metrics_ports(namespace: str, app_name: str):
@@ -592,10 +591,10 @@ def _gateway_service_name(gateway_name: str) -> str:
     )
 
 
-def assert_prediction(gateway_name: str):
+def assert_prediction(gateway_name: str, name: str = LLMISVC_NAME, model: str = LLMISVC_MODEL_NAME):
     gw_ip = _gateway_ip(gateway_name)
     payload = {
-        "model": LLMISVC_MODEL_NAME,
+        "model": model,
         "prompt": "Say hello in one short sentence.",
         "max_tokens": 32,
         "temperature": 0.2,
@@ -603,7 +602,7 @@ def assert_prediction(gateway_name: str):
 
     if gw_ip:
         response = requests.post(
-            f"http://{gw_ip}/default/{LLMISVC_NAME}/v1/completions",
+            f"http://{gw_ip}/default/{name}/v1/completions",
             headers={"Content-Type": "application/json"},
             json=payload,
             timeout=120,
@@ -632,7 +631,7 @@ def assert_prediction(gateway_name: str):
         for _ in RETRY_FOR_TEN_MINUTES:
             with _:
                 response = requests.post(
-                    f"http://127.0.0.1:8080/default/{LLMISVC_NAME}/v1/completions",
+                    f"http://127.0.0.1:8080/default/{name}/v1/completions",
                     headers={"Content-Type": "application/json"},
                     json=payload,
                     timeout=120,
