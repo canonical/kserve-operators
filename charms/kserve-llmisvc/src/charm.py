@@ -4,10 +4,10 @@
 
 import json
 import logging
-import time
 from base64 import b64encode
 from typing import Dict
 
+import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import (
@@ -18,12 +18,10 @@ from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from lightkube import ApiError
+from lightkube import ApiError, Client
 from lightkube.core.exceptions import LoadResourceError
-from lightkube.generic_resource import (
-    create_namespaced_resource,
-    load_in_cluster_generic_resources,
-)
+from lightkube.generic_resource import load_in_cluster_generic_resources
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from ops import main
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -67,15 +65,13 @@ WORKLOAD_POD_LABEL_SELECTOR = "app.kubernetes.io/part-of=llminferenceservice"
 KRH_SCOPE_BASE = "kserve-llmisvc-base"
 KRH_SCOPE_SCHEDULER_CONFIG = "kserve-llmisvc-scheduler-config"
 
-# LLMInferenceService custom resource coordinates. The charm-managed controller
-# attaches the `serving.kserve.io/llmisvc-finalizer` to these CRs, so they must
-# be deleted (and their finalizers cleared by the running controller) before the
-# CRD itself is removed. v1alpha2 is the CRD storage version.
-LLMISVC_GROUP = "serving.kserve.io"
-LLMISVC_VERSION = "v1alpha2"
-LLMISVC_KIND = "LLMInferenceService"
-LLMISVC_PLURAL = "llminferenceservices"
-# How long to wait for the controller to clear finalizers during removal.
+# The charm-managed controller attaches the `serving.kserve.io/llmisvc-finalizer`
+# to LLMInferenceService CRs. Deleting the LLMInferenceService CRD while the
+# controller is still running cascades deletion to all its CRs and lets the
+# controller clear their finalizers; the CRD must be fully gone before the
+# controller workload is torn down, otherwise the CRD (and its CRs) get stuck
+# terminating.
+# How long to wait for the CRD (and the CRs it cascades to) to be removed.
 LLMISVC_DELETION_TIMEOUT = 300
 LLMISVC_DELETION_POLL_INTERVAL = 5
 
@@ -98,6 +94,14 @@ def parse_images_config(config: str) -> Dict:
     if not isinstance(images, dict):
         raise ErrorWithStatus("custom_images must be a YAML/JSON object", BlockedStatus)
     return images
+
+
+# For errors when a K8s object exists while it shouldn't
+class ObjectStillExistsError(Exception):
+    """Exception for when a K8s object exists, while it should have been removed."""
+
+    def __init__(self, resource_name: str):
+        self.resource_name = resource_name
 
 
 class KServeLLMISVCCharm(CharmBase):
@@ -419,84 +423,94 @@ class KServeLLMISVCCharm(CharmBase):
             log.exception("Kubernetes API error during reconcile")
             raise
 
-    def _delete_llm_inference_services(self) -> None:
-        """Delete all LLMInferenceService CRs and wait for finalizers to clear.
+    @tenacity.retry(
+        stop=tenacity.stop_after_delay(LLMISVC_DELETION_TIMEOUT),
+        wait=tenacity.wait_fixed(LLMISVC_DELETION_POLL_INTERVAL),
+        reraise=True,
+    )
+    def ensure_resource_is_deleted(self, client: Client, resource_kind, resource_name: str):
+        """Block until a resource no longer exists, retrying on each check.
 
-        This must run while the controller workload is still alive so it can
-        process the ``serving.kserve.io/llmisvc-finalizer`` on each CR. If the
-        CRs were left in place, deleting the CRD would leave them (and the CRD)
-        stuck terminating once the controller pod is gone.
+        Used to wait for the LLMInferenceService CRD to finish terminating.
+        Deleting the CRD cascades deletion to all its CRs, whose finalizers are
+        cleared by the still-running controller; the workload must not be torn
+        down until that completes.
+
+        Args:
+            client: The lightkube client to use for talking to K8s.
+            resource_kind: The lightkube resource class to check.
+            resource_name: The name of the resource to check.
+
+        Raises:
+            ApiError: From lightkube, if there was an error aside from 404.
+            ObjectStillExistsError: If the resource still exists after retries.
         """
-        llm_isvc_resource = create_namespaced_resource(
-            group=LLMISVC_GROUP,
-            version=LLMISVC_VERSION,
-            kind=LLMISVC_KIND,
-            plural=LLMISVC_PLURAL,
-        )
-        client = self.base_resource_handler.lightkube_client
-
+        log.info("Checking if resource exists: %s", resource_name)
         try:
-            existing = list(client.list(llm_isvc_resource, namespace="*"))
+            client.get(resource_kind, name=resource_name)
+            log.info('Resource "%s" exists, retrying...', resource_name)
+            raise ObjectStillExistsError(resource_name)
         except ApiError as e:
             if e.status.code == 404:
-                # CRD is already gone, so there are no CRs to clean up.
+                log.info('Resource "%s" does not exist!', resource_name)
                 return
+            # Raise any other error
             raise
-
-        if not existing:
-            return
-
-        delete_many(client=client, objs=existing, ignore_missing=True, logger=log)
-
-        deadline = time.monotonic() + LLMISVC_DELETION_TIMEOUT
-        remaining = existing
-        while time.monotonic() < deadline:
-            remaining = list(client.list(llm_isvc_resource, namespace="*"))
-            if not remaining:
-                log.info("All LLMInferenceService resources removed")
-                return
-            time.sleep(LLMISVC_DELETION_POLL_INTERVAL)
-
-        remaining_names = [f"{cr.metadata.namespace}/{cr.metadata.name}" for cr in remaining]
-        log.warning(
-            "Timed out waiting for LLMInferenceService resources to be removed: %s",
-            remaining_names,
-        )
 
     def _on_remove(self, _):
         """Delete resources rendered by llmisvc handlers."""
         self.unit.status = MaintenanceStatus("Removing k8s resources")
 
-        # Delete user-created LLMInferenceService CRs first, while the controller
-        # is still running to clear their finalizers. Otherwise the CRD deletion
-        # below would get stuck terminating.
+        base_manifests = self._sync_handler_resource_types(self.base_resource_handler)
+        scheduler_has_manifests = bool(
+            self._sync_handler_resource_types(self.scheduler_config_resource_handler)
+        )
+
+        client = self.base_resource_handler.lightkube_client
         try:
-            self._delete_llm_inference_services()
+            # Delete the scheduler-config LLMInferenceServiceConfig CRs first,
+            # while their CRD still exists. Once the CRDs are removed below the
+            # serving.kserve.io API endpoints disappear and this handler can no
+            # longer list its resources, so it must run before the CRD deletion.
+            if scheduler_has_manifests:
+                self.scheduler_config_resource_handler.delete(ignore_missing=True)
+
+            # Delete the LLMInferenceService CRD next, while the controller is
+            # still running. Removing the CRD cascades deletion to all its CRs
+            # and the controller clears their finalizers. Block until the CRD is
+            # fully gone before deleting anything else, otherwise the CRD (and
+            # its CRs) would get stuck terminating once the controller workload
+            # is torn down.
+            crd_manifests = [
+                resource
+                for resource in base_manifests
+                if isinstance(resource, CustomResourceDefinition)
+            ]
+            if crd_manifests:
+                delete_many(client, crd_manifests, ignore_missing=True, logger=log)
+                for crd in crd_manifests:
+                    self.ensure_resource_is_deleted(
+                        client=client,
+                        resource_kind=CustomResourceDefinition,
+                        resource_name=crd.metadata.name,
+                    )
+
+            # Finally delete the remaining base resources (webhooks, RBAC, the
+            # already-removed CRDs). These are all standard Kubernetes resource
+            # types whose API endpoints survive CRD deletion, so listing them
+            # here is safe.
+            if base_manifests:
+                self.base_resource_handler.delete(ignore_missing=True)
         except ApiError as e:
-            log.warning("Failed to delete LLMInferenceService resources: %s", e)
-
-        sync_order = [
-            self.base_resource_handler,
-            self.scheduler_config_resource_handler,
-        ]
-        handlers_with_manifests = {}
-
-        for handler in sync_order:
-            handlers_with_manifests[handler] = bool(self._sync_handler_resource_types(handler))
-
-        delete_order = [
-            self.scheduler_config_resource_handler,
-            self.base_resource_handler,
-        ]
-        for handler in delete_order:
-            try:
-                if handlers_with_manifests.get(handler, False):
-                    handler.delete(ignore_missing=True)
-            except ApiError as e:
-                if e.status.code == 404:
-                    continue
+            if e.status.code != 404:
                 log.warning("Failed to delete resources with error: %s", e)
                 raise
+        except ObjectStillExistsError as e:
+            log.warning(
+                "Failed to remove resource: %s. Manual intervention for cleanup might be required",
+                e.resource_name,
+            )
+            raise
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
     def _gen_certs_if_missing(self) -> None:

@@ -785,7 +785,7 @@ def assert_no_charm_resources_left():
     # cluster-scoped ones like clusterroles/webhooks) can lag behind Juju
     # reporting the applications as removed. Retry the check so GC has time to
     # finish before we assert the cluster is clean.
-    for attempt in RETRY_FOR_TEN_MINUTES:
+    for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
             leftovers = []
             for check_name, command in checks:

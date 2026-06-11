@@ -22,6 +22,7 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
+from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charmed_kubeflow_chisme.service_mesh import generate_allow_all_authorization_policy
 from charmed_kubeflow_chisme.types import LightkubeResourcesList
@@ -783,14 +784,15 @@ class KServeControllerCharm(CharmBase):
 
     def _remove_cluster_runtimes_resources(self) -> None:
         """Delete ClusterServingRuntime resources and wait until they are gone."""
+        client = self.cluster_runtimes_resource_handler.lightkube_client
         runtimes_manifests = self._sync_handler_resource_types(
             self.cluster_runtimes_resource_handler
         )
         if runtimes_manifests:
-            self.cluster_runtimes_resource_handler.delete(ignore_missing=True)
+            delete_many(client, runtimes_manifests, logger=log)
         for runtime_name, runtime_kind in _extract_runtimes_names(runtimes_manifests).items():
             self.ensure_resource_is_deleted(
-                client=self.cluster_runtimes_resource_handler.lightkube_client,
+                client=client,
                 resource_kind=runtime_kind,
                 resource_name=runtime_name,
             )
@@ -800,7 +802,7 @@ class KServeControllerCharm(CharmBase):
         for handler in handlers:
             manifests = self._sync_handler_resource_types(handler)
             if manifests:
-                handler.delete(ignore_missing=True)
+                delete_many(handler.lightkube_client, manifests, logger=log)
 
     @tenacity.retry(stop=tenacity.stop_after_delay(300), wait=tenacity.wait_fixed(5), reraise=True)
     def ensure_resource_is_deleted(self, client: Client, resource_kind, resource_name: str):

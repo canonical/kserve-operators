@@ -224,10 +224,10 @@ def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
     # resources (and waits for their finalizers) during its remove hook, so no
     # explicit CR cleanup is needed here.
     logger.info("Removing charm applications from Juju model")
-    juju.remove_application("kserve-llmisvc", force=True)
-    juju.remove_application(GATEWAY_METADATA_PROVIDER_CHARM, force=True)
-    juju.remove_application("kserve-controller", force=True)
-    juju.remove_application(LWS_CONTROLLER_TESTER_CHARM, force=True)
+    juju.remove_application("kserve-llmisvc")
+    juju.remove_application(GATEWAY_METADATA_PROVIDER_CHARM)
+    juju.remove_application("kserve-controller")
+    juju.remove_application(LWS_CONTROLLER_TESTER_CHARM)
 
     logger.info("Waiting for charm applications to disappear from Juju model")
     juju.wait(
