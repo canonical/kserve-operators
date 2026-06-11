@@ -9,6 +9,7 @@ import time
 from contextlib import suppress
 
 import requests
+from jinja2 import Template
 
 from .command import run_command
 from .retry import (
@@ -329,12 +330,20 @@ def assert_gateway_programmed(gateway_name: str, gateway_namespace: str):
             raise AssertionError("Gateway not yet programmed")
 
 
-def apply_llmisvc_example(manifest_path: str, name: str = LLMISVC_NAME):
+def _render_manifest(manifest_path: str, context: dict) -> str:
+    """Render a Jinja2 LLMInferenceService manifest template with the given context."""
+    with open(manifest_path, "r") as template_file:
+        return Template(template_file.read()).render(context)
+
+
+def apply_llmisvc_example(manifest_path: str, context: dict, name: str = LLMISVC_NAME):
     logger.info("Applying LLMInferenceService example from %s...", manifest_path)
+    rendered_manifest = _render_manifest(manifest_path, context)
     for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
             result = subprocess.run(
-                ["kubectl", "apply", "-f", manifest_path],
+                ["kubectl", "apply", "-f", "-"],
+                input=rendered_manifest,
                 check=False,
                 text=True,
                 capture_output=True,
@@ -390,7 +399,7 @@ def apply_llmisvc_example(manifest_path: str, name: str = LLMISVC_NAME):
             )
 
 
-def delete_llmisvc_example(manifest_path: str, name: str = LLMISVC_NAME):
+def delete_llmisvc_example(name: str = LLMISVC_NAME):
     """Delete the LLMInferenceService example and wait for it to be fully gone.
 
     This must run while the kserve controller is still deployed. The
@@ -400,9 +409,18 @@ def delete_llmisvc_example(manifest_path: str, name: str = LLMISVC_NAME):
     resource is stuck, and the ``llminferenceservices.serving.kserve.io`` CRD
     can never finish terminating -- leaving charm-owned resources behind.
     """
-    logger.info("Deleting LLMInferenceService example from %s...", manifest_path)
+    logger.info("Deleting LLMInferenceService '%s'...", name)
     subprocess.run(
-        ["kubectl", "delete", "-f", manifest_path, "--ignore-not-found", "--wait=false"],
+        [
+            "kubectl",
+            "-n",
+            "default",
+            "delete",
+            "llminferenceservice",
+            name,
+            "--ignore-not-found",
+            "--wait=false",
+        ],
         check=True,
         text=True,
     )

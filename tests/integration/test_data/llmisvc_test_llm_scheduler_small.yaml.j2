@@ -19,7 +19,7 @@ spec:
         emptyDir: {}
     initContainers:
       - name: storage-initializer
-        image: docker.io/kserve/storage-initializer:v0.17.0
+        image: {{ storage_initializer_image }}
         args:
           - hf://EleutherAI/pythia-70m
           - /mnt/models
@@ -33,7 +33,7 @@ spec:
             mountPath: /mnt/models
     containers:
       - name: main
-        image: quay.io/pierdipi/vllm-cpu:latest
+        image: {{ vllm_image }}
         securityContext:
           runAsNonRoot: false
         env:

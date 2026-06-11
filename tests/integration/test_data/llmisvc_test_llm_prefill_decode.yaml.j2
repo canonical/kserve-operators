@@ -19,7 +19,7 @@ spec:
         emptyDir: {}
     initContainers:
       - name: storage-initializer
-        image: docker.io/kserve/storage-initializer:v0.17.0
+        image: {{ storage_initializer_image }}
         args:
           - hf://EleutherAI/pythia-70m
           - /mnt/models
@@ -33,7 +33,7 @@ spec:
             mountPath: /mnt/models
     containers:
       - name: main
-        image: quay.io/pierdipi/vllm-cpu:latest
+        image: {{ vllm_image }}
         args:
           - "--enforce-eager"
           - "--port"
@@ -43,6 +43,8 @@ spec:
         env:
           - name: VLLM_LOGGING_LEVEL
             value: INFO
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "1"
         volumeMounts:
           - name: kserve-pvc-source
             mountPath: /mnt/models
@@ -62,7 +64,7 @@ spec:
           emptyDir: {}
       initContainers:
         - name: storage-initializer
-          image: docker.io/kserve/storage-initializer:v0.17.0
+          image: {{ storage_initializer_image }}
           args:
             - hf://EleutherAI/pythia-70m
             - /mnt/models
@@ -76,7 +78,7 @@ spec:
               mountPath: /mnt/models
       containers:
         - name: main
-          image: quay.io/pierdipi/vllm-cpu:latest
+          image: {{ vllm_image }}
           args:
             - "--enable-chunked-prefill"
           securityContext:
@@ -84,6 +86,8 @@ spec:
           env:
             - name: VLLM_LOGGING_LEVEL
               value: INFO
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "1"
           volumeMounts:
             - name: kserve-pvc-source
               mountPath: /mnt/models
