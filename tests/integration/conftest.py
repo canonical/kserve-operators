@@ -8,7 +8,6 @@ import shutil
 from pathlib import Path
 
 import jubilant
-import lightkube
 import pytest
 
 WAIT_TIMEOUT = 40 * 60
@@ -68,11 +67,6 @@ def juju(request: pytest.FixtureRequest):
         with jubilant.temp_model(keep=keep_models) as juju_instance:
             juju_instance.wait_timeout = WAIT_TIMEOUT
             yield juju_instance
-
-
-@pytest.fixture(scope="session")
-def lightkube_client() -> lightkube.Client:
-    return lightkube.Client(field_manager="kserve-bundle-tests")
 
 
 def pytest_addoption(parser):

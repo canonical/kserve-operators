@@ -7,25 +7,31 @@ from pathlib import Path
 import yaml
 
 
-def resolve_charm_path(charms_path: str, charm_name: str) -> Path:
-    base = Path(charms_path)
-    expected = base / charm_name / f"{charm_name}_ubuntu@24.04-amd64.charm"
-    if expected.exists():
-        return expected.absolute()
+def _resolve_single_charm(directory: Path, charm_name: str) -> Path:
+    """Return the single ``<charm_name>_*.charm`` artifact under ``directory``.
 
-    candidates = list((base / charm_name).glob(f"{charm_name}_*.charm"))
+    Raises ``RuntimeError`` if zero or more than one artifact is found.
+    """
+    candidates = list(directory.glob(f"{charm_name}_*.charm"))
     if len(candidates) == 1:
         return candidates[0].absolute()
     if len(candidates) > 1:
         raise RuntimeError(
-            f"Multiple charm artifacts found for {charm_name} under {(base / charm_name)!s}: "
+            f"Multiple charm artifacts found for {charm_name} under {directory!s}: "
             f"{[str(c) for c in candidates]}"
         )
-
     raise RuntimeError(
-        f"No charm artifact found for {charm_name}. Expected {expected!s} or a single "
-        f"{charm_name}_*.charm under {(base / charm_name)!s}."
+        f"No charm artifact found for {charm_name} under {directory!s}. "
+        f"Expected a single {charm_name}_*.charm file."
     )
+
+
+def resolve_charm_path(charms_path: str, charm_name: str) -> Path:
+    directory = Path(charms_path) / charm_name
+    expected = directory / f"{charm_name}_ubuntu@24.04-amd64.charm"
+    if expected.exists():
+        return expected.absolute()
+    return _resolve_single_charm(directory, charm_name)
 
 
 def resolve_charm_resources(charm_name: str) -> dict[str, str]:
@@ -51,16 +57,5 @@ def resolve_charm_resources(charm_name: str) -> dict[str, str]:
 
 
 def resolve_test_charm_path(test_charm_name: str) -> Path:
-    base = Path(__file__).resolve().parents[1] / test_charm_name
-    candidates = list(base.glob(f"{test_charm_name}_*.charm"))
-    if len(candidates) == 1:
-        return candidates[0].absolute()
-    if len(candidates) > 1:
-        raise RuntimeError(
-            f"Multiple charm artifacts found for {test_charm_name} under {base!s}: "
-            f"{[str(c) for c in candidates]}"
-        )
-    raise RuntimeError(
-        f"No charm artifact found for {test_charm_name} under {base!s}. "
-        f"Expected a single {test_charm_name}_*.charm file."
-    )
+    directory = Path(__file__).resolve().parents[1] / test_charm_name
+    return _resolve_single_charm(directory, test_charm_name)
