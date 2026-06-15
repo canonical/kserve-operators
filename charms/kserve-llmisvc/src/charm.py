@@ -428,18 +428,22 @@ class KServeLLMISVCCharm(CharmBase):
         wait=tenacity.wait_fixed(LLMISVC_DELETION_POLL_INTERVAL),
         reraise=True,
     )
-    def ensure_resource_is_deleted(self, client: Client, resource_kind, resource_name: str):
+    def ensure_resource_is_deleted(
+        self, client: Client, resource_kind, resource_name: str, namespace: str = None
+    ):
         """Block until a resource no longer exists, retrying on each check.
 
-        Used to wait for the LLMInferenceService CRD to finish terminating.
-        Deleting the CRD cascades deletion to all its CRs, whose finalizers are
-        cleared by the still-running controller; the workload must not be torn
-        down until that completes.
+        Used to wait for the LLMInferenceService CRD and the base resources
+        (e.g. webhook configurations) to finish terminating. Deletion is async,
+        so the resources may linger after ``delete()`` returns; the workload
+        must not be torn down until they are actually gone, otherwise orphaned
+        resources (especially webhooks) can be left behind in the cluster.
 
         Args:
             client: The lightkube client to use for talking to K8s.
             resource_kind: The lightkube resource class to check.
             resource_name: The name of the resource to check.
+            namespace: The namespace of the resource, or None if cluster-scoped.
 
         Raises:
             ApiError: From lightkube, if there was an error aside from 404.
@@ -447,7 +451,7 @@ class KServeLLMISVCCharm(CharmBase):
         """
         log.info("Checking if resource exists: %s", resource_name)
         try:
-            client.get(resource_kind, name=resource_name)
+            client.get(resource_kind, name=resource_name, namespace=namespace)
             log.info('Resource "%s" exists, retrying...', resource_name)
             raise ObjectStillExistsError(resource_name)
         except ApiError as e:
@@ -456,6 +460,71 @@ class KServeLLMISVCCharm(CharmBase):
                 return
             # Raise any other error
             raise
+
+    def _ensure_all_deleted(self, client: Client, resources: list) -> None:
+        """Wait for every resource to be deleted, reporting all that linger.
+
+        Each resource is checked independently so that a single stuck resource
+        does not mask the others: every lingering resource is logged, and a
+        single ``ObjectStillExistsError`` listing all of them is raised at the
+        end if any remained.
+        """
+        stuck = []
+        for resource in resources:
+            try:
+                self.ensure_resource_is_deleted(
+                    client=client,
+                    resource_kind=type(resource),
+                    resource_name=resource.metadata.name,
+                    namespace=resource.metadata.namespace,
+                )
+            except ObjectStillExistsError as e:
+                log.warning(
+                    "Resource %s still present after deletion; "
+                    "continuing to check the remaining resources",
+                    e.resource_name,
+                )
+                stuck.append(e.resource_name)
+        if stuck:
+            raise ObjectStillExistsError(", ".join(stuck))
+
+    def _delete_crds_and_wait(self, client: Client, base_manifests: list) -> None:
+        """Delete the LLMInferenceService CRD(s) and block until they are gone.
+
+        Removing the CRD while the controller is still running cascades deletion
+        to all its CRs and lets the controller clear their finalizers. Block
+        until the CRD is fully gone before deleting anything else, otherwise the
+        CRD (and its CRs) would get stuck terminating once the controller
+        workload is torn down.
+        """
+        crd_manifests = [
+            resource
+            for resource in base_manifests
+            if isinstance(resource, CustomResourceDefinition)
+        ]
+        if not crd_manifests:
+            return
+        delete_many(client, crd_manifests, ignore_missing=True, logger=log)
+        self._ensure_all_deleted(client, crd_manifests)
+
+    def _delete_base_resources_and_wait(self, client: Client, base_manifests: list) -> None:
+        """Delete the remaining base resources and block until they are gone.
+
+        These are standard Kubernetes resources (webhooks, RBAC, the webhook
+        Service) whose API endpoints survive CRD deletion. Deletion is async, so
+        block until they are actually gone to avoid tearing down the workload
+        while webhooks (or other resources) linger and get orphaned in the
+        cluster. The CRDs were already waited on separately, so skip them here.
+        """
+        if not base_manifests:
+            return
+        self.base_resource_handler.delete(ignore_missing=True)
+        non_crd_manifests = [
+            resource
+            for resource in base_manifests
+            if not isinstance(resource, CustomResourceDefinition)
+        ]
+        self._ensure_all_deleted(client, non_crd_manifests)
 
     def _on_remove(self, _):
         """Delete resources rendered by llmisvc handlers."""
@@ -475,32 +544,10 @@ class KServeLLMISVCCharm(CharmBase):
             if scheduler_has_manifests:
                 self.scheduler_config_resource_handler.delete(ignore_missing=True)
 
-            # Delete the LLMInferenceService CRD next, while the controller is
-            # still running. Removing the CRD cascades deletion to all its CRs
-            # and the controller clears their finalizers. Block until the CRD is
-            # fully gone before deleting anything else, otherwise the CRD (and
-            # its CRs) would get stuck terminating once the controller workload
-            # is torn down.
-            crd_manifests = [
-                resource
-                for resource in base_manifests
-                if isinstance(resource, CustomResourceDefinition)
-            ]
-            if crd_manifests:
-                delete_many(client, crd_manifests, ignore_missing=True, logger=log)
-                for crd in crd_manifests:
-                    self.ensure_resource_is_deleted(
-                        client=client,
-                        resource_kind=CustomResourceDefinition,
-                        resource_name=crd.metadata.name,
-                    )
-
-            # Finally delete the remaining base resources (webhooks, RBAC, the
-            # already-removed CRDs). These are all standard Kubernetes resource
-            # types whose API endpoints survive CRD deletion, so listing them
-            # here is safe.
-            if base_manifests:
-                self.base_resource_handler.delete(ignore_missing=True)
+            # Then delete the CRD (cascading to its CRs) and wait for it to be
+            # gone, then the remaining base resources (webhooks, RBAC, ...).
+            self._delete_crds_and_wait(client, base_manifests)
+            self._delete_base_resources_and_wait(client, base_manifests)
         except ApiError as e:
             if e.status.code != 404:
                 log.warning("Failed to delete resources with error: %s", e)

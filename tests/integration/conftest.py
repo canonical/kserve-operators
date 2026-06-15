@@ -29,7 +29,6 @@ def _configure_juju_cli_path() -> None:
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "deploy: mark test as a deployment test")
     config.addinivalue_line(
         "markers",
         "abort_on_fail: abort the entire test session if this test fails",

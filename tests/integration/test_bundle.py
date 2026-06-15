@@ -33,15 +33,17 @@ from .helpers.cluster_setup import (
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
 logger = logging.getLogger(__name__)
+# Quiet jubilant's per-poll wait logging, which is very verbose during the long
+# waits in these tests. See
+# https://documentation.ubuntu.com/jubilant/reference/jubilant/#jubilant.Juju.wait
+logging.getLogger("jubilant.wait").setLevel("WARNING")
 
 GATEWAY_API_VERSION = "v1.4.1"
 GIE_VERSION = "v1.3.0"
 ENVOY_GATEWAY_VERSION = "v1.6.3"
 ENVOY_AI_GATEWAY_VERSION = "v0.5.0"
 LWS_VERSION = "v0.7.0"
-KSERVE_NAMESPACE = "kubeflow"
 GATEWAY_NAME = "kserve-ingress-gateway"
-GATEWAY_NAMESPACE = "kubeflow"
 CONTROLLER_APP = "kserve-controller"
 LLMISVC_APP = "kserve-llmisvc"
 GATEWAY_METADATA_PROVIDER_CHARM = "gateway-metadata-provider-tester"
@@ -80,7 +82,6 @@ LLMISVC_EXAMPLES = [
 ]
 
 
-@pytest.mark.deploy
 @pytest.mark.abort_on_fail
 def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     charms_path = request.config.getoption("--charms-path")
@@ -116,9 +117,9 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
 
     logger.info("Creating Gateway resource")
     ensure_gateway(
-        kserve_namespace=KSERVE_NAMESPACE,
+        kserve_namespace=juju.model,
         gateway_name=GATEWAY_NAME,
-        gateway_namespace=GATEWAY_NAMESPACE,
+        gateway_namespace=juju.model,
     )
 
     logger.info("Installing LWS Helm chart")
@@ -177,12 +178,11 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     juju.wait(jubilant.all_active, successes=1)
 
     logger.info("Waiting for Gateway to be programmed")
-    assert_gateway_programmed(gateway_name=GATEWAY_NAME, gateway_namespace=GATEWAY_NAMESPACE)
+    assert_gateway_programmed(gateway_name=GATEWAY_NAME, gateway_namespace=juju.model)
 
     logger.info("Charm setup complete")
 
 
-@pytest.mark.deploy
 @pytest.mark.abort_on_fail
 @pytest.mark.parametrize(
     "example_name, example_path",
@@ -202,7 +202,7 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
     assert_inferencepool_and_workload_resources(name=example_name)
 
     logger.info("Example '%s': verifying observability metrics endpoints", example_name)
-    assert_llmisvc_metrics_endpoints(namespace=KSERVE_NAMESPACE)
+    assert_llmisvc_metrics_endpoints(namespace=juju.model)
 
     logger.info("Example '%s': testing prediction endpoint", example_name)
     assert_prediction(gateway_name=GATEWAY_NAME, name=example_name)
@@ -211,7 +211,6 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
     delete_llmisvc_example(name=example_name)
 
 
-@pytest.mark.deploy
 def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
     logger.info("Starting bundle cleanup test")
     logger.info("Removing charm applications from Juju model")

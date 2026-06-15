@@ -235,13 +235,6 @@ jobs:
           juju add-model kubeflow --config automatically-retry-hooks=false
           tox -e bundle-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/
 
-      - name: Start tmate session for debugging
-        if: failure()
-        timeout-minutes: 360
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-
       - name: Get all
         run: kubectl get all -A
         if: failure()
@@ -261,6 +254,26 @@ jobs:
       - name: Get juju status
         run: juju status --relations
         if: always()
+
+      - name: Get kserve-controller workload logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-controller -c kserve-controller
+        if: failure()
+
+      - name: Get kserve-controller charm logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-controller -c charm
+        if: failure()
+
+      - name: Get kserve-llmisvc workload logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c llmisvc-controller
+        if: failure()
+
+      - name: Get kserve-llmisvc charm logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c charm
+        if: failure()
+
+      - name: Collect charm debug artifacts
+        uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
+        if: failure()
 
   release:
     strategy:
