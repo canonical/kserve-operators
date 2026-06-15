@@ -7,6 +7,26 @@
 import logging
 
 import requests
+from lightkube.operators import in_
+from lightkube.resources.admissionregistration_v1 import (
+    MutatingWebhookConfiguration,
+    ValidatingWebhookConfiguration,
+)
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
+from lightkube.resources.apps_v1 import StatefulSet
+from lightkube.resources.core_v1 import (
+    ConfigMap,
+    Pod,
+    Secret,
+    Service,
+    ServiceAccount,
+)
+from lightkube.resources.rbac_authorization_v1 import (
+    ClusterRole,
+    ClusterRoleBinding,
+    Role,
+    RoleBinding,
+)
 
 from .constants import (
     LLMISVC_AGGREGATED_METRICS_PORT,
@@ -19,10 +39,36 @@ from .constants import (
     NAMESPACE_DEFAULT,
     NAMESPACE_ENVOY_GATEWAY,
 )
-from .kubectl import kubectl, kubectl_get_json, port_forward
+from .k8s import (
+    Gateway,
+    HTTPRoute,
+    generic_resource_for_crd,
+    get_client,
+)
+from .kubectl import port_forward
 from .retry import RETRY_FOR_TEN_MINUTES, RETRY_FOR_THREE_MINUTES
 
 logger = logging.getLogger(__name__)
+
+# Namespaced and cluster-scoped resource kinds that charms own. Used to assert
+# the cluster is clean after the applications are removed.
+NAMESPACED_RESOURCE_KINDS = (
+    Pod,
+    Service,
+    StatefulSet,
+    ConfigMap,
+    Secret,
+    ServiceAccount,
+    Role,
+    RoleBinding,
+)
+CLUSTER_RESOURCE_KINDS = (
+    ClusterRole,
+    ClusterRoleBinding,
+    ValidatingWebhookConfiguration,
+    MutatingWebhookConfiguration,
+    CustomResourceDefinition,
+)
 
 _COMPLETION_PAYLOAD = {
     "prompt": "Say hello in one short sentence.",
@@ -33,45 +79,63 @@ _COMPLETION_PAYLOAD = {
 
 def assert_gateway_programmed(gateway_name: str, gateway_namespace: str) -> None:
     logger.info("Waiting for Gateway '%s' to be programmed...", gateway_name)
+    client = get_client()
     for attempt in RETRY_FOR_TEN_MINUTES:
         with attempt:
-            gateway_data = kubectl_get_json("-n", gateway_namespace, "get", "gateway", gateway_name)
-            conditions = gateway_data.get("status", {}).get("conditions", [])
+            gateway = client.get(Gateway, name=gateway_name, namespace=gateway_namespace)
+            conditions = (gateway.status or {}).get("conditions", [])
             logger.info("Gateway conditions: %s", conditions)
 
-            for condition in conditions:
-                if condition.get("type") == "Accepted" and condition.get("status") == "True":
-                    logger.info("Gateway is Accepted and Programmed")
-                    return
+            true_conditions = {
+                condition.get("type")
+                for condition in conditions
+                if condition.get("status") == "True"
+            }
+            # "Accepted" alone only means the spec is valid; the data plane is
+            # not necessarily routable until "Programmed" is also True.
+            if {"Accepted", "Programmed"} <= true_conditions:
+                logger.info("Gateway is Accepted and Programmed")
+                return
 
-            if conditions:
-                logger.info(
-                    "Gateway not ready yet. Conditions: %s",
-                    [(c.get("type"), c.get("status"), c.get("reason")) for c in conditions],
-                )
+            logger.info(
+                "Gateway not ready yet. Conditions: %s",
+                [(c.get("type"), c.get("status"), c.get("reason")) for c in conditions],
+            )
             raise AssertionError("Gateway not yet programmed")
 
 
 def assert_route_programmed(name: str = LLMISVC_NAME) -> None:
-    output = kubectl(["-n", NAMESPACE_DEFAULT, "describe", "httproute", f"{name}-kserve-route"])
-    assert "Accepted" in output
-    assert "ResolvedRefs" in output or "Programmed" in output
+    route = get_client().get(HTTPRoute, name=f"{name}-kserve-route", namespace=NAMESPACE_DEFAULT)
+    parents = (route.status or {}).get("parents", [])
+    condition_types = {
+        condition.get("type")
+        for parent in parents
+        for condition in parent.get("conditions", [])
+        if condition.get("status") == "True"
+    }
+    assert "Accepted" in condition_types
+    assert "ResolvedRefs" in condition_types or "Programmed" in condition_types
 
 
 def assert_inferencepool_and_workload_resources(name: str = LLMISVC_NAME) -> None:
-    inferencepools = kubectl(["-n", NAMESPACE_DEFAULT, "get", "inferencepool"])
-    assert name in inferencepools
+    client = get_client()
+    inferencepool_resource = generic_resource_for_crd(
+        "inferencepools.inference.networking.x-k8s.io"
+    )
 
-    services = kubectl(["-n", NAMESPACE_DEFAULT, "get", "svc"])
-    assert name in services
+    pools = client.list(inferencepool_resource, namespace=NAMESPACE_DEFAULT)
+    assert any(name in pool.metadata.name for pool in pools)
 
-    pods = kubectl(["-n", NAMESPACE_DEFAULT, "get", "pods", "-o", "wide"])
-    assert name in pods
+    services = client.list(Service, namespace=NAMESPACE_DEFAULT)
+    assert any(name in service.metadata.name for service in services)
+
+    pods = client.list(Pod, namespace=NAMESPACE_DEFAULT)
+    assert any(name in pod.metadata.name for pod in pods)
 
 
 def _assert_service_metrics_ports(namespace: str, app_name: str) -> None:
-    service = kubectl_get_json("-n", namespace, "get", "svc", app_name)
-    service_ports = {port.get("port") for port in service.get("spec", {}).get("ports", [])}
+    service = get_client().get(Service, name=app_name, namespace=namespace)
+    service_ports = {port.port for port in (service.spec.ports or [])}
 
     missing_ports = {
         LLMISVC_CONTROLLER_METRICS_PORT,
@@ -153,20 +217,32 @@ def assert_llmisvc_metrics_endpoints(namespace: str, app_name: str = LLMISVC_APP
         )
 
 
-def _gateway_field(gateway_name: str, jsonpath: str, check: bool = True) -> str:
-    return kubectl(
-        [
-            "-n",
-            NAMESPACE_ENVOY_GATEWAY,
-            "get",
-            "svc",
-            "-l",
-            f"serving.kserve.io/gateway={gateway_name}",
-            "-o",
-            f"jsonpath={jsonpath}",
-        ],
-        check=check,
+def _gateway_services(gateway_name: str) -> list:
+    return list(
+        get_client().list(
+            Service,
+            namespace=NAMESPACE_ENVOY_GATEWAY,
+            labels={"serving.kserve.io/gateway": gateway_name},
+        )
     )
+
+
+def _gateway_ip(gateway_name: str):
+    services = _gateway_services(gateway_name)
+    if not services:
+        return None
+    load_balancer = services[0].status.loadBalancer if services[0].status else None
+    ingress = (load_balancer.ingress if load_balancer else None) or []
+    if not ingress:
+        return None
+    return ingress[0].ip
+
+
+def _gateway_service_name(gateway_name: str) -> str:
+    services = _gateway_services(gateway_name)
+    if not services:
+        raise AssertionError(f"No Envoy service found for gateway '{gateway_name}'")
+    return services[0].metadata.name
 
 
 def _post_completion_and_assert(url: str, model: str, name: str) -> None:
@@ -189,14 +265,12 @@ def assert_prediction(
 ) -> None:
     completions_path = f"/default/{name}/v1/completions"
 
-    gw_ip = _gateway_field(
-        gateway_name, "{.items[0].status.loadBalancer.ingress[0].ip}", check=False
-    )
+    gw_ip = _gateway_ip(gateway_name)
     if gw_ip:
         _post_completion_and_assert(f"http://{gw_ip}{completions_path}", model=model, name=name)
         return
 
-    service_name = _gateway_field(gateway_name, "{.items[0].metadata.name}")
+    service_name = _gateway_service_name(gateway_name)
     with port_forward(NAMESPACE_ENVOY_GATEWAY, f"svc/{service_name}", "8080:80"):
         for attempt in RETRY_FOR_TEN_MINUTES:
             with attempt:
@@ -206,47 +280,34 @@ def assert_prediction(
                 break
 
 
-def _kubectl_items(args: list[str]) -> list[str]:
-    output = kubectl(args, check=False)
-    if not output or "No resources found" in output:
-        return []
-    return [line.strip() for line in output.splitlines() if line.strip()]
+def _list_resource_names(resource, labels: dict, namespaced: bool) -> list[str]:
+    namespace = "*" if namespaced else None
+    return [
+        f"{resource.__name__}/{obj.metadata.name}"
+        for obj in get_client().list(resource, namespace=namespace, labels=labels)
+    ]
 
 
 def assert_no_charm_resources_left() -> None:
     logger.info("Checking that no charm-owned resources remain in the cluster...")
-    selector_by_creator = (
-        "app.juju.is/created-by in (kserve-controller,kserve-llmisvc,lws-controller)"
-    )
-    selector_by_instance = (
-        "app.kubernetes.io/instance in "
-        "(kserve-controller-kubeflow,kserve-llmisvc-kubeflow,lws-controller-kubeflow)"
-    )
-    namespaced_resource_kinds = (
-        "pod,svc,statefulset,configmap,secret,serviceaccount,role,rolebinding"
-    )
-    cluster_resource_kinds = (
-        "clusterrole,clusterrolebinding,validatingwebhookconfiguration,"
-        "mutatingwebhookconfiguration,customresourcedefinition"
-    )
+    selector_by_creator = {
+        "app.juju.is/created-by": in_(["kserve-controller", "kserve-llmisvc", "lws-controller"])
+    }
+    selector_by_instance = {
+        "app.kubernetes.io/instance": in_(
+            [
+                "kserve-controller-kubeflow",
+                "kserve-llmisvc-kubeflow",
+                "lws-controller-kubeflow",
+            ]
+        )
+    }
 
     checks = [
-        (
-            "namespaced resources by creator",
-            ["get", namespaced_resource_kinds, "-A", "-l", selector_by_creator, "--no-headers"],
-        ),
-        (
-            "cluster resources by creator",
-            ["get", cluster_resource_kinds, "-l", selector_by_creator, "--no-headers"],
-        ),
-        (
-            "namespaced resources by instance",
-            ["get", namespaced_resource_kinds, "-A", "-l", selector_by_instance, "--no-headers"],
-        ),
-        (
-            "cluster resources by instance",
-            ["get", cluster_resource_kinds, "-l", selector_by_instance, "--no-headers"],
-        ),
+        ("namespaced resources by creator", NAMESPACED_RESOURCE_KINDS, selector_by_creator, True),
+        ("cluster resources by creator", CLUSTER_RESOURCE_KINDS, selector_by_creator, False),
+        ("namespaced resources by instance", NAMESPACED_RESOURCE_KINDS, selector_by_instance, True),
+        ("cluster resources by instance", CLUSTER_RESOURCE_KINDS, selector_by_instance, False),
     ]
 
     # Kubernetes garbage-collection of charm-owned resources (especially
@@ -256,8 +317,10 @@ def assert_no_charm_resources_left() -> None:
     for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
             leftovers = []
-            for check_name, args in checks:
-                found = _kubectl_items(args)
+            for check_name, kinds, selector, namespaced in checks:
+                found = []
+                for resource in kinds:
+                    found.extend(_list_resource_names(resource, selector, namespaced))
                 if found:
                     leftovers.append((check_name, found))
 

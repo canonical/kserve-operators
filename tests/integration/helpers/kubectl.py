@@ -4,12 +4,12 @@
 
 """Thin wrappers around ``kubectl``/``helm`` invocations used by the bundle tests.
 
-These helpers centralise the repeated ``subprocess``/``run_command`` plumbing so the
-higher-level setup and assertion modules can stay focused on test intent rather than
-command construction.
+Resource operations in the bundle tests go through lightkube; the helpers that
+remain here cover the few things lightkube does not do: Helm chart installs,
+applying upstream multi-document install bundles served from remote URLs
+(``kubectl apply -f <url>``) and port-forwarding a service for HTTP probes.
 """
 
-import json
 import logging
 import subprocess
 import time
@@ -57,31 +57,6 @@ def helm(args: list[str], check: bool = True) -> str:
     ) from last_error
 
 
-def kubectl_apply_stdin(manifest: str) -> None:
-    """Apply a manifest piped via stdin (``kubectl apply -f -``)."""
-    subprocess.run(
-        ["kubectl", "apply", "-f", "-"],
-        input=manifest,
-        text=True,
-        check=True,
-    )
-
-
-def kubectl_get_json(*args: str) -> dict:
-    """Run ``kubectl <args> -o json`` and return the parsed document."""
-    return json.loads(kubectl([*args, "-o", "json"]))
-
-
-def wait_for_crd_established(crd: str, timeout: str = "120s") -> None:
-    """Block until the given CRD reports the ``Established`` condition."""
-    kubectl(["wait", "--for=condition=Established", f"crd/{crd}", f"--timeout={timeout}"])
-
-
-def rollout_status(namespace: str, target: str, timeout: str = "300s") -> None:
-    """Block until a rollout (e.g. ``deploy/foo``) completes in ``namespace``."""
-    kubectl(["-n", namespace, "rollout", "status", target, f"--timeout={timeout}"])
-
-
 @contextmanager
 def port_forward(namespace: str, target: str, *port_mappings: str) -> Iterator[None]:
     """Run ``kubectl port-forward`` for the duration of the ``with`` block.
@@ -99,5 +74,14 @@ def port_forward(namespace: str, target: str, *port_mappings: str) -> Iterator[N
     finally:
         with suppress(ProcessLookupError):
             process.terminate()
-        with suppress(subprocess.TimeoutExpired, ProcessLookupError):
+        try:
             process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            # terminate() didn't take; escalate to SIGKILL so we don't leak a
+            # background port-forward that could interfere with later tests.
+            with suppress(ProcessLookupError):
+                process.kill()
+            with suppress(subprocess.TimeoutExpired, ProcessLookupError):
+                process.wait(timeout=20)
+        except ProcessLookupError:
+            pass

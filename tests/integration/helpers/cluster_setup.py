@@ -7,22 +7,25 @@
 These helpers install the third-party CRDs/controllers (Gateway API, the
 inference extension, Envoy Gateway, Envoy AI Gateway and LeaderWorkerSet) and
 create the shared Gateway resource the charms route through.
+
+Resource operations go through lightkube. The two exceptions are intentional:
+Helm chart installs (``helm``) and applying upstream multi-document install
+bundles served from remote URLs (``kubectl apply -f <url>``), neither of which
+lightkube performs.
 """
 
 import logging
+
+from lightkube.models.meta_v1 import ObjectMeta
+from lightkube.resources.core_v1 import Namespace
 
 from .constants import (
     NAMESPACE_ENVOY_AI_GATEWAY,
     NAMESPACE_ENVOY_GATEWAY,
     NAMESPACE_LWS,
 )
-from .kubectl import (
-    helm,
-    kubectl,
-    kubectl_apply_stdin,
-    rollout_status,
-    wait_for_crd_established,
-)
+from .k8s import apply_yaml, get_client, wait_for_crd_established, wait_for_deployment_available
+from .kubectl import helm, kubectl
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ def install_envoy_gateway(envoy_gateway_version: str, envoy_ai_gateway_version: 
         ]
     )
     logger.info("Waiting for Envoy Gateway controller to be ready...")
-    rollout_status(NAMESPACE_ENVOY_GATEWAY, "deploy/envoy-gateway")
+    wait_for_deployment_available(NAMESPACE_ENVOY_GATEWAY, "envoy-gateway")
     logger.info("Envoy Gateway installed")
 
 
@@ -127,7 +130,7 @@ def install_envoy_ai_gateway(envoy_ai_gateway_version: str) -> None:
             "300s",
         ]
     )
-    rollout_status(NAMESPACE_ENVOY_AI_GATEWAY, "deploy/ai-gateway-controller")
+    wait_for_deployment_available(NAMESPACE_ENVOY_AI_GATEWAY, "ai-gateway-controller")
 
 
 def install_lws(version: str) -> None:
@@ -150,15 +153,14 @@ def install_lws(version: str) -> None:
         ]
     )
 
-    rollout_status(NAMESPACE_LWS, "deploy/lws-controller-manager")
+    wait_for_deployment_available(NAMESPACE_LWS, "lws-controller-manager")
     wait_for_crd_established("leaderworkersets.leaderworkerset.x-k8s.io")
     logger.info("LWS installed")
 
 
 def ensure_gateway(kserve_namespace: str, gateway_name: str, gateway_namespace: str) -> None:
     logger.info("Creating namespace '%s'...", kserve_namespace)
-    ns_yaml = kubectl(["create", "namespace", kserve_namespace, "--dry-run=client", "-o", "yaml"])
-    kubectl_apply_stdin(ns_yaml)
+    get_client().apply(Namespace(metadata=ObjectMeta(name=kserve_namespace)))
 
     logger.info("Creating Gateway '%s' in namespace '%s'...", gateway_name, gateway_namespace)
     gateway_manifest = f"""apiVersion: gateway.networking.k8s.io/v1
@@ -186,7 +188,5 @@ spec:
     labels:
       serving.kserve.io/gateway: {gateway_name}
 """
-    kubectl_apply_stdin(gateway_manifest)
-
-    logger.info("Gateway resource created, checking status...")
-    kubectl(["-n", gateway_namespace, "get", "gateway", gateway_name, "-o", "wide"])
+    apply_yaml(gateway_manifest)
+    logger.info("Gateway resource created")
