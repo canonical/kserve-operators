@@ -92,6 +92,15 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
 
     Assert on the unit status before any relations/configurations take place.
     """
+    await deploy_and_integrate_service_mesh_charms(
+        APP_NAME,
+        model=ops_test.model,
+        channel="dev/edge",  # TODO: restore it, just a temporary channel to make the CI non-flaky
+        relate_to_beacon=True,
+        relate_to_ingress_route_endpoint=False,
+        relate_to_ingress_gateway_endpoint=True,
+    )
+
     # build and deploy charm from local source folder
     entity_url = (
         await ops_test.build_charm(".")
@@ -109,15 +118,6 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         config={"deployment-mode": "standard"},
         application_name=APP_NAME,
         trust=True,
-    )
-
-    await deploy_and_integrate_service_mesh_charms(
-        APP_NAME,
-        model=ops_test.model,
-        channel="dev/edge",  # TODO: restore it, just a temporary channel to make the CI non-flaky
-        relate_to_beacon=True,
-        relate_to_ingress_route_endpoint=False,
-        relate_to_ingress_gateway_endpoint=True,
     )
 
     # issuing dummy update_status just to trigger an event
