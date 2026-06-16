@@ -19,7 +19,6 @@ from charmed_kubeflow_chisme.testing import (
     assert_metrics_endpoint,
     assert_security_context,
     deploy_and_assert_grafana_agent,
-    deploy_and_integrate_service_mesh_charms,
     get_alert_rules,
     get_pod_names,
 )
@@ -146,9 +145,9 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     )
 
     await ops_test.model.integrate(
-            f"{ISTIO_INGRESS_K8S_APP}:{ISTIO_INGRESS_ROUTE_ENDPOINT}",
-            f"{APP_NAME}:{ISTIO_INGRESS_ROUTE_ENDPOINT}",
-        )
+        f"{ISTIO_INGRESS_K8S_APP}:{ISTIO_INGRESS_ROUTE_ENDPOINT}",
+        f"{APP_NAME}:{ISTIO_INGRESS_ROUTE_ENDPOINT}",
+    )
     await ops_test.model.integrate(
         f"{ISTIO_BEACON_K8S_APP}:{SERVICE_MESH_ENDPOINT}",
         f"{APP_NAME}:{SERVICE_MESH_ENDPOINT}",
