@@ -114,6 +114,7 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     await deploy_and_integrate_service_mesh_charms(
         APP_NAME,
         model=ops_test.model,
+        channel="dev/edge",  # TODO: restore it, just a temporary channel to make the CI non-flaky
         relate_to_beacon=True,
         relate_to_ingress_route_endpoint=False,
         relate_to_ingress_gateway_endpoint=True,
