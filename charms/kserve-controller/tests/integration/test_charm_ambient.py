@@ -98,6 +98,11 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
 
     Assert on the unit status before any relations/configurations take place.
     """
+    # NOTE: Chisme utilities for deploying Istio's ecosystem and integrating it with KServe are
+    # not employed because, for unclear reasons, deploying Istio after the tested application, as
+    # done in Chisme, gives sporadic, flaky problems with Beacon often stuck in maintenance status
+    # saying: "Validating waypoint readiness"
+
     # deploy Istio's ecosystem:
     istio_channel = "2/stable"
     await ops_test.model.deploy(
