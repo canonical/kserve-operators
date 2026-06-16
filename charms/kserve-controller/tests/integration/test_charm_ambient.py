@@ -58,7 +58,9 @@ from tests.integration.utils import (
 
 # ambient-mode Istio:
 ISTIO_K8S_APP = "istio-k8s"
+ISTIO_INGRESS_K8S_APP = "istio-ingress-k8s"
 ISTIO_BEACON_K8S_APP = "istio-beacon-k8s"
+ISTIO_INGRESS_GATEWAY_ENDPOINT = "gateway-metadata"
 SERVICE_MESH_ENDPOINT = "service-mesh"
 
 # tenacity
@@ -105,6 +107,11 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         trust=True,
     )
     await ops_test.model.deploy(
+        ISTIO_INGRESS_K8S_APP,
+        channel=istio_channel,
+        trust=True,
+    )
+    await ops_test.model.deploy(
         ISTIO_BEACON_K8S_APP,
         channel=istio_channel,
         trust=True,
@@ -136,6 +143,10 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         trust=True,
     )
 
+    await ops_test.model.integrate(
+        f"{ISTIO_INGRESS_K8S_APP}:{ISTIO_INGRESS_GATEWAY_ENDPOINT}",
+        f"{APP_NAME}:{ISTIO_INGRESS_GATEWAY_ENDPOINT}",
+    )
     await ops_test.model.integrate(
         f"{ISTIO_BEACON_K8S_APP}:{SERVICE_MESH_ENDPOINT}",
         f"{APP_NAME}:{SERVICE_MESH_ENDPOINT}",
