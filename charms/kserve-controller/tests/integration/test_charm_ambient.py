@@ -7,7 +7,6 @@ import base64
 import json
 import logging
 from pathlib import Path
-from pyexpat import model
 
 import lightkube
 import lightkube.codecs
