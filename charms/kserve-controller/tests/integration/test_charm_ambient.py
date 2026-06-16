@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 from pathlib import Path
+from pyexpat import model
 
 import lightkube
 import lightkube.codecs
@@ -57,6 +58,14 @@ from tests.integration.utils import (
     populate_template,
 )
 
+# ambient-mode Istio:
+ISTIO_K8S_APP = "istio-k8s"
+ISTIO_INGRESS_K8S_APP = "istio-ingress-k8s"
+ISTIO_BEACON_K8S_APP = "istio-beacon-k8s"
+ISTIO_INGRESS_ROUTE_ENDPOINT = "istio-ingress-route"
+ISTIO_INGRESS_GATEWAY_ENDPOINT = "gateway-metadata"
+SERVICE_MESH_ENDPOINT = "service-mesh"
+
 # tenacity
 RETRY_FOR_THREE_MINUTES = tenacity.Retrying(
     stop=tenacity.stop_after_delay(60 * 3),
@@ -92,6 +101,32 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
 
     Assert on the unit status before any relations/configurations take place.
     """
+    # deploy Istio's ecosystem:
+    istio_channel = "2/stable"
+    await ops_test.model.deploy(
+        ISTIO_K8S_APP,
+        channel=istio_channel,
+        config={"platform": ""},
+        trust=True,
+    )
+    await ops_test.model.deploy(
+        ISTIO_INGRESS_K8S_APP,
+        channel=istio_channel,
+        trust=True,
+    )
+    await ops_test.model.deploy(
+        ISTIO_BEACON_K8S_APP,
+        channel=istio_channel,
+        trust=True,
+        config={"model-on-mesh": False},
+    )
+    await ops_test.model.wait_for_idle(
+        raise_on_blocked=False,
+        raise_on_error=False,
+        wait_for_active=True,
+        timeout=900,
+    )
+
     # build and deploy charm from local source folder
     entity_url = (
         await ops_test.build_charm(".")
@@ -111,13 +146,13 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         trust=True,
     )
 
-    await deploy_and_integrate_service_mesh_charms(
-        APP_NAME,
-        model=ops_test.model,
-        channel="dev/edge",  # TODO: restore it, just a temporary channel to make the CI non-flaky
-        relate_to_beacon=True,
-        relate_to_ingress_route_endpoint=False,
-        relate_to_ingress_gateway_endpoint=True,
+    await ops_test.model.integrate(
+            f"{ISTIO_INGRESS_K8S_APP}:{ISTIO_INGRESS_ROUTE_ENDPOINT}",
+            f"{APP_NAME}:{ISTIO_INGRESS_ROUTE_ENDPOINT}",
+        )
+    await ops_test.model.integrate(
+        f"{ISTIO_BEACON_K8S_APP}:{SERVICE_MESH_ENDPOINT}",
+        f"{APP_NAME}:{SERVICE_MESH_ENDPOINT}",
     )
 
     # issuing dummy update_status just to trigger an event
