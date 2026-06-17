@@ -1,0 +1,54 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: test-llm-scheduler-small
+  namespace: default
+spec:
+  model:
+    uri: hf://EleutherAI/pythia-70m
+    name: EleutherAI/pythia-70m
+  storageInitializer:
+    enabled: false
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  template:
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: {{ storage_initializer_image }}
+        args:
+          - hf://EleutherAI/pythia-70m
+          - /mnt/models
+        env:
+          - name: HF_HUB_DISABLE_XET
+            value: "1"
+          - name: HF_HUB_ENABLE_HF_TRANSFER
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+    containers:
+      - name: main
+        image: {{ vllm_image }}
+        securityContext:
+          runAsNonRoot: false
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "3Gi"
+          limits:
+            cpu: "2"
+            memory: "8Gi"

@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
+from lightkube import ApiError
 from ops import pebble
 from ops.testing import Container, Context, Relation, State
 
@@ -27,6 +28,24 @@ from charm import (
     METRICS_PROXY_CONTAINER,
     KServeLLMISVCCharm,
 )
+
+
+class _Fake404Response:
+    """Minimal httpx-like response that lightkube parses into a 404 status."""
+
+    code = 404
+    message = "not found"
+
+    def json(self):
+        return {"apiVersion": 1, "code": 404, "message": "not found"}
+
+
+class _Fake404ApiError(ApiError):
+    """A lightkube ApiError carrying a 404 status, for use as a get() side effect."""
+
+    def __init__(self):
+        super().__init__(response=_Fake404Response())
+
 
 # ---------------------------------------------------------------------------
 # Autouse mocks: stub unavoidable I/O so unit tests can run cluster-less.
@@ -65,6 +84,10 @@ def mock_krh_lightkube_client():
     real ``lightkube.Client`` from the in-cluster service account.
     """
     fake_client = MagicMock(name="fake_lightkube_client")
+    # By default, simulate that resources queried during removal are already
+    # gone so ``ensure_resource_is_deleted`` returns immediately instead of
+    # retrying (which would otherwise block the suite for the deletion timeout).
+    fake_client.get.side_effect = _Fake404ApiError()
     with patch.object(
         KubernetesResourceHandler,
         "lightkube_client",

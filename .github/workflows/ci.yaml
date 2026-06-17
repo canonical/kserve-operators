@@ -107,6 +107,22 @@ jobs:
       actions: read  # Needed for GitHub API call to get workflow version (for private repositories)
       contents: read
 
+  build-test-charms:
+    name: Build charm | ${{ matrix.charm }}
+    strategy:
+      fail-fast: false
+      matrix:
+        charm:
+          - tests/integration/lws-controller-tester
+          - tests/integration/gateway-metadata-provider-tester
+    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v49.0.1
+    with:
+      path-to-charm-directory: ${{ matrix.charm }}
+      cache: true
+    permissions:
+      actions: read
+      contents: read
+
   integration:
     name: Integration tests
     needs:
@@ -180,6 +196,90 @@ jobs:
 
       - name: Get application logs
         run: kubectl logs -n kubeflow --tail 1000 -l app.kubernetes.io/name=${{ matrix.charm }} --all-containers
+        if: failure()
+
+  test-bundle:
+    name: Bundle integration tests
+    needs:
+      - build
+      - build-test-charms
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Maximise GH runner space
+        uses: jlumbroso/free-disk-space@v1.3.1
+
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pipx install tox
+
+      - name: Setup environment
+        run: |
+          sudo apt-get remove -y docker-ce docker-ce-cli containerd.io
+          sudo rm -rf /run/containerd
+          sudo snap install concierge --classic
+          sudo concierge prepare --trace
+
+      - name: Download packed charm(s)
+        id: download-charms
+        timeout-minutes: 5
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ needs.build.outputs.artifact-prefix }}-*
+          merge-multiple: true
+
+      - name: Download packed test charm(s)
+        timeout-minutes: 5
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ needs.build-test-charms.outputs.artifact-prefix }}-*
+          merge-multiple: true
+          path: ${{ github.workspace }}/tests/integration/
+
+      - name: Run bundle integration tests
+        run: |
+          juju add-model kubeflow --config automatically-retry-hooks=false
+          tox -e bundle-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/
+
+      - name: Get all
+        run: kubectl get all -A
+        if: failure()
+
+      - name: Get events
+        run: kubectl get events -A
+        if: failure()
+
+      - name: Describe deployments
+        run: kubectl describe deployments -A
+        if: failure()
+
+      - name: Describe replicasets
+        run: kubectl describe replicasets -A
+        if: failure()
+
+      - name: Get juju status
+        run: juju status --relations
+        if: always()
+
+      - name: Get kserve-controller workload logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-controller -c kserve-controller
+        if: failure()
+
+      - name: Get kserve-controller charm logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-controller -c charm
+        if: failure()
+
+      - name: Get kserve-llmisvc workload logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c llmisvc-controller
+        if: failure()
+
+      - name: Get kserve-llmisvc charm logs
+        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c charm
+        if: failure()
+
+      - name: Collect charm debug artifacts
+        uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
         if: failure()
 
   release:
