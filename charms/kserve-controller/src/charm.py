@@ -23,6 +23,7 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
+from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charmed_kubeflow_chisme.service_mesh import generate_allow_all_authorization_policy
 from charmed_kubeflow_chisme.types import LightkubeResourcesList
