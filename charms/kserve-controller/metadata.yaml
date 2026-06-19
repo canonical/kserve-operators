@@ -28,6 +28,7 @@ provides:
 requires:
   object-storage:
     interface: object-storage
+    optional: true
     schema:
       v1:
         provides:
@@ -55,6 +56,10 @@ requires:
           - service
     versions: [v1]
     __schema_source: https://raw.githubusercontent.com/canonical/operator-schemas/master/object-storage.yaml
+  s3-credentials:
+    interface: s3
+    optional: true
+    limit: 1
   gateway-metadata:
     interface: gateway_metadata
     limit: 1

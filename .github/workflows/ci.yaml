@@ -115,7 +115,7 @@ jobs:
       fail-fast: false
       matrix:
         charm: [kserve-controller]
-        test-type: [integration, integration-ambient]
+        test-type: [integration, integration-ambient, integration-s3]
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space

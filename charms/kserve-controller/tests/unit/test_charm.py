@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import ops.testing
 import pytest
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_service_mesh_helpers.interfaces import GatewayMetadata
 from lightkube import ApiError
 from ops import StatusBase
@@ -719,6 +720,163 @@ def test_deployment_modes_gateway_relations(
     harness.update_config({"deployment-mode": deployment_mode})
 
     assert harness.charm.model.unit.status == expected_status
+
+
+# Storage relations (object-storage and s3-credentials)
+
+S3_CONNECTION_INFO = {
+    "access-key": "s3-access-key",
+    "secret-key": "s3-secret-key",
+    "endpoint": "https://my-s3.example.com:9000",
+    "region": "eu-west-2",
+    "bucket": "my-bucket",
+}
+
+OBJECT_STORAGE_DATA = {
+    "access-key": "minio-access-key",
+    "secret-key": "minio-secret-key",
+    "service": "minio",
+    "namespace": "kubeflow",
+    "port": 9000,
+    "secure": False,
+}
+
+
+def test_get_storage_secrets_context_object_storage(harness: Harness, mocker):
+    """The object-storage relation produces the expected secret context."""
+    harness.begin()
+    harness.add_relation("object-storage", "minio")
+    mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
+    mocker.patch.object(harness.charm, "_get_object_storage", return_value=OBJECT_STORAGE_DATA)
+
+    context = harness.charm._get_storage_secrets_context()
+
+    assert context == {
+        "secret_name": "kserve-controller-s3",
+        "s3_endpoint": "minio.kubeflow:9000",
+        "s3_usehttps": "0",
+        "s3_region": "us-east-1",
+        "s3_useanoncredential": "false",
+        "s3_access_key": "minio-access-key",
+        "s3_secret_access_key": "minio-secret-key",
+    }
+
+
+def test_get_storage_secrets_context_s3_credentials(harness: Harness, mocker):
+    """The s3-credentials relation produces the expected secret context.
+
+    The endpoint scheme is stripped (host[:port] only) and translated into the
+    s3-usehttps annotation, and the region is taken from the relation data.
+    """
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = dict(S3_CONNECTION_INFO)
+
+    context = harness.charm._get_storage_secrets_context()
+
+    assert context == {
+        "secret_name": "kserve-controller-s3",
+        "s3_endpoint": "my-s3.example.com:9000",
+        "s3_usehttps": "1",
+        "s3_region": "eu-west-2",
+        "s3_useanoncredential": "false",
+        "s3_access_key": "s3-access-key",
+        "s3_secret_access_key": "s3-secret-key",
+    }
+
+
+def test_get_storage_secrets_context_s3_http_endpoint_default_region(harness: Harness, mocker):
+    """An http endpoint sets s3-usehttps to 0 and a missing region falls back to the default."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    connection_info = dict(S3_CONNECTION_INFO)
+    connection_info["endpoint"] = "http://minio:9000"
+    del connection_info["region"]
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = connection_info
+
+    context = harness.charm._get_storage_secrets_context()
+
+    assert context["s3_endpoint"] == "minio:9000"
+    assert context["s3_usehttps"] == "0"
+    assert context["s3_region"] == "us-east-1"
+
+
+def test_get_storage_secrets_context_both_relations_blocked(harness: Harness, mocker):
+    """Relating both object-storage and s3-credentials blocks the charm."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("object-storage", "minio")
+    harness.add_relation("s3-credentials", "s3-integrator")
+
+    with pytest.raises(ErrorWithStatus) as exc_info:
+        harness.charm._get_storage_secrets_context()
+
+    assert isinstance(exc_info.value.status, BlockedStatus)
+
+
+def test_get_storage_secrets_context_no_relation(harness: Harness, mocker):
+    """No storage relation yields no secret context."""
+    harness.begin()
+    mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
+
+    assert harness.charm._get_storage_secrets_context() is None
+
+
+def test_get_storage_secrets_context_s3_incomplete_data_blocked(harness: Harness, mocker):
+    """Incomplete s3-credentials relation data blocks the charm."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    # endpoint is missing from the relation data
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = {
+        "access-key": "s3-access-key",
+        "secret-key": "s3-secret-key",
+    }
+
+    with pytest.raises(ErrorWithStatus) as exc_info:
+        harness.charm._get_storage_secrets_context()
+
+    assert isinstance(exc_info.value.status, BlockedStatus)
+
+
+def test_get_storage_secrets_context_s3_no_data_waiting(harness: Harness, mocker):
+    """An established s3-credentials relation with no data sets the charm to waiting."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = {}
+
+    with pytest.raises(ErrorWithStatus) as exc_info:
+        harness.charm._get_storage_secrets_context()
+
+    assert isinstance(exc_info.value.status, WaitingStatus)
+
+
+def test_send_object_storage_manifests_s3(harness: Harness, mocker):
+    """The s3-credentials backend renders and sends both the secret and service account."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = dict(S3_CONNECTION_INFO)
+    mocked_send_manifests = mocker.patch.object(harness.charm, "_send_manifests")
+
+    harness.charm.send_object_storage_manifests()
+
+    # One call for the secret, one for the service account
+    assert mocked_send_manifests.call_count == 2
+
+
+def test_send_object_storage_manifests_no_relation(harness: Harness, mocker):
+    """No storage relation means no manifests are sent."""
+    harness.begin()
+    mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
+    mocked_send_manifests = mocker.patch.object(harness.charm, "_send_manifests")
+
+    harness.charm.send_object_storage_manifests()
+
+    mocked_send_manifests.assert_not_called()
 
 
 @patch("charm.KServeControllerCharm._restart_controller_service")
