@@ -217,6 +217,7 @@ async def test_new_user_namespace_has_s3_manifests(
     The Secret is built from the data provided over the `s3-credentials` relation
     by s3-integrator, which is backed by a microceph (https) endpoint.
     """
+    logger.info("Checking the created secret in the user namespace.")
     manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
     secret = get_k8s_secret(manifests_name, test_namespace, lightkube_client)
     service_account = get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
