@@ -176,7 +176,8 @@ class KServeControllerCharm(CharmBase):
             self.on[SDI_LOCAL_GATEWAY_RELATION].relation_changed,
             self.on[SDI_INGRESS_GATEWAY_RELATION].relation_changed,
             self.on[GATEWAY_METADATA_RELATION].relation_changed,
-            self.on["object-storage"].relation_changed,
+            self.on[OBJECT_STORAGE_RELATION].relation_changed,
+            self.on[OBJECT_STORAGE_RELATION].relation_broken,
             self.on[S3_CREDENTIALS_RELATION].relation_changed,
             self.on[S3_CREDENTIALS_RELATION].relation_broken,
             self.on["secrets"].relation_changed,
@@ -597,17 +598,14 @@ class KServeControllerCharm(CharmBase):
             ErrorWithStatus(..., Blocked) if both storage relations are established.
             ErrorWithStatus(..., Blocked/Waiting) if the relation data is incomplete.
         """
-        has_object_storage = self.model.get_relation(OBJECT_STORAGE_RELATION) is not None
-        has_s3_credentials = self.model.get_relation(S3_CREDENTIALS_RELATION) is not None
-
-        if has_object_storage and has_s3_credentials:
+        if self.model.relations["object-storage"] and self.model.relations["s3-credentials"]:
             raise ErrorWithStatus(
-                "Both object-storage and s3-credentials relations are established. "
-                "Please remove one of them.",
+                "Too many object storage relations. Please relate to only one of "
+                "`object-storage` or `s3-credentials`.",
                 BlockedStatus,
             )
 
-        if has_s3_credentials:
+        if self.model.relations["s3-credentials"]:
             return self._get_s3_credentials_context()
 
         return self._get_object_storage_context()
