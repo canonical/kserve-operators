@@ -4,28 +4,29 @@
 
 """Integration tests for the kserve-controller `s3-credentials` relation.
 
-These tests deploy kserve-controller together with an s3-integrator charm and
-assert that the S3 credentials provided over the `s3-credentials` relation are
-rendered into the Secret and ServiceAccount that are dispatched, via the
-resource-dispatcher, into user namespaces.
+These tests deploy kserve-controller (in standard/ambient mode) together with
+an s3-integrator charm and assert that the S3 credentials provided over the
+`s3-credentials` relation are rendered into the Secret and ServiceAccount that
+are dispatched, via the resource-dispatcher, into user namespaces.
 """
 
 import base64
 import logging
+from pathlib import Path
 
 import lightkube
+import lightkube.codecs
 import pytest
+import tenacity
+import yaml
 from charmed_kubeflow_chisme.testing.s3_integration import (
     deploy_and_assert_s3_integrator,
     host_ip,
 )
+from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.charms_dependencies import (
-    ISTIO_GATEWAY,
-    ISTIO_PILOT,
-    KNATIVE_OPERATOR,
-    KNATIVE_SERVING,
     METACONTROLLER_OPERATOR,
     RESOURCE_DISPATCHER,
     S3_INTEGRATOR,
@@ -35,8 +36,13 @@ from tests.integration.constants import (
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
+    SKLEARN_INF_SVC_NAME,
+    SKLEARN_INF_SVC_OBJECT,
+    YAMLS_PREFIX,
 )
 from tests.integration.utils import (
+    assert_inf_svc_state,
+    assert_isvc_ingress_traffic,
     deploy_k8s_resources,
     get_k8s_secret,
     get_k8s_service_account,
@@ -44,71 +50,52 @@ from tests.integration.utils import (
 
 logger = logging.getLogger(__name__)
 
-ISTIO_INGRESS_GATEWAY = "test-gateway"
-ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+# tenacity
+RETRY_FOR_THREE_MINUTES = tenacity.Retrying(
+    stop=tenacity.stop_after_delay(60 * 3),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
+)
+
+# ambient-mode Istio:
+ISTIO_K8S_APP = "istio-k8s"
+ISTIO_INGRESS_K8S_APP = "istio-ingress-k8s"
+ISTIO_BEACON_K8S_APP = "istio-beacon-k8s"
+ISTIO_INGRESS_GATEWAY_ENDPOINT = "gateway-metadata"
+SERVICE_MESH_ENDPOINT = "service-mesh"
 
 
 @pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, request):
-    """Build and deploy kserve-controller with the istio/knative dependencies.
+    """Build and deploy kserve-controller with the ambient Istio dependencies.
 
     Assert that the charm reaches Active before any storage relation is added.
     """
-    # Deploy istio-operators for ingress configuration
+    # Deploy ambient Istio ecosystem
+    istio_channel = "2/stable"
     await ops_test.model.deploy(
-        ISTIO_PILOT.charm,
-        channel=ISTIO_PILOT.channel,
-        config={"default-gateway": ISTIO_INGRESS_GATEWAY},
-        trust=ISTIO_PILOT.trust,
+        ISTIO_K8S_APP,
+        channel=istio_channel,
+        config={"platform": ""},
+        trust=True,
     )
-
     await ops_test.model.deploy(
-        ISTIO_GATEWAY.charm,
-        application_name=ISTIO_GATEWAY_APP_NAME,
-        channel=ISTIO_GATEWAY.channel,
-        config=ISTIO_GATEWAY.config,
-        trust=ISTIO_GATEWAY.trust,
+        ISTIO_INGRESS_K8S_APP,
+        channel=istio_channel,
+        trust=True,
     )
-    await ops_test.model.integrate(ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME)
-    await ops_test.model.wait_for_idle(
-        [ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME],
-        raise_on_blocked=False,
-        status="active",
-        timeout=90 * 10,
-    )
-
-    # Deploy knative-operator
     await ops_test.model.deploy(
-        KNATIVE_OPERATOR.charm,
-        channel=KNATIVE_OPERATOR.channel,
-        trust=KNATIVE_OPERATOR.trust,
-    )
-
-    # Wait for idle knative-operator before deploying knative-serving
-    # due to issue https://github.com/canonical/knative-operators/issues/156
-    await ops_test.model.wait_for_idle(
-        [KNATIVE_OPERATOR.charm],
-        status="active",
-        raise_on_blocked=False,
-        timeout=90 * 10,
-    )
-
-    # Deploy knative-serving
-    await ops_test.model.deploy(
-        KNATIVE_SERVING.charm,
-        channel=KNATIVE_SERVING.channel,
-        config={
-            "istio.gateway.namespace": ops_test.model_name,
-            "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
-        },
-        trust=KNATIVE_SERVING.trust,
+        ISTIO_BEACON_K8S_APP,
+        channel=istio_channel,
+        trust=True,
+        config={"model-on-mesh": False},
     )
     await ops_test.model.wait_for_idle(
-        [KNATIVE_SERVING.charm],
         raise_on_blocked=False,
-        status="active",
-        timeout=90 * 10,
+        raise_on_error=False,
+        wait_for_active=True,
+        timeout=900,
     )
 
     # build and deploy charm from local source folder
@@ -125,13 +112,19 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     await ops_test.model.deploy(
         entity_url,
         resources=resources,
+        config={"deployment-mode": "standard"},
         application_name=APP_NAME,
         trust=True,
     )
 
-    await ops_test.model.integrate(ISTIO_PILOT.charm, APP_NAME)
-    # Relate kserve-controller and knative-serving
-    await ops_test.model.integrate(KNATIVE_SERVING.charm, APP_NAME)
+    await ops_test.model.integrate(
+        f"{ISTIO_INGRESS_K8S_APP}:{ISTIO_INGRESS_GATEWAY_ENDPOINT}",
+        f"{APP_NAME}:{ISTIO_INGRESS_GATEWAY_ENDPOINT}",
+    )
+    await ops_test.model.integrate(
+        f"{ISTIO_BEACON_K8S_APP}:{SERVICE_MESH_ENDPOINT}",
+        f"{APP_NAME}:{SERVICE_MESH_ENDPOINT}",
+    )
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward(fast_interval="60s"):
@@ -160,6 +153,48 @@ async def test_relate_to_s3_integrator(ops_test: OpsTest):
         timeout=600,
     )
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+
+
+@pytest.mark.parametrize(
+    "inference_file",
+    [
+        YAMLS_PREFIX + "predictionserver-sklearn.yaml",
+        YAMLS_PREFIX + "sklearn-iris.yaml",
+        YAMLS_PREFIX + "lgbserver.yaml",
+        YAMLS_PREFIX + "pmml-server.yaml",
+        YAMLS_PREFIX + "paddleserver-resnet.yaml",
+        YAMLS_PREFIX + "xgbserver.yaml",
+        YAMLS_PREFIX + "tensorflow-serving.yaml",
+    ],
+)
+async def test_inference_service(
+    test_namespace: str,
+    lightkube_client: lightkube.Client,
+    inference_file,
+    ops_test: OpsTest,
+):
+    """Validates that an InferenceService can be deployed."""
+    inf_svc_yaml = yaml.safe_load(Path(inference_file).read_text())
+    inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
+    inf_svc_name = inf_svc_object.metadata.name
+
+    # Create InferenceService from example file
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(30),
+        reraise=True,
+    )
+    def create_inf_svc():
+        lightkube_client.create(inf_svc_object, namespace=test_namespace)
+
+    create_inf_svc()
+    # Assert InferenceService state is Available
+    assert_inf_svc_state(lightkube_client, inf_svc_name, test_namespace)
+
+    # Assert that traffic reaches the ISVC
+    await assert_isvc_ingress_traffic(
+        inf_svc_name, test_namespace, lightkube_client, ops_test.model_name
+    )
 
 
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
@@ -234,6 +269,64 @@ async def test_new_user_namespace_has_s3_manifests(
     assert base64.b64decode(secret.data["AWS_SECRET_ACCESS_KEY"])
 
     assert service_account.secrets[0].name == manifests_name
+
+
+# Test Proxy configurations
+async def test_inference_service_proxy_envs_configuration(
+    test_namespace: str, ops_test: OpsTest, lightkube_client: lightkube.Client
+):
+    """Changes `http-proxy`, `https-proxy` and `no-proxy` configs and asserts that
+    the InferenceService Pod is using the values from configs as environment variables."""
+
+    # Set Proxy envs by setting the charm configs
+    test_http_proxy = "my_http_proxy"
+    test_https_proxy = "my_https_proxy"
+    test_no_proxy = "no_proxy"
+
+    await ops_test.model.applications[APP_NAME].set_config(
+        {
+            "http-proxy": test_http_proxy,
+            "https-proxy": test_https_proxy,
+            "no-proxy": test_no_proxy,
+        }
+    )
+
+    await ops_test.model.wait_for_idle(
+        [APP_NAME],
+        status="active",
+        raise_on_blocked=False,
+        timeout=60 * 1,
+    )
+
+    # Create InferenceService from example file
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            lightkube_client.create(SKLEARN_INF_SVC_OBJECT, namespace=test_namespace)
+
+    # Assert InferenceService Pod specifies the proxy envs for the initContainer
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            pods_list = iter(
+                lightkube_client.list(
+                    res=Pod,
+                    namespace=test_namespace,
+                    labels={"serving.kserve.io/inferenceservice": SKLEARN_INF_SVC_NAME},
+                )
+            )
+            isvc_pod = next(pods_list)
+            init_env_vars = isvc_pod.spec.initContainers[0].env
+
+            for env_var in init_env_vars:
+                if env_var.name == "HTTP_PROXY":
+                    http_proxy_env = env_var.value
+                elif env_var.name == "HTTPS_PROXY":
+                    https_proxy_env = env_var.value
+                elif env_var.name == "NO_PROXY":
+                    no_proxy_env = env_var.value
+
+            assert http_proxy_env == test_http_proxy
+            assert https_proxy_env == test_https_proxy
+            assert no_proxy_env == test_no_proxy
 
 
 async def test_remove_application(ops_test: OpsTest):
