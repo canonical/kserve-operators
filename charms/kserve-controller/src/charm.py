@@ -567,7 +567,7 @@ class KServeControllerCharm(CharmBase):
         """Send object storage related manifests in case a storage relation exists.
 
         The storage credentials can be provided either through the `object-storage`
-        relation (e.g. minio) or the `s3-credentials` relation (e.g. s3-integrator).
+        relation or the `s3-credentials` relation.
         Both relations are optional, but they are mutually exclusive.
         """
         secrets_context = self._get_storage_secrets_context()

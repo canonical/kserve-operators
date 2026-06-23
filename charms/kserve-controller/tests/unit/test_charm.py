@@ -722,13 +722,11 @@ def test_deployment_modes_gateway_relations(
     assert harness.charm.model.unit.status == expected_status
 
 
-# Storage relations (object-storage and s3-credentials)
-
 S3_CONNECTION_INFO = {
     "access-key": "s3-access-key",
     "secret-key": "s3-secret-key",
     "endpoint": "https://my-s3.example.com:9000",
-    "region": "eu-west-2",
+    "region": "eu-west-1",
     "bucket": "my-bucket",
 }
 
