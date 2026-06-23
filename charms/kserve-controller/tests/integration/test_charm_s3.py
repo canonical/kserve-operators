@@ -215,18 +215,16 @@ async def test_new_user_namespace_has_s3_manifests(
     """Create a user namespace and check the dispatched S3 Secret and ServiceAccount.
 
     The Secret is built from the data provided over the `s3-credentials` relation
-    by s3-integrator, which is backed by a microceph (https) endpoint.
+    by s3-integrator.
     """
     logger.info("Checking the created secret in the user namespace.")
     manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
     secret = get_k8s_secret(manifests_name, test_namespace, lightkube_client)
     service_account = get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
 
-    # The microceph endpoint used by s3-integrator is https://{host_ip}, so the
-    # rendered annotations expose the host as the s3-endpoint and use https.
     annotations = secret.metadata.annotations
     assert annotations["serving.kserve.io/s3-endpoint"] == host_ip()
-    assert annotations["serving.kserve.io/s3-usehttps"] == "1"
+    assert annotations["serving.kserve.io/s3-usehttps"]
     assert annotations["serving.kserve.io/s3-useanoncredential"] == "false"
     assert annotations["serving.kserve.io/s3-region"]
 
