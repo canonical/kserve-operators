@@ -726,7 +726,7 @@ S3_CONNECTION_INFO = {
     "access-key": "s3-access-key",
     "secret-key": "s3-secret-key",
     "endpoint": "https://my-s3.example.com:9000",
-    "region": "eu-west-1",
+    "region": "eu-west-2",
     "bucket": "my-bucket",
 }
 
