@@ -13,6 +13,7 @@ an s3-integrator charm and assert that:
 """
 
 import base64
+import json
 import logging
 from pathlib import Path
 
@@ -21,11 +22,22 @@ import lightkube.codecs
 import pytest
 import tenacity
 import yaml
+from charmed_kubeflow_chisme.testing import (
+    assert_alert_rules,
+    assert_logging,
+    assert_metrics_endpoint,
+    assert_security_context,
+    deploy_and_assert_grafana_agent,
+    get_alert_rules,
+    get_pod_names,
+)
 from charmed_kubeflow_chisme.testing.s3_integration import (
     deploy_and_assert_s3_integrator,
     host_ip,
 )
-from lightkube.resources.core_v1 import Pod
+from lightkube import Client
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
+from lightkube.resources.core_v1 import ConfigMap, Pod
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.charms_dependencies import (
@@ -35,6 +47,11 @@ from tests.integration.charms_dependencies import (
 )
 from tests.integration.constants import (
     APP_NAME,
+    CONFIGMAP_DATA_INGRESS_DOMAIN,
+    CONFIGMAP_NAME,
+    CONFIGMAP_TEMPLATE_PATH,
+    CONTAINERS_SECURITY_CONTEXT_MAP,
+    CUSTOM_IMAGES_PATH,
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
@@ -48,6 +65,7 @@ from tests.integration.utils import (
     deploy_k8s_resources,
     get_k8s_secret,
     get_k8s_service_account,
+    populate_template,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,6 +83,24 @@ ISTIO_INGRESS_K8S_APP = "istio-ingress-k8s"
 ISTIO_BEACON_K8S_APP = "istio-beacon-k8s"
 ISTIO_INGRESS_GATEWAY_ENDPOINT = "gateway-metadata"
 SERVICE_MESH_ENDPOINT = "service-mesh"
+
+
+custom_images = json.loads(Path(CUSTOM_IMAGES_PATH).read_text())
+
+explainer_image, explainer_version = custom_images["configmap__explainers__art"].split(":")
+
+
+def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
+    return {
+        **custom_images,
+        "configmap__explainers__art__image": explainer_image,
+        "configmap__explainers__art__version": explainer_version,
+        "deployment_mode": "Standard",
+        "enable_gateway_api": "true",
+        "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
+        "ingress_gateway_namespace": ingress_gateway_namespace,
+        "ingress_gateway_name": ISTIO_INGRESS_K8S_APP,
+    }
 
 
 @pytest.mark.skip_if_deployed
@@ -138,6 +174,11 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         )
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
+    # Deploying grafana-agent-k8s and add all relations
+    await deploy_and_assert_grafana_agent(
+        ops_test.model, APP_NAME, metrics=True, dashboard=False, logging=True
+    )
+
 
 async def test_relate_to_s3_integrator(ops_test: OpsTest):
     """Test that the charm can relate to s3-integrator and stay in Active state."""
@@ -197,6 +238,78 @@ async def test_inference_service(
     await assert_isvc_ingress_traffic(
         inf_svc_name, test_namespace, lightkube_client, ops_test.model_name
     )
+
+
+# Test o11y
+async def test_logging(ops_test: OpsTest):
+    """Test logging is defined in relation data bag."""
+    app = ops_test.model.applications[APP_NAME]
+    await assert_logging(app)
+
+
+async def test_metrics_endpoint(ops_test: OpsTest):
+    """Test metrics_endpoints are defined in relation data bag and their accessibility.
+    This function gets all the metrics_endpoints from the relation data bag, checks if
+    they are available from the grafana-agent-k8s charm and finally compares them with the
+    ones provided to the function.
+    """
+    app = ops_test.model.applications[APP_NAME]
+    await assert_metrics_endpoint(app, metrics_port=8080, metrics_path="/metrics")
+
+
+async def test_alert_rules(ops_test: OpsTest):
+    """Test check charm alert rules and rules defined in relation data bag."""
+    app = ops_test.model.applications[APP_NAME]
+    alert_rules = get_alert_rules()
+    logger.info("found alert_rules: %s", alert_rules)
+    await assert_alert_rules(app, alert_rules)
+
+
+# Test KServe ConfigMap
+async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
+    """
+    Test whether the configmap is created with the expected data.
+
+    Args:
+        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    inferenceservice_config = lightkube_client.get(
+        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+    )
+
+    expected_configmap = populate_template(
+        CONFIGMAP_TEMPLATE_PATH, generate_configmap_context(ops_test.model_name)
+    )
+    assert inferenceservice_config.data == expected_configmap["data"]
+
+
+async def test_configmap_changes_with_config(
+    lightkube_client: lightkube.Client, ops_test: OpsTest
+):
+    """
+    Test whether the configmap changes successfully with custom configurations.
+
+    Args:
+        lightkube_client (lightkube.Client): The Lightkube client to interact with Kubernetes.
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    await ops_test.model.applications[APP_NAME].set_config(
+        {"custom_images": '{"configmap__batcher": "custom:1.0"}'}  # noqa: E501
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=300
+    )
+
+    inferenceservice_config = lightkube_client.get(
+        ConfigMap, CONFIGMAP_NAME, namespace=ops_test.model_name
+    )
+
+    configmap_context = generate_configmap_context(ops_test.model_name)
+    configmap_context["configmap__batcher"] = "custom:1.0"
+
+    expected_configmap = populate_template(CONFIGMAP_TEMPLATE_PATH, configmap_context)
+    assert inferenceservice_config.data == expected_configmap["data"]
 
 
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
@@ -335,7 +448,74 @@ async def test_inference_service_proxy_envs_configuration(
             assert no_proxy_env == test_no_proxy
 
 
-async def test_remove_application(ops_test: OpsTest):
-    """Test that the application can be removed successfully."""
+async def test_blocked_on_invalid_config(ops_test: OpsTest):
+    """
+    Test whether the application is blocked on providing an invalid configuration.
+
+    Args:
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    await ops_test.model.applications[APP_NAME].set_config({"custom_images": "{"})
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=300
+    )
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
+
+
+@pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
+async def test_container_security_context(
+    ops_test: OpsTest,
+    lightkube_client: Client,
+    container_name: str,
+):
+    """Test container security context is correctly set.
+
+    Verify that container spec defines the security context with correct
+    user ID and group ID.
+    """
+    pod_name = get_pod_names(ops_test.model.name, APP_NAME)[0]
+    assert_security_context(
+        lightkube_client,
+        pod_name,
+        container_name,
+        CONTAINERS_SECURITY_CONTEXT_MAP,
+        ops_test.model.name,
+    )
+
+
+@pytest.mark.abort_on_fail
+async def test_remove_with_resources_present(ops_test: OpsTest):
+    """Test remove with all resources deployed.
+
+    Verify that all deployed resources that need to be removed are removed.
+
+    This test should be next after test_upgrade(), because it removes deployed charm.
+    """
+
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=15),
+        stop=tenacity.stop_after_delay(5 * 60),
+        reraise=True,
+    )
+    def assert_resources_removed():
+        """Asserts on the resource removal.
+
+        Retries multiple times using tenacity to allow time for the resources to be deleted.
+        """
+        lightkube_client = lightkube.Client()
+        crd_list = iter(
+            lightkube_client.list(
+                CustomResourceDefinition,
+                labels=[("app.juju.is/created-by", APP_NAME)],
+                namespace=ops_test.model_name,
+            )
+        )
+        # testing for empty list (iterator)
+        _last = object()
+        assert next(crd_list, _last) is _last
+
+    # remove deployed charm and verify that it is removed alongside resources it created
     await ops_test.model.remove_application(app_name=APP_NAME, block_until_done=True)
     assert APP_NAME not in ops_test.model.applications
+
+    assert_resources_removed()
