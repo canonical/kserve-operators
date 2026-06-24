@@ -598,14 +598,17 @@ class KServeControllerCharm(CharmBase):
             ErrorWithStatus(..., Blocked) if both storage relations are established.
             ErrorWithStatus(..., Blocked/Waiting) if the relation data is incomplete.
         """
-        if self.model.relations["object-storage"] and self.model.relations["s3-credentials"]:
+        if (
+            self.model.relations[OBJECT_STORAGE_RELATION]
+            and self.model.relations[S3_CREDENTIALS_RELATION]
+        ):
             raise ErrorWithStatus(
                 "Too many object storage relations. Please relate to only one of "
                 "`object-storage` or `s3-credentials`.",
                 BlockedStatus,
             )
 
-        if self.model.relations["s3-credentials"]:
+        if self.model.relations[S3_CREDENTIALS_RELATION]:
             return self._get_s3_credentials_context()
 
         return self._get_object_storage_context()
