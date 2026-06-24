@@ -5,9 +5,11 @@
 """Integration tests for the kserve-controller `s3-credentials` relation.
 
 These tests deploy kserve-controller (in standard/ambient mode) together with
-an s3-integrator charm and assert that the S3 credentials provided over the
-`s3-credentials` relation are rendered into the Secret and ServiceAccount that
-are dispatched, via the resource-dispatcher, into user namespaces.
+an s3-integrator charm and assert that:
+  1. Deploying an inferenceservice works
+  2. The S3 credentials provided over the `s3-credentials` relation are
+    rendered into the Secret and ServiceAccount that are dispatched,
+    via the resource-dispatcher, into user namespaces.
 """
 
 import base64
