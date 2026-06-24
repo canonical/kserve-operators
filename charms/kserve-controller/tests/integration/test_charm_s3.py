@@ -318,6 +318,7 @@ async def test_inference_service_proxy_envs_configuration(
             isvc_pod = next(pods_list)
             init_env_vars = isvc_pod.spec.initContainers[0].env
 
+            http_proxy_env = https_proxy_env = no_proxy_env = None
             for env_var in init_env_vars:
                 if env_var.name == "HTTP_PROXY":
                     http_proxy_env = env_var.value
@@ -326,6 +327,9 @@ async def test_inference_service_proxy_envs_configuration(
                 elif env_var.name == "NO_PROXY":
                     no_proxy_env = env_var.value
 
+            assert http_proxy_env is not None
+            assert https_proxy_env is not None
+            assert no_proxy_env is not None
             assert http_proxy_env == test_http_proxy
             assert https_proxy_env == test_https_proxy
             assert no_proxy_env == test_no_proxy
