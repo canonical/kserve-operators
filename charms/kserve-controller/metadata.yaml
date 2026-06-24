@@ -29,6 +29,7 @@ requires:
   object-storage:
     interface: object-storage
     optional: true
+    limit: 1
     schema:
       v1:
         provides:
