@@ -512,8 +512,8 @@ async def test_replace_object_storage_relation_with_s3_integrator(ops_test: OpsT
     charm stays Active after removing `object-storage`. The `s3-credentials` relation can then
     be established without tripping the mutual-exclusion BlockedStatus.
     """
-    await ops_test.model.remove_relation(
-        f"{MINIO.charm}:object-storage", f"{APP_NAME}:object-storage"
+    await ops_test.model.applications[APP_NAME].remove_relation(
+        "object-storage", f"{MINIO.charm}:object-storage"
     )
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
