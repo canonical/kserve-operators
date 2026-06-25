@@ -571,9 +571,13 @@ class KServeControllerCharm(CharmBase):
         Both relations are optional, but they are mutually exclusive.
         """
         secrets_context = self._get_storage_secrets_context()
-
-        # No storage relation is present
+        # No storage relation is present; clear previously-sent manifests so resource-dispatcher
+        # can remove the Secret/ServiceAccount from user namespaces.
         if secrets_context is None:
+            if self.model.relations["secrets"]:
+                self.secrets_manifests_wrapper.send_data([])
+            if self.model.relations["service-accounts"]:
+                self.service_accounts_manifests_wrapper.send_data([])
             return
 
         service_accounts_context = {
