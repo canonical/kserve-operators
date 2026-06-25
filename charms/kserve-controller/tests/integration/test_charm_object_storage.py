@@ -470,47 +470,11 @@ async def test_inference_service_proxy_envs_configuration(
             assert no_proxy_env == test_no_proxy
 
 
-async def test_blocked_on_invalid_config(ops_test: OpsTest):
-    """
-    Test whether the application is blocked on providing an invalid configuration.
-
-    Args:
-        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
-    """
-    await ops_test.model.applications[APP_NAME].set_config({"custom_images": "{"})
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=300
-    )
-    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
-
-
-@pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
-async def test_container_security_context(
-    ops_test: OpsTest,
-    lightkube_client: Client,
-    container_name: str,
-):
-    """Test container security context is correctly set.
-
-    Verify that container spec defines the security context with correct
-    user ID and group ID.
-    """
-    pod_name = get_pod_names(ops_test.model.name, APP_NAME)[0]
-    assert_security_context(
-        lightkube_client,
-        pod_name,
-        container_name,
-        CONTAINERS_SECURITY_CONTEXT_MAP,
-        ops_test.model.name,
-    )
-
-
 async def test_replace_object_storage_relation_with_s3_integrator(ops_test: OpsTest):
-    """Swap the `object-storage` (minio) relation for the `s3-credentials` (s3-integrator) one.
+    """Swap the `object-storage` relation for `s3-credentials`.
 
     Both storage relations are optional and mutually exclusive in kserve-controller, so the
-    charm stays Active after removing `object-storage`. The `s3-credentials` relation can then
-    be established without tripping the mutual-exclusion BlockedStatus.
+    charm stays Active after removing `object-storage`.
     """
     await ops_test.model.applications[APP_NAME].remove_relation(
         "object-storage", f"{MINIO.charm}:object-storage"
@@ -565,6 +529,41 @@ async def test_user_namespace_has_new_manifests(
     assert base64.b64decode(secret.data["AWS_SECRET_ACCESS_KEY"])
 
     assert service_account.secrets[0].name == manifests_name
+
+
+async def test_blocked_on_invalid_config(ops_test: OpsTest):
+    """
+    Test whether the application is blocked on providing an invalid configuration.
+
+    Args:
+        ops_test (OpsTest): The Juju OpsTest fixture to interact with the deployed model.
+    """
+    await ops_test.model.applications[APP_NAME].set_config({"custom_images": "{"})
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=300
+    )
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
+
+
+@pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
+async def test_container_security_context(
+    ops_test: OpsTest,
+    lightkube_client: Client,
+    container_name: str,
+):
+    """Test container security context is correctly set.
+
+    Verify that container spec defines the security context with correct
+    user ID and group ID.
+    """
+    pod_name = get_pod_names(ops_test.model.name, APP_NAME)[0]
+    assert_security_context(
+        lightkube_client,
+        pod_name,
+        container_name,
+        CONTAINERS_SECURITY_CONTEXT_MAP,
+        ops_test.model.name,
+    )
 
 
 @pytest.mark.abort_on_fail
