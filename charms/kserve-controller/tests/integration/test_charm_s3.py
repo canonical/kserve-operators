@@ -404,8 +404,6 @@ async def test_inference_service_from_s3_object_storage(
     that references it through a `s3://` storageUri and the dispatched
     `kserve-controller-s3` ServiceAccount.
     """
-    # `setup_microceph` is idempotent: it returns the same credentials and the HTTP
-    # endpoint used by the already-deployed s3-integrator.
     s3_connection_info = setup_microceph(add_ca_chain=False)
     upload_model_to_object_storage(
         s3_connection_info,
@@ -415,7 +413,7 @@ async def test_inference_service_from_s3_object_storage(
     )
 
     # Wait for the resource-dispatcher to populate the S3 Secret and ServiceAccount in the
-    # (freshly created) user namespace before the InferenceService references them.
+    # user namespace before the InferenceService references them.
     manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
     get_k8s_secret(manifests_name, test_namespace, lightkube_client)
     get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
