@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Integration tests for the kserve-controller `s3-credentials` relation.
+
+These tests deploy kserve-controller (in standard/ambient mode) together with
+an s3-integrator charm and assert that:
+  1. Deploying an inferenceservice works
+  2. The S3 credentials provided over the `s3-credentials` relation are
+    rendered into the Secret and ServiceAccount that are dispatched,
+    via the resource-dispatcher, into user namespaces.
+"""
 
 import base64
 import json
@@ -22,23 +31,20 @@ from charmed_kubeflow_chisme.testing import (
     get_alert_rules,
     get_pod_names,
 )
+from charmed_kubeflow_chisme.testing.s3_integration import (
+    deploy_and_assert_s3_integrator,
+    host_ip,
+    setup_microceph,
+)
 from lightkube import Client
 from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
-from lightkube.resources.core_v1 import (
-    ConfigMap,
-    Pod,
-)
+from lightkube.resources.core_v1 import ConfigMap, Pod
 from pytest_operator.plugin import OpsTest
-from tenacity import Retrying, stop_after_delay, wait_fixed
 
 from tests.integration.charms_dependencies import (
-    ISTIO_GATEWAY,
-    ISTIO_PILOT,
-    KNATIVE_OPERATOR,
-    KNATIVE_SERVING,
     METACONTROLLER_OPERATOR,
-    MINIO,
     RESOURCE_DISPATCHER,
+    S3_INTEGRATOR,
 )
 from tests.integration.constants import (
     APP_NAME,
@@ -50,29 +56,41 @@ from tests.integration.constants import (
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
+    S3_BUCKET,
+    S3_MODEL_KEY,
+    S3_MODEL_URL,
     SKLEARN_INF_SVC_NAME,
     SKLEARN_INF_SVC_OBJECT,
+    SKLEARN_S3_INF_SVC_NAME,
+    SKLEARN_S3_INF_SVC_OBJECT,
     YAMLS_PREFIX,
 )
 from tests.integration.utils import (
     assert_inf_svc_state,
+    assert_isvc_ingress_traffic,
     deploy_k8s_resources,
     get_k8s_secret,
     get_k8s_service_account,
     populate_template,
+    upload_model_to_object_storage,
 )
 
-ISTIO_INGRESS_GATEWAY = "test-gateway"
-ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
-
-# ConfigMap (Knative)
-CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE = "knative-serving"
-CONFIGMAP_DATA_LOCAL_GATEWAY_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME = "knative-local-gateway"
-CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_KNATIVE = "test-gateway"
-
-
 logger = logging.getLogger(__name__)
+
+# tenacity
+RETRY_FOR_THREE_MINUTES = tenacity.Retrying(
+    stop=tenacity.stop_after_delay(60 * 3),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
+)
+
+# ambient-mode Istio:
+ISTIO_K8S_APP = "istio-k8s"
+ISTIO_INGRESS_K8S_APP = "istio-ingress-k8s"
+ISTIO_BEACON_K8S_APP = "istio-beacon-k8s"
+ISTIO_INGRESS_GATEWAY_ENDPOINT = "gateway-metadata"
+SERVICE_MESH_ENDPOINT = "service-mesh"
+
 
 custom_images = json.loads(Path(CUSTOM_IMAGES_PATH).read_text())
 
@@ -84,78 +102,45 @@ def generate_configmap_context(ingress_gateway_namespace: str) -> dict:
         **custom_images,
         "configmap__explainers__art__image": explainer_image,
         "configmap__explainers__art__version": explainer_version,
-        "deployment_mode": "Knative",
-        "enable_gateway_api": "false",
+        "deployment_mode": "Standard",
+        "enable_gateway_api": "true",
         "ingress_domain": CONFIGMAP_DATA_INGRESS_DOMAIN,
-        "local_gateway_namespace": CONFIGMAP_DATA_LOCAL_GATEWAY_NAMESPACE,
-        "local_gateway_name": CONFIGMAP_DATA_LOCAL_GATEWAY_NAME,
-        "local_gateway_service_name": CONFIGMAP_DATA_LOCAL_GATEWAY_SERVICE_NAME,
         "ingress_gateway_namespace": ingress_gateway_namespace,
-        "ingress_gateway_name": CONFIGMAP_DATA_INGRESS_GATEWAY_NAME_KNATIVE,
+        "ingress_gateway_name": ISTIO_INGRESS_K8S_APP,
     }
 
 
 @pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, request):
-    """Build the charm-under-test and deploy it together with related charms.
+    """Build and deploy kserve-controller with the ambient Istio dependencies.
 
-    Assert on the unit status before any relations/configurations take place.
+    Assert that the charm reaches Active before any storage relation is added.
     """
-    # Deploy istio-operators for ingress configuration
+    # Deploy ambient Istio ecosystem
+    istio_channel = "2/stable"
     await ops_test.model.deploy(
-        ISTIO_PILOT.charm,
-        channel=ISTIO_PILOT.channel,
-        config={"default-gateway": ISTIO_INGRESS_GATEWAY},
-        trust=ISTIO_PILOT.trust,
+        ISTIO_K8S_APP,
+        channel=istio_channel,
+        config={"platform": ""},
+        trust=True,
     )
-
     await ops_test.model.deploy(
-        ISTIO_GATEWAY.charm,
-        application_name=ISTIO_GATEWAY_APP_NAME,
-        channel=ISTIO_GATEWAY.channel,
-        config=ISTIO_GATEWAY.config,
-        trust=ISTIO_GATEWAY.trust,
+        ISTIO_INGRESS_K8S_APP,
+        channel=istio_channel,
+        trust=True,
     )
-    await ops_test.model.integrate(ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME)
-    await ops_test.model.wait_for_idle(
-        [ISTIO_PILOT.charm, ISTIO_GATEWAY_APP_NAME],
-        raise_on_blocked=False,
-        status="active",
-        timeout=90 * 10,
-    )
-
-    # Deploy knative-operator
     await ops_test.model.deploy(
-        KNATIVE_OPERATOR.charm,
-        channel=KNATIVE_OPERATOR.channel,
-        trust=KNATIVE_OPERATOR.trust,
-    )
-
-    # Wait for idle knative-operator before deploying knative-serving
-    # due to issue https://github.com/canonical/knative-operators/issues/156
-    await ops_test.model.wait_for_idle(
-        [KNATIVE_OPERATOR.charm],
-        status="active",
-        raise_on_blocked=False,
-        timeout=90 * 10,
-    )
-
-    # Deploy knative-serving
-    await ops_test.model.deploy(
-        KNATIVE_SERVING.charm,
-        channel=KNATIVE_SERVING.channel,
-        config={
-            "istio.gateway.namespace": ops_test.model_name,
-            "istio.gateway.name": ISTIO_INGRESS_GATEWAY,
-        },
-        trust=KNATIVE_SERVING.trust,
+        ISTIO_BEACON_K8S_APP,
+        channel=istio_channel,
+        trust=True,
+        config={"model-on-mesh": False},
     )
     await ops_test.model.wait_for_idle(
-        [KNATIVE_SERVING.charm],
         raise_on_blocked=False,
-        status="active",
-        timeout=90 * 10,
+        raise_on_error=False,
+        wait_for_active=True,
+        timeout=900,
     )
 
     # build and deploy charm from local source folder
@@ -172,13 +157,19 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     await ops_test.model.deploy(
         entity_url,
         resources=resources,
+        config={"deployment-mode": "standard"},
         application_name=APP_NAME,
         trust=True,
     )
 
-    await ops_test.model.integrate(ISTIO_PILOT.charm, APP_NAME)
-    # Relate kserve-controller and knative-serving
-    await ops_test.model.integrate(KNATIVE_SERVING.charm, APP_NAME)
+    await ops_test.model.integrate(
+        f"{ISTIO_INGRESS_K8S_APP}:{ISTIO_INGRESS_GATEWAY_ENDPOINT}",
+        f"{APP_NAME}:{ISTIO_INGRESS_GATEWAY_ENDPOINT}",
+    )
+    await ops_test.model.integrate(
+        f"{ISTIO_BEACON_K8S_APP}:{SERVICE_MESH_ENDPOINT}",
+        f"{APP_NAME}:{SERVICE_MESH_ENDPOINT}",
+    )
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward(fast_interval="60s"):
@@ -196,6 +187,24 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     )
 
 
+async def test_relate_to_s3_integrator(ops_test: OpsTest):
+    """Test that the charm can relate to s3-integrator and stay in Active state."""
+    # Deploy s3-integrator and provide it with S3 credentials
+    await deploy_and_assert_s3_integrator(ops_test.model, s3_integrator=S3_INTEGRATOR)
+
+    await ops_test.model.integrate(
+        f"{APP_NAME}:s3-credentials", f"{S3_INTEGRATOR.charm}:s3-credentials"
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, S3_INTEGRATOR.charm],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=600,
+    )
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+
+
 @pytest.mark.parametrize(
     "inference_file",
     [
@@ -208,15 +217,13 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         YAMLS_PREFIX + "tensorflow-serving.yaml",
     ],
 )
-def test_inference_service(
+async def test_inference_service(
     test_namespace: str,
     lightkube_client: lightkube.Client,
     inference_file,
     ops_test: OpsTest,
 ):
     """Validates that an InferenceService can be deployed."""
-    # Read InferenceService example
-
     inf_svc_yaml = yaml.safe_load(Path(inference_file).read_text())
     inf_svc_object = lightkube.codecs.load_all_yaml(yaml.dump(inf_svc_yaml))[0]
     inf_svc_name = inf_svc_object.metadata.name
@@ -233,6 +240,11 @@ def test_inference_service(
     create_inf_svc()
     # Assert InferenceService state is Available
     assert_inf_svc_state(lightkube_client, inf_svc_name, test_namespace)
+
+    # Assert that traffic reaches the ISVC
+    await assert_isvc_ingress_traffic(
+        inf_svc_name, test_namespace, lightkube_client, ops_test.model_name
+    )
 
 
 # Test o11y
@@ -260,7 +272,7 @@ async def test_alert_rules(ops_test: OpsTest):
     await assert_alert_rules(app, alert_rules)
 
 
-# ConfigMap
+# Test KServe ConfigMap
 async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
     """
     Test whether the configmap is created with the expected data.
@@ -307,36 +319,8 @@ async def test_configmap_changes_with_config(
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
-# MLflow integration, via MinIO and Resource Dispatcher
-async def test_relate_to_object_store(ops_test: OpsTest):
-    """Test if the charm can relate to minio and stay in Active state"""
-    await ops_test.model.deploy(
-        MINIO.charm,
-        channel=MINIO.channel,
-        config=MINIO.config,
-        trust=MINIO.trust,
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[MINIO.charm],
-        status="active",
-        raise_on_blocked=False,
-        raise_on_error=False,
-        timeout=600,
-    )
-    await ops_test.model.integrate(f"{MINIO.charm}:object-storage", f"{APP_NAME}:object-storage")
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="active",
-        raise_on_blocked=False,
-        raise_on_error=False,
-        timeout=600,
-    )
-    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-
-
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
-    """
-    Test if the charm can relate to resource dispatcher and stay in Active state
+    """Test that the charm can relate to resource-dispatcher and stay in Active state.
 
     We need to deploy Metacontroller and poddefaults CRD (for Resource dispatcher).
     """
@@ -382,32 +366,69 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
-async def test_new_user_namespace_has_manifests(
+async def test_new_user_namespace_has_s3_manifests(
     ops_test: OpsTest, lightkube_client: lightkube.Client, test_namespace: str
 ):
-    """Create user namespace with correct label and check manifests."""
+    """Create a user namespace and check the dispatched S3 Secret and ServiceAccount.
+
+    The Secret is built from the data provided over the `s3-credentials` relation
+    by s3-integrator.
+    """
+    logger.info("Checking the created secret in the user namespace.")
     manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
     secret = get_k8s_secret(manifests_name, test_namespace, lightkube_client)
     service_account = get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
 
-    assert secret.data == {
-        "AWS_ACCESS_KEY_ID": base64.b64encode(MINIO.config["access-key"].encode("utf-8")).decode(
-            "utf-8"
-        ),
-        "AWS_SECRET_ACCESS_KEY": base64.b64encode(
-            MINIO.config["secret-key"].encode("utf-8")
-        ).decode("utf-8"),
-    }
+    annotations = secret.metadata.annotations
+    assert annotations["serving.kserve.io/s3-endpoint"] == host_ip()
+    assert annotations["serving.kserve.io/s3-usehttps"] == "0"
+    assert annotations["serving.kserve.io/s3-useanoncredential"] == "false"
+    assert annotations["serving.kserve.io/s3-region"]
+
+    # The credentials are generated by microceph and are not known ahead of time,
+    # so assert that they are present and non-empty rather than matching values.
+    assert base64.b64decode(secret.data["AWS_ACCESS_KEY_ID"])
+    assert base64.b64decode(secret.data["AWS_SECRET_ACCESS_KEY"])
+
     assert service_account.secrets[0].name == manifests_name
 
 
-RETRY_FOR_THREE_MINUTES = Retrying(
-    stop=stop_after_delay(60 * 3),
-    wait=wait_fixed(5),
-    reraise=True,
-)
+async def test_inference_service_from_s3_object_storage(
+    test_namespace: str,
+    lightkube_client: lightkube.Client,
+):
+    """Validate that an InferenceService can pull its model from S3 object storage.
+
+    A model artifact is uploaded to the microceph-backed S3 store (over HTTP, since the
+    s3-integrator is deployed with `add_ca_chain=False`) and an InferenceService is created
+    that references it through a `s3://` storageUri and the dispatched
+    `kserve-controller-s3` ServiceAccount.
+    """
+    s3_connection_info = setup_microceph(add_ca_chain=False)
+    upload_model_to_object_storage(
+        s3_connection_info,
+        bucket=S3_BUCKET,
+        key=S3_MODEL_KEY,
+        model_url=S3_MODEL_URL,
+    )
+
+    # Wait for the resource-dispatcher to populate the S3 Secret and ServiceAccount in the
+    # user namespace before the InferenceService references them.
+    manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
+    get_k8s_secret(manifests_name, test_namespace, lightkube_client)
+    get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
+
+    # Create the InferenceService that pulls its model from S3
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            lightkube_client.create(SKLEARN_S3_INF_SVC_OBJECT, namespace=test_namespace)
+
+    # Assert the InferenceService reaches a Ready state, which confirms the model was
+    # successfully pulled from S3.
+    assert_inf_svc_state(lightkube_client, SKLEARN_S3_INF_SVC_NAME, test_namespace)
 
 
+# Test Proxy configurations
 async def test_inference_service_proxy_envs_configuration(
     test_namespace: str, ops_test: OpsTest, lightkube_client: lightkube.Client
 ):
@@ -452,6 +473,7 @@ async def test_inference_service_proxy_envs_configuration(
             isvc_pod = next(pods_list)
             init_env_vars = isvc_pod.spec.initContainers[0].env
 
+            http_proxy_env = https_proxy_env = no_proxy_env = None
             for env_var in init_env_vars:
                 if env_var.name == "HTTP_PROXY":
                     http_proxy_env = env_var.value

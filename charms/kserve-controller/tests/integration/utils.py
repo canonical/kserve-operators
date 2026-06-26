@@ -5,13 +5,17 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import boto3
 import lightkube
 import lightkube.codecs
 import lightkube.generic_resource
+import requests
 import tenacity
 import yaml
+from botocore.exceptions import ClientError
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.testing import assert_path_reachable_through_ingress
+from charmed_kubeflow_chisme.testing.s3_integration import S3ConnectionInfo
 from jinja2 import Template
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Pod, Secret, ServiceAccount
@@ -137,6 +141,47 @@ def get_k8s_service_account(
 ) -> ServiceAccount:
     """Returns a k8s service account with retry logic."""
     return lightkube_client.get(ServiceAccount, name, namespace=namespace)
+
+
+# Object storage helpers
+def upload_model_to_object_storage(
+    s3_connection_info: S3ConnectionInfo,
+    bucket: str,
+    key: str,
+    model_url: str,
+):
+    """Download a model artifact and upload it to the S3-compatible object store.
+
+    Args:
+        s3_connection_info: The S3ConnectionInfo (endpoint, credentials, region) returned
+            by chisme's `setup_microceph()`.
+        bucket: Name of the bucket to create (if needed) and upload the model to.
+        key: Object key under which the model artifact is stored.
+        model_url: URL to download the model artifact from.
+    """
+    logger.info("Downloading model from %s", model_url)
+    response = requests.get(model_url, timeout=60)
+    response.raise_for_status()
+
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=s3_connection_info.endpoint,
+        aws_access_key_id=s3_connection_info.access_key,
+        aws_secret_access_key=s3_connection_info.secret_key,
+        region_name=s3_connection_info.region,
+    )
+
+    logger.info("Creating bucket %s (if it does not already exist)", bucket)
+    try:
+        s3_client.create_bucket(Bucket=bucket)
+    except ClientError as error:
+        # Ignore the bucket already existing, e.g. when the test is re-run.
+        error_code = error.response.get("Error", {}).get("Code", "")
+        if error_code not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+            raise
+
+    logger.info("Uploading model to s3://%s/%s", bucket, key)
+    s3_client.put_object(Bucket=bucket, Key=key, Body=response.content)
 
 
 # Assert helpers

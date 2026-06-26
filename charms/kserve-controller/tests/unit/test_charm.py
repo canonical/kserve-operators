@@ -102,6 +102,31 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     yield mocked_resource_handler.lightkube_client
 
 
+@pytest.fixture()
+def active_no_object_storage_harness(harness, mocker, mocked_resource_handler):
+    """A harness configured so the charm would otherwise reach ActiveStatus.
+
+    Satisfies gateway-metadata and the deployment mode, so that we can more
+    easily test the object storatge relations.
+    """
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.update_config({"deployment-mode": "standard"})
+    harness.add_relation("gateway-metadata", "istio-ingress-k8s")
+    mocker.patch.object(
+        harness.charm.gateway_info,
+        "get_metadata",
+        return_value=GatewayMetadata(
+            namespace="test-namespace",
+            deployment_name="test-deployment",
+            gateway_name="test-gateway",
+            service_account="test-service-account",
+        ),
+    )
+    yield harness
+
+
 def test_metrics(harness: Harness):
     """Test MetricsEndpointProvider initialization."""
     with (
@@ -719,6 +744,198 @@ def test_deployment_modes_gateway_relations(
     harness.update_config({"deployment-mode": deployment_mode})
 
     assert harness.charm.model.unit.status == expected_status
+
+
+S3_CREDENTIALS_ACCESS_KEY = "s3-access-key"
+S3_CREDENTIALS_SECRET_KEY = "s3-secret-key"
+S3_CREDENTIALS_ENDPOINT = "https://my-s3.example.com:9000"
+S3_CREDENTIALS_REGION = "eu-west-2"
+S3_CREDENTIALS_BUCKET = "my-bucket"
+
+S3_CONNECTION_INFO = {
+    "access-key": S3_CREDENTIALS_ACCESS_KEY,
+    "secret-key": S3_CREDENTIALS_SECRET_KEY,
+    "endpoint": S3_CREDENTIALS_ENDPOINT,
+    "region": S3_CREDENTIALS_REGION,
+    "bucket": S3_CREDENTIALS_BUCKET,
+}
+
+OBJECT_STORAGE_ACCESS_KEY = "minio-access-key"
+OBJECT_STORAGE_SECRET_KEY = "minio-secret-key"
+OBJECT_STORAGE_SERVICE = "minio"
+OBJECT_STORAGE_NAMESPACE = "kubeflow"
+OBJECT_STORAGE_PORT = 9000
+OBJECT_STORAGE_SECURE = False
+
+OBJECT_STORAGE_DATA = {
+    "access-key": OBJECT_STORAGE_ACCESS_KEY,
+    "secret-key": OBJECT_STORAGE_SECRET_KEY,
+    "service": OBJECT_STORAGE_SERVICE,
+    "namespace": OBJECT_STORAGE_NAMESPACE,
+    "port": OBJECT_STORAGE_PORT,
+    "secure": OBJECT_STORAGE_SECURE,
+}
+
+
+def test_resolve_storage_secrets_context_object_storage(harness: Harness, mocker):
+    """The object-storage relation produces the expected secret context."""
+    harness.begin()
+    harness.add_relation("object-storage", "minio")
+    mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
+    mocker.patch.object(harness.charm, "_get_object_storage", return_value=OBJECT_STORAGE_DATA)
+
+    context = harness.charm._resolve_storage_secrets_context()
+
+    assert context == {
+        "secret_name": "kserve-controller-s3",
+        "s3_endpoint": "minio.kubeflow:9000",
+        "s3_usehttps": "0",
+        "s3_region": "us-east-1",
+        "s3_useanoncredential": "false",
+        "s3_access_key": OBJECT_STORAGE_ACCESS_KEY,
+        "s3_secret_access_key": OBJECT_STORAGE_SECRET_KEY,
+    }
+
+
+def test_resolve_storage_secrets_context_s3_credentials(harness: Harness, mocker):
+    """The s3-credentials relation produces the expected secret context.
+
+    The endpoint scheme is stripped (host[:port] only) and translated into the
+    s3-usehttps annotation, and the region is taken from the relation data.
+    """
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = dict(S3_CONNECTION_INFO)
+
+    context = harness.charm._resolve_storage_secrets_context()
+
+    assert context == {
+        "secret_name": "kserve-controller-s3",
+        "s3_endpoint": "my-s3.example.com:9000",
+        "s3_usehttps": "1",
+        "s3_region": S3_CREDENTIALS_REGION,
+        "s3_useanoncredential": "false",
+        "s3_access_key": S3_CREDENTIALS_ACCESS_KEY,
+        "s3_secret_access_key": S3_CREDENTIALS_SECRET_KEY,
+    }
+
+
+def test_resolve_storage_secrets_context_s3_http_endpoint_default_region(harness: Harness, mocker):
+    """An http endpoint sets s3-usehttps to 0 and a missing region falls back to the default."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    connection_info = dict(S3_CONNECTION_INFO)
+    connection_info["endpoint"] = "http://minio:9000"
+    del connection_info["region"]
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = connection_info
+
+    context = harness.charm._resolve_storage_secrets_context()
+
+    assert context["s3_endpoint"] == "minio:9000"
+    assert context["s3_usehttps"] == "0"
+    assert context["s3_region"] == "us-east-1"
+
+
+def test_both_storage_relations_blocks_unit_status(active_no_object_storage_harness):
+    """Relating both object-storage and s3-credentials sets the unit to BlockedStatus."""
+    harness = active_no_object_storage_harness
+
+    # Relate BOTH storage backends -> charm must block.
+    harness.add_relation("object-storage", "minio")
+    harness.add_relation("s3-credentials", "s3-integrator")
+
+    harness.charm.on.install.emit()
+
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "Too many object storage relations. Please relate to only one of "
+        "`object-storage` or `s3-credentials`."
+    )
+
+
+def test_resolve_storage_secrets_context_no_relation(harness: Harness, mocker):
+    """No storage relation yields no secret context."""
+    harness.begin()
+    mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
+
+    assert harness.charm._resolve_storage_secrets_context() is None
+
+
+def test_s3_incomplete_data_blocks_unit_status(active_no_object_storage_harness):
+    """Incomplete s3-credentials relation data sets the unit to BlockedStatus."""
+    harness = active_no_object_storage_harness
+    harness.add_relation("s3-credentials", "s3-integrator")
+    # endpoint is missing from the relation data
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = {
+        "access-key": S3_CREDENTIALS_ACCESS_KEY,
+        "secret-key": S3_CREDENTIALS_SECRET_KEY,
+    }
+
+    harness.charm.on.install.emit()
+
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "Incomplete s3-credentials relation data, missing: endpoint"
+    )
+
+
+def test_s3_no_data_sets_waiting_unit_status(active_no_object_storage_harness):
+    """An established s3-credentials relation with no data sets the unit to WaitingStatus."""
+    harness = active_no_object_storage_harness
+    harness.add_relation("s3-credentials", "s3-integrator")
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = {}
+
+    harness.charm.on.install.emit()
+
+    assert harness.charm.model.unit.status == WaitingStatus(
+        "Waiting for s3-credentials relation data"
+    )
+
+
+def test_send_object_storage_manifests_s3(harness: Harness, mocker):
+    """The s3-credentials backend renders and sends both the secret and service account."""
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.add_relation("s3-credentials", "s3-integrator")
+    harness.charm.s3_requirer.get_storage_connection_info.return_value = dict(S3_CONNECTION_INFO)
+    mocked_send_manifests = mocker.patch.object(harness.charm, "_send_manifests")
+
+    harness.charm.send_object_storage_manifests()
+
+    # One call for the secret, one for the service account
+    assert mocked_send_manifests.call_count == 2
+
+
+def test_send_object_storage_manifests_no_relation(harness: Harness, mocker):
+    """No storage relation means no manifests are sent."""
+    harness.begin()
+    mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
+    mocked_send_manifests = mocker.patch.object(harness.charm, "_send_manifests")
+
+    harness.charm.send_object_storage_manifests()
+
+    mocked_send_manifests.assert_not_called()
+
+
+def test_send_object_storage_manifests_clears_stale_manifests(harness: Harness, mocker):
+    """No storage relation clears manifests on the established dispatcher relations.
+
+    When no storage relation is present but the secrets/service-accounts relations exist,
+    empty manifests are sent so resource-dispatcher removes the previously-created
+    Secret/ServiceAccount from user namespaces.
+    """
+    harness.begin()
+    harness.add_relation("secrets", "resource-dispatcher")
+    harness.add_relation("service-accounts", "resource-dispatcher")
+    mocked_secrets_send = mocker.patch.object(harness.charm.secrets_manifests_wrapper, "send_data")
+    mocked_service_accounts_send = mocker.patch.object(
+        harness.charm.service_accounts_manifests_wrapper, "send_data"
+    )
+
+    harness.charm.send_object_storage_manifests()
+
+    mocked_secrets_send.assert_called_once_with([])
+    mocked_service_accounts_send.assert_called_once_with([])
 
 
 @patch("charm.KServeControllerCharm._restart_controller_service")

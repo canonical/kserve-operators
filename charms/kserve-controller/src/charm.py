@@ -16,7 +16,8 @@ import json
 import logging
 from base64 import b64encode
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, TypedDict
+from urllib.parse import urlparse
 
 import tenacity
 import yaml
@@ -46,6 +47,7 @@ from lightkube import ApiError, Client
 from lightkube.generic_resource import load_in_cluster_generic_resources
 from lightkube.models.core_v1 import ServicePort
 from lightkube_extensions.batch import create_charm_default_labels
+from object_storage import S3Requirer
 from ops import main
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -90,11 +92,13 @@ K8S_RESOURCE_FILES = [
 SDI_INGRESS_GATEWAY_RELATION = "ingress-gateway"
 SDI_LOCAL_GATEWAY_RELATION = "local-gateway"
 GATEWAY_METADATA_RELATION = "gateway-metadata"
+OBJECT_STORAGE_RELATION = "object-storage"
+S3_CREDENTIALS_RELATION = "s3-credentials"
 
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
 S3_USEANONCREDENTIALS = "false"
 S3_REGION = "us-east-1"
-S3_USEHTTPS = "0"
+OBJECT_STORAGE_USEHTTPS = "0"
 
 SECRETS_FILES = [
     "src/secrets/kserve-mlflow-minio-secret.yaml.j2",
@@ -105,6 +109,18 @@ SERVICE_ACCOUNTS_FILES = [
 NO_MINIO_RELATION_DATA = {}
 
 METRICS_PORT = 8080
+
+
+class S3SecretContext(TypedDict):
+    """Template context for rendering the s3 Secret manifest."""
+
+    secret_name: str
+    s3_endpoint: str
+    s3_usehttps: str
+    s3_region: str
+    s3_useanoncredential: str
+    s3_access_key: str
+    s3_secret_access_key: str
 
 
 # For errors when a K8s object exists while it shouldn't
@@ -159,6 +175,7 @@ class KServeControllerCharm(CharmBase):
             self, relation_name=SDI_LOCAL_GATEWAY_RELATION
         )
         self.gateway_info = GatewayMetadataRequirer(self, relation_name=GATEWAY_METADATA_RELATION)
+        self.s3_requirer = S3Requirer(self, relation_name=S3_CREDENTIALS_RELATION)
 
         self.framework.observe(self.on.remove, self._on_remove)
 
@@ -171,7 +188,10 @@ class KServeControllerCharm(CharmBase):
             self.on[SDI_LOCAL_GATEWAY_RELATION].relation_changed,
             self.on[SDI_INGRESS_GATEWAY_RELATION].relation_changed,
             self.on[GATEWAY_METADATA_RELATION].relation_changed,
-            self.on["object-storage"].relation_changed,
+            self.on[OBJECT_STORAGE_RELATION].relation_changed,
+            self.on[OBJECT_STORAGE_RELATION].relation_broken,
+            self.on[S3_CREDENTIALS_RELATION].relation_changed,
+            self.on[S3_CREDENTIALS_RELATION].relation_broken,
             self.on["secrets"].relation_changed,
             self.on["service-accounts"].relation_changed,
             self.on[SDI_INGRESS_GATEWAY_RELATION].relation_broken,
@@ -495,8 +515,7 @@ class KServeControllerCharm(CharmBase):
 
     def _get_object_storage(self, interfaces, default_return):
         """Retrieve object-storage relation data."""
-        relation_name = "object-storage"
-        return self._validate_sdi_interface(interfaces, relation_name, default_return)
+        return self._validate_sdi_interface(interfaces, OBJECT_STORAGE_RELATION, default_return)
 
     def _create_manifests(self, manifest_files, context):
         """Create manifests string for given folder and context."""
@@ -557,23 +576,22 @@ class KServeControllerCharm(CharmBase):
         relation_requirer.send_data(manifests)
 
     def send_object_storage_manifests(self):
-        """Send object storage related manifests in case the object storage relation exists"""
-        interfaces = self._get_interfaces()
-        object_storage_data = self._get_object_storage(interfaces, NO_MINIO_RELATION_DATA)
+        """Send object storage related manifests in case a storage relation exists.
 
-        # Relation is not present
-        if object_storage_data == NO_MINIO_RELATION_DATA:
+        The storage credentials can be provided either through the `object-storage`
+        relation or the `s3-credentials` relation.
+        Both relations are optional, but they are mutually exclusive.
+        """
+        secrets_context = self._resolve_storage_secrets_context()
+        # No usable storage credentials yet (either no storage relation, or the relation's
+        # data is not ready); clear previously-sent manifests so resource-dispatcher
+        # can remove the Secret/ServiceAccount from user namespaces.
+        if secrets_context is None:
+            if self.model.relations["secrets"]:
+                self.secrets_manifests_wrapper.send_data([])
+            if self.model.relations["service-accounts"]:
+                self.service_accounts_manifests_wrapper.send_data([])
             return
-
-        secrets_context = {
-            "secret_name": f"{self.app.name}-s3",
-            "s3_endpoint": f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
-            "s3_usehttps": S3_USEHTTPS,
-            "s3_region": S3_REGION,
-            "s3_useanoncredential": S3_USEANONCREDENTIALS,
-            "s3_access_key": object_storage_data["access-key"],
-            "s3_secret_access_key": object_storage_data["secret-key"],
-        }
 
         service_accounts_context = {
             "svc_account_name": f"{self.app.name}-s3",
@@ -585,6 +603,90 @@ class KServeControllerCharm(CharmBase):
             service_accounts_context,
             SERVICE_ACCOUNTS_FILES,
             self.service_accounts_manifests_wrapper,
+        )
+
+    def _resolve_storage_secrets_context(self) -> Optional[S3SecretContext]:
+        """Resolve the s3 Secret rendering context from the active storage relation.
+
+        Returns the rendering context for the s3 Secret, sourced from whichever
+        storage relation is established, or None when no storage relation exists
+        or its data is not ready yet.
+
+        Raises:
+            ErrorWithStatus(..., Blocked) if both storage relations are established.
+            ErrorWithStatus(..., Blocked/Waiting) if the relation data is incomplete.
+        """
+        if (
+            self.model.relations[OBJECT_STORAGE_RELATION]
+            and self.model.relations[S3_CREDENTIALS_RELATION]
+        ):
+            raise ErrorWithStatus(
+                "Too many object storage relations. Please relate to only one of "
+                "`object-storage` or `s3-credentials`.",
+                BlockedStatus,
+            )
+
+        if self.model.relations[S3_CREDENTIALS_RELATION]:
+            return self._get_s3_credentials_context()
+
+        if self.model.relations[OBJECT_STORAGE_RELATION]:
+            return self._get_object_storage_credentials_context()
+
+        # No storage relation is present.
+        return None
+
+    def _get_object_storage_credentials_context(self) -> Optional[S3SecretContext]:
+        """Build the s3 Secret context from the object-storage (SDI) relation."""
+        interfaces = self._get_interfaces()
+        object_storage_data = self._get_object_storage(interfaces, NO_MINIO_RELATION_DATA)
+
+        # Relation is not present
+        if object_storage_data == NO_MINIO_RELATION_DATA:
+            return None
+
+        return S3SecretContext(
+            secret_name=f"{self.app.name}-s3",
+            s3_endpoint=f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
+            s3_usehttps=OBJECT_STORAGE_USEHTTPS,
+            s3_region=S3_REGION,
+            s3_useanoncredential=S3_USEANONCREDENTIALS,
+            s3_access_key=object_storage_data["access-key"],
+            s3_secret_access_key=object_storage_data["secret-key"],
+        )
+
+    def _get_s3_credentials_context(self) -> S3SecretContext:
+        """Build the s3 Secret context from the s3-credentials relation."""
+        relation = self.model.get_relation(S3_CREDENTIALS_RELATION)
+        connection_info = self.s3_requirer.get_storage_connection_info(relation)
+
+        if not connection_info:
+            raise ErrorWithStatus("Waiting for s3-credentials relation data", WaitingStatus)
+
+        required_fields = {"access-key", "secret-key", "endpoint"}
+        missing_fields = required_fields - set(connection_info)
+        if missing_fields:
+            raise ErrorWithStatus(
+                f"Incomplete s3-credentials relation data, missing: "
+                f"{', '.join(sorted(missing_fields))}",
+                BlockedStatus,
+            )
+
+        # The endpoint is a full URL (e.g. "https://minio:9000"), but the kserve
+        # s3-endpoint annotation expects just the host[:port], and the scheme is
+        # captured separately by the s3-usehttps annotation.
+        parsed_endpoint = urlparse(connection_info["endpoint"])
+        raw_endpoint = parsed_endpoint.netloc if parsed_endpoint.netloc else parsed_endpoint.path
+        endpoint = raw_endpoint.split("/", 1)[0]
+        usehttps = "1" if parsed_endpoint.scheme == "https" else "0"
+
+        return S3SecretContext(
+            secret_name=f"{self.app.name}-s3",
+            s3_endpoint=endpoint,
+            s3_usehttps=usehttps,
+            s3_region=connection_info.get("region") or S3_REGION,
+            s3_useanoncredential=S3_USEANONCREDENTIALS,
+            s3_access_key=connection_info["access-key"],
+            s3_secret_access_key=connection_info["secret-key"],
         )
 
     def reconcile_authorization_policies(self):
