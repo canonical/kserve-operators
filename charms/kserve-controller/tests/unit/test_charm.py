@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import ops.testing
 import pytest
-from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_service_mesh_helpers.interfaces import GatewayMetadata
 from lightkube import ApiError
 from ops import StatusBase
@@ -101,6 +100,31 @@ def mocked_lightkube_client(mocker, mocked_resource_handler):
     """Prevents lightkube clients from being created, returning a mock instead."""
     mocked_resource_handler.lightkube_client = MagicMock()
     yield mocked_resource_handler.lightkube_client
+
+
+@pytest.fixture()
+def active_no_object_storage_harness(harness, mocker, mocked_resource_handler):
+    """A harness configured so the charm would otherwise reach ActiveStatus.
+
+    Satisfies gateway-metadata and the deployment mode, so that we can more
+    easily test the object storatge relations.
+    """
+    mocker.patch("charm.S3Requirer")
+    harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+    harness.update_config({"deployment-mode": "standard"})
+    harness.add_relation("gateway-metadata", "istio-ingress-k8s")
+    mocker.patch.object(
+        harness.charm.gateway_info,
+        "get_metadata",
+        return_value=GatewayMetadata(
+            namespace="test-namespace",
+            deployment_name="test-deployment",
+            gateway_name="test-gateway",
+            service_account="test-service-account",
+        ),
+    )
+    yield harness
 
 
 def test_metrics(harness: Harness):
@@ -814,32 +838,9 @@ def test_get_storage_secrets_context_s3_http_endpoint_default_region(harness: Ha
     assert context["s3_region"] == "us-east-1"
 
 
-def test_both_storage_relations_blocks_unit_status(
-    harness: Harness, mocker, mocked_resource_handler
-):
-    """Relating both object-storage and s3-credentials sets the unit to BlockedStatus.
-
-    Exercises the full event flow (not just the helper) to verify the ErrorWithStatus
-    raised in _get_storage_secrets_context is translated into a BlockedStatus by _on_event.
-    """
-    mocker.patch("charm.S3Requirer")
-    harness.begin()
-    harness.charm._k8s_resource_handler = mocked_resource_handler
-
-    # Make everything before send_object_storage_manifests() succeed:
-    # standard mode + gateway-metadata relation -> would otherwise be Active.
-    harness.update_config({"deployment-mode": "standard"})
-    harness.add_relation("gateway-metadata", "istio-ingress-k8s")
-    mocker.patch.object(
-        harness.charm.gateway_info,
-        "get_metadata",
-        return_value=GatewayMetadata(
-            namespace="test-namespace",
-            deployment_name="test-deployment",
-            gateway_name="test-gateway",
-            service_account="test-service-account",
-        ),
-    )
+def test_both_storage_relations_blocks_unit_status(active_no_object_storage_harness):
+    """Relating both object-storage and s3-credentials sets the unit to BlockedStatus."""
+    harness = active_no_object_storage_harness
 
     # Relate BOTH storage backends -> charm must block.
     harness.add_relation("object-storage", "minio")
@@ -861,10 +862,9 @@ def test_get_storage_secrets_context_no_relation(harness: Harness, mocker):
     assert harness.charm._get_storage_secrets_context() is None
 
 
-def test_get_storage_secrets_context_s3_incomplete_data_blocked(harness: Harness, mocker):
-    """Incomplete s3-credentials relation data blocks the charm."""
-    mocker.patch("charm.S3Requirer")
-    harness.begin()
+def test_s3_incomplete_data_blocks_unit_status(active_no_object_storage_harness):
+    """Incomplete s3-credentials relation data sets the unit to BlockedStatus."""
+    harness = active_no_object_storage_harness
     harness.add_relation("s3-credentials", "s3-integrator")
     # endpoint is missing from the relation data
     harness.charm.s3_requirer.get_storage_connection_info.return_value = {
@@ -872,23 +872,24 @@ def test_get_storage_secrets_context_s3_incomplete_data_blocked(harness: Harness
         "secret-key": S3_CREDENTIALS_SECRET_KEY,
     }
 
-    with pytest.raises(ErrorWithStatus) as exc_info:
-        harness.charm._get_storage_secrets_context()
+    harness.charm.on.install.emit()
 
-    assert isinstance(exc_info.value.status, BlockedStatus)
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "Incomplete s3-credentials relation data, missing: endpoint"
+    )
 
 
-def test_get_storage_secrets_context_s3_no_data_waiting(harness: Harness, mocker):
-    """An established s3-credentials relation with no data sets the charm to waiting."""
-    mocker.patch("charm.S3Requirer")
-    harness.begin()
+def test_s3_no_data_sets_waiting_unit_status(active_no_object_storage_harness):
+    """An established s3-credentials relation with no data sets the unit to WaitingStatus."""
+    harness = active_no_object_storage_harness
     harness.add_relation("s3-credentials", "s3-integrator")
     harness.charm.s3_requirer.get_storage_connection_info.return_value = {}
 
-    with pytest.raises(ErrorWithStatus) as exc_info:
-        harness.charm._get_storage_secrets_context()
+    harness.charm.on.install.emit()
 
-    assert isinstance(exc_info.value.status, WaitingStatus)
+    assert harness.charm.model.unit.status == WaitingStatus(
+        "Waiting for s3-credentials relation data"
+    )
 
 
 def test_send_object_storage_manifests_s3(harness: Harness, mocker):
