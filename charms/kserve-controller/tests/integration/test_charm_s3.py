@@ -374,7 +374,7 @@ async def test_new_user_namespace_has_s3_manifests(
 
     annotations = secret.metadata.annotations
     assert annotations["serving.kserve.io/s3-endpoint"] == host_ip()
-    assert annotations["serving.kserve.io/s3-usehttps"]
+    assert annotations["serving.kserve.io/s3-usehttps"] == "1"
     assert annotations["serving.kserve.io/s3-useanoncredential"] == "false"
     assert annotations["serving.kserve.io/s3-region"]
 
