@@ -98,7 +98,7 @@ S3_CREDENTIALS_RELATION = "s3-credentials"
 # Values for MinIO manifests https://kserve.github.io/website/0.11/modelserving/storage/s3/s3/
 S3_USEANONCREDENTIALS = "false"
 S3_REGION = "us-east-1"
-S3_USEHTTPS = "0"
+OBJECT_STORAGE_USEHTTPS = "0"
 
 SECRETS_FILES = [
     "src/secrets/kserve-mlflow-minio-secret.yaml.j2",
@@ -633,7 +633,7 @@ class KServeControllerCharm(CharmBase):
         return {
             "secret_name": f"{self.app.name}-s3",
             "s3_endpoint": f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
-            "s3_usehttps": S3_USEHTTPS,
+            "s3_usehttps": OBJECT_STORAGE_USEHTTPS,
             "s3_region": S3_REGION,
             "s3_useanoncredential": S3_USEANONCREDENTIALS,
             "s3_access_key": object_storage_data["access-key"],
