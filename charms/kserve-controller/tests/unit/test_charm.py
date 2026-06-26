@@ -777,14 +777,14 @@ OBJECT_STORAGE_DATA = {
 }
 
 
-def test_get_storage_secrets_context_object_storage(harness: Harness, mocker):
+def test_resolve_storage_secrets_context_object_storage(harness: Harness, mocker):
     """The object-storage relation produces the expected secret context."""
     harness.begin()
     harness.add_relation("object-storage", "minio")
     mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
     mocker.patch.object(harness.charm, "_get_object_storage", return_value=OBJECT_STORAGE_DATA)
 
-    context = harness.charm._get_storage_secrets_context()
+    context = harness.charm._resolve_storage_secrets_context()
 
     assert context == {
         "secret_name": "kserve-controller-s3",
@@ -797,7 +797,7 @@ def test_get_storage_secrets_context_object_storage(harness: Harness, mocker):
     }
 
 
-def test_get_storage_secrets_context_s3_credentials(harness: Harness, mocker):
+def test_resolve_storage_secrets_context_s3_credentials(harness: Harness, mocker):
     """The s3-credentials relation produces the expected secret context.
 
     The endpoint scheme is stripped (host[:port] only) and translated into the
@@ -808,7 +808,7 @@ def test_get_storage_secrets_context_s3_credentials(harness: Harness, mocker):
     harness.add_relation("s3-credentials", "s3-integrator")
     harness.charm.s3_requirer.get_storage_connection_info.return_value = dict(S3_CONNECTION_INFO)
 
-    context = harness.charm._get_storage_secrets_context()
+    context = harness.charm._resolve_storage_secrets_context()
 
     assert context == {
         "secret_name": "kserve-controller-s3",
@@ -821,7 +821,7 @@ def test_get_storage_secrets_context_s3_credentials(harness: Harness, mocker):
     }
 
 
-def test_get_storage_secrets_context_s3_http_endpoint_default_region(harness: Harness, mocker):
+def test_resolve_storage_secrets_context_s3_http_endpoint_default_region(harness: Harness, mocker):
     """An http endpoint sets s3-usehttps to 0 and a missing region falls back to the default."""
     mocker.patch("charm.S3Requirer")
     harness.begin()
@@ -831,7 +831,7 @@ def test_get_storage_secrets_context_s3_http_endpoint_default_region(harness: Ha
     del connection_info["region"]
     harness.charm.s3_requirer.get_storage_connection_info.return_value = connection_info
 
-    context = harness.charm._get_storage_secrets_context()
+    context = harness.charm._resolve_storage_secrets_context()
 
     assert context["s3_endpoint"] == "minio:9000"
     assert context["s3_usehttps"] == "0"
@@ -854,12 +854,12 @@ def test_both_storage_relations_blocks_unit_status(active_no_object_storage_harn
     )
 
 
-def test_get_storage_secrets_context_no_relation(harness: Harness, mocker):
+def test_resolve_storage_secrets_context_no_relation(harness: Harness, mocker):
     """No storage relation yields no secret context."""
     harness.begin()
     mocker.patch.object(harness.charm, "_get_interfaces", return_value={})
 
-    assert harness.charm._get_storage_secrets_context() is None
+    assert harness.charm._resolve_storage_secrets_context() is None
 
 
 def test_s3_incomplete_data_blocks_unit_status(active_no_object_storage_harness):

@@ -570,8 +570,9 @@ class KServeControllerCharm(CharmBase):
         relation or the `s3-credentials` relation.
         Both relations are optional, but they are mutually exclusive.
         """
-        secrets_context = self._get_storage_secrets_context()
-        # No storage relation is present; clear previously-sent manifests so resource-dispatcher
+        secrets_context = self._resolve_storage_secrets_context()
+        # No usable storage credentials yet (either no storage relation, or the relation's
+        # data is not ready); clear previously-sent manifests so resource-dispatcher
         # can remove the Secret/ServiceAccount from user namespaces.
         if secrets_context is None:
             if self.model.relations["secrets"]:
@@ -592,11 +593,12 @@ class KServeControllerCharm(CharmBase):
             self.service_accounts_manifests_wrapper,
         )
 
-    def _get_storage_secrets_context(self):
-        """Build the secret rendering context from the active storage relation.
+    def _resolve_storage_secrets_context(self):
+        """Resolve the s3 Secret rendering context from the active storage relation.
 
         Returns the rendering context for the s3 Secret, sourced from whichever
-        storage relation is established, or None when no storage relation exists.
+        storage relation is established, or None when no storage relation exists
+        or its data is not ready yet.
 
         Raises:
             ErrorWithStatus(..., Blocked) if both storage relations are established.
