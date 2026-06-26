@@ -616,7 +616,7 @@ class KServeControllerCharm(CharmBase):
             return self._get_s3_credentials_context()
 
         if self.model.relations[OBJECT_STORAGE_RELATION]:
-            return self._get_object_storage_context()
+            return self._get_object_storage_credentials_context()
 
         # No storage relation is present.
         return None

@@ -801,17 +801,43 @@ def test_get_storage_secrets_context_s3_http_endpoint_default_region(harness: Ha
     assert context["s3_region"] == "us-east-1"
 
 
-def test_get_storage_secrets_context_both_relations_blocked(harness: Harness, mocker):
-    """Relating both object-storage and s3-credentials blocks the charm."""
+def test_both_storage_relations_blocks_unit_status(
+    harness: Harness, mocker, mocked_resource_handler
+):
+    """Relating both object-storage and s3-credentials sets the unit to BlockedStatus.
+
+    Exercises the full event flow (not just the helper) to verify the ErrorWithStatus
+    raised in _get_storage_secrets_context is translated into a BlockedStatus by _on_event.
+    """
     mocker.patch("charm.S3Requirer")
     harness.begin()
+    harness.charm._k8s_resource_handler = mocked_resource_handler
+
+    # Make everything before send_object_storage_manifests() succeed:
+    # standard mode + gateway-metadata relation -> would otherwise be Active.
+    harness.update_config({"deployment-mode": "standard"})
+    harness.add_relation("gateway-metadata", "istio-ingress-k8s")
+    mocker.patch.object(
+        harness.charm.gateway_info,
+        "get_metadata",
+        return_value=GatewayMetadata(
+            namespace="test-namespace",
+            deployment_name="test-deployment",
+            gateway_name="test-gateway",
+            service_account="test-service-account",
+        ),
+    )
+
+    # Relate BOTH storage backends -> charm must block.
     harness.add_relation("object-storage", "minio")
     harness.add_relation("s3-credentials", "s3-integrator")
 
-    with pytest.raises(ErrorWithStatus) as exc_info:
-        harness.charm._get_storage_secrets_context()
+    harness.charm.on.install.emit()
 
-    assert isinstance(exc_info.value.status, BlockedStatus)
+    assert harness.charm.model.unit.status == BlockedStatus(
+        "Too many object storage relations. Please relate to only one of "
+        "`object-storage` or `s3-credentials`."
+    )
 
 
 def test_get_storage_secrets_context_no_relation(harness: Harness, mocker):
