@@ -615,7 +615,11 @@ class KServeControllerCharm(CharmBase):
         if self.model.relations[S3_CREDENTIALS_RELATION]:
             return self._get_s3_credentials_context()
 
-        return self._get_object_storage_context()
+        if self.model.relations[OBJECT_STORAGE_RELATION]:
+            return self._get_object_storage_context()
+
+        # No storage relation is present.
+        return None
 
     def _get_object_storage_credentials_context(self):
         """Build the s3 Secret context from the object-storage (SDI) relation."""
