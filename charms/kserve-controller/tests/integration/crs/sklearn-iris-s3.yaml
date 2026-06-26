@@ -1,0 +1,20 @@
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "sklearn-iris-s3"
+spec:
+  predictor:
+    serviceAccountName: kserve-controller-s3
+    model:
+      modelFormat:
+        name: sklearn
+      protocolVersion: v2
+      runtime: kserve-sklearnserver
+      storageUri: "s3://kserve-models/sklearn"
+      resources:
+        limits:
+          cpu: 1
+          memory: 500Mi
+        requests:
+          cpu: 100m
+          memory: 250Mi

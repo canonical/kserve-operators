@@ -415,6 +415,46 @@ jupyter = ["ipython (>=7.8.0)", "tokenize-rt (>=3.2.0)"]
 uvloop = ["uvloop (>=0.15.2)"]
 
 [[package]]
+name = "boto3"
+version = "1.43.36"
+description = "The AWS SDK for Python"
+optional = false
+python-versions = ">=3.10"
+groups = ["integration"]
+files = [
+    {file = "boto3-1.43.36-py3-none-any.whl", hash = "sha256:42942dde254673abcbc9e6e60017c88341a4f49d99d24e1f2e290fb38138c26f"},
+    {file = "boto3-1.43.36.tar.gz", hash = "sha256:587d7ee92a12e440ad12b0e7f11f3358f0c4d65b19f64726efc94aaf194aff28"},
+]
+
+[package.dependencies]
+botocore = ">=1.43.36,<1.44.0"
+jmespath = ">=0.7.1,<2.0.0"
+s3transfer = ">=0.19.0,<0.20.0"
+
+[package.extras]
+crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
+
+[[package]]
+name = "botocore"
+version = "1.43.36"
+description = "Low-level, data-driven core of boto 3."
+optional = false
+python-versions = ">=3.10"
+groups = ["integration"]
+files = [
+    {file = "botocore-1.43.36-py3-none-any.whl", hash = "sha256:3c65fdc39ed01d8dfde1e961b34038aed03c459f8ddf80717a12ac006475e49d"},
+    {file = "botocore-1.43.36.tar.gz", hash = "sha256:4cae47d1b2d426316b85a0087d9e69e048f13bc003b5177d74639fe9dfd28205"},
+]
+
+[package.dependencies]
+jmespath = ">=0.7.1,<2.0.0"
+python-dateutil = ">=2.1,<3.0.0"
+urllib3 = ">=1.25.4,<2.2.0 || >2.2.0,<3"
+
+[package.extras]
+crt = ["awscrt (==0.32.2)"]
+
+[[package]]
 name = "certifi"
 version = "2026.6.17"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -1467,6 +1507,18 @@ MarkupSafe = ">=2.0"
 
 [package.extras]
 i18n = ["Babel (>=2.7)"]
+
+[[package]]
+name = "jmespath"
+version = "1.1.0"
+description = "JSON Matching Expressions"
+optional = false
+python-versions = ">=3.9"
+groups = ["integration"]
+files = [
+    {file = "jmespath-1.1.0-py3-none-any.whl", hash = "sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64"},
+    {file = "jmespath-1.1.0.tar.gz", hash = "sha256:472c87d80f36026ae83c6ddd0f1d05d4e510134ed462851fd5f754c8c3cbb88d"},
+]
 
 [[package]]
 name = "jsonschema"
@@ -2990,6 +3042,24 @@ libyaml = ["ruamel.yaml.clibz (>=0.3.7) ; platform_python_implementation == \"CP
 oldlibyaml = ["ruamel.yaml.clib ; platform_python_implementation == \"CPython\""]
 
 [[package]]
+name = "s3transfer"
+version = "0.19.0"
+description = "An Amazon S3 Transfer Manager"
+optional = false
+python-versions = ">=3.10"
+groups = ["integration"]
+files = [
+    {file = "s3transfer-0.19.0-py3-none-any.whl", hash = "sha256:777cc2415536f1debadb5c2ef7779275d0fc0fe0e042411cdd6caebeb2685262"},
+    {file = "s3transfer-0.19.0.tar.gz", hash = "sha256:ce436931687addc4c1712d52d40b32f53e88315723f107ffa20ba82b05a0f685"},
+]
+
+[package.dependencies]
+botocore = ">=1.37.4,<2.0a0"
+
+[package.extras]
+crt = ["botocore[crt] (>=1.37.4,<2.0a0)"]
+
+[[package]]
 name = "serialized-data-interface"
 version = "0.7.0"
 description = "Serialized Data Interface for Juju Operators"
@@ -3419,4 +3489,4 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "650d78ba5968fd91e0d2d3503fc8d609ae7fdc3bb6371863b1f5f6b3dcb7c96f"
+content-hash = "8784b23f5f61961370273de5303a98e80de08f383d82cb5f602c6708598fbd59"

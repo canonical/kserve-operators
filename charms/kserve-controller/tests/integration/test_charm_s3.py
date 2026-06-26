@@ -34,6 +34,7 @@ from charmed_kubeflow_chisme.testing import (
 from charmed_kubeflow_chisme.testing.s3_integration import (
     deploy_and_assert_s3_integrator,
     host_ip,
+    setup_microceph,
 )
 from lightkube import Client
 from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
@@ -55,8 +56,13 @@ from tests.integration.constants import (
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
+    S3_BUCKET,
+    S3_MODEL_KEY,
+    S3_MODEL_URL,
     SKLEARN_INF_SVC_NAME,
     SKLEARN_INF_SVC_OBJECT,
+    SKLEARN_S3_INF_SVC_NAME,
+    SKLEARN_S3_INF_SVC_OBJECT,
     YAMLS_PREFIX,
 )
 from tests.integration.utils import (
@@ -66,6 +72,7 @@ from tests.integration.utils import (
     get_k8s_secret,
     get_k8s_service_account,
     populate_template,
+    upload_model_to_object_storage,
 )
 
 logger = logging.getLogger(__name__)
@@ -374,7 +381,7 @@ async def test_new_user_namespace_has_s3_manifests(
 
     annotations = secret.metadata.annotations
     assert annotations["serving.kserve.io/s3-endpoint"] == host_ip()
-    assert annotations["serving.kserve.io/s3-usehttps"] == "1"
+    assert annotations["serving.kserve.io/s3-usehttps"] == "0"
     assert annotations["serving.kserve.io/s3-useanoncredential"] == "false"
     assert annotations["serving.kserve.io/s3-region"]
 
@@ -384,6 +391,43 @@ async def test_new_user_namespace_has_s3_manifests(
     assert base64.b64decode(secret.data["AWS_SECRET_ACCESS_KEY"])
 
     assert service_account.secrets[0].name == manifests_name
+
+
+async def test_inference_service_from_s3_object_storage(
+    test_namespace: str,
+    lightkube_client: lightkube.Client,
+):
+    """Validate that an InferenceService can pull its model from S3 object storage.
+
+    A model artifact is uploaded to the microceph-backed S3 store (over HTTP, since the
+    s3-integrator is deployed with `add_ca_chain=False`) and an InferenceService is created
+    that references it through a `s3://` storageUri and the dispatched
+    `kserve-controller-s3` ServiceAccount.
+    """
+    # `setup_microceph` is idempotent: it returns the same credentials and the HTTP
+    # endpoint used by the already-deployed s3-integrator.
+    s3_connection_info = setup_microceph(add_ca_chain=False)
+    upload_model_to_object_storage(
+        s3_connection_info,
+        bucket=S3_BUCKET,
+        key=S3_MODEL_KEY,
+        model_url=S3_MODEL_URL,
+    )
+
+    # Wait for the resource-dispatcher to populate the S3 Secret and ServiceAccount in the
+    # (freshly created) user namespace before the InferenceService references them.
+    manifests_name = f"{APP_NAME}{MANIFESTS_SUFFIX}"
+    get_k8s_secret(manifests_name, test_namespace, lightkube_client)
+    get_k8s_service_account(manifests_name, test_namespace, lightkube_client)
+
+    # Create the InferenceService that pulls its model from S3
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            lightkube_client.create(SKLEARN_S3_INF_SVC_OBJECT, namespace=test_namespace)
+
+    # Assert the InferenceService reaches a Ready state, which confirms the model was
+    # successfully pulled from S3.
+    assert_inf_svc_state(lightkube_client, SKLEARN_S3_INF_SVC_NAME, test_namespace)
 
 
 # Test Proxy configurations
