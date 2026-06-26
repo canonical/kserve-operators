@@ -440,9 +440,6 @@ async def test_inference_service_proxy_envs_configuration(
                 elif env_var.name == "NO_PROXY":
                     no_proxy_env = env_var.value
 
-            assert http_proxy_env is not None
-            assert https_proxy_env is not None
-            assert no_proxy_env is not None
             assert http_proxy_env == test_http_proxy
             assert https_proxy_env == test_https_proxy
             assert no_proxy_env == test_no_proxy
