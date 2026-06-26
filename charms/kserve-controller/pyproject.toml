@@ -93,10 +93,10 @@ pytest = "^8.4.1"
 pytest-mock = "^3.14.1"
 serialized-data-interface = "^0.7.0"
 
-[tool.poetry.group.integration]
+[tool.poetry.group.integration-s3]
 optional = true
 
-[tool.poetry.group.integration.dependencies]
+[tool.poetry.group.integration-s3.dependencies]
 juju = "<4.0"
 boto3 = "^1.34"
 charmed-kubeflow-chisme = "^0.4.29"
