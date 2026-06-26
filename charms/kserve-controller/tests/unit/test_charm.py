@@ -722,21 +722,34 @@ def test_deployment_modes_gateway_relations(
     assert harness.charm.model.unit.status == expected_status
 
 
+S3_CREDENTIALS_ACCESS_KEY = "s3-access-key"
+S3_CREDENTIALS_SECRET_KEY = "s3-secret-key"
+S3_CREDENTIALS_ENDPOINT = "https://my-s3.example.com:9000"
+S3_CREDENTIALS_REGION = "eu-west-2"
+S3_CREDENTIALS_BUCKET = "my-bucket"
+
 S3_CONNECTION_INFO = {
-    "access-key": "s3-access-key",
-    "secret-key": "s3-secret-key",
-    "endpoint": "https://my-s3.example.com:9000",
-    "region": "eu-west-2",
-    "bucket": "my-bucket",
+    "access-key": S3_CREDENTIALS_ACCESS_KEY,
+    "secret-key": S3_CREDENTIALS_SECRET_KEY,
+    "endpoint": S3_CREDENTIALS_ENDPOINT,
+    "region": S3_CREDENTIALS_REGION,
+    "bucket": S3_CREDENTIALS_BUCKET,
 }
 
+OBJECT_STORAGE_ACCESS_KEY = "minio-access-key"
+OBJECT_STORAGE_SECRET_KEY = "minio-secret-key"
+OBJECT_STORAGE_SERVICE = "minio"
+OBJECT_STORAGE_NAMESPACE = "kubeflow"
+OBJECT_STORAGE_PORT = 9000
+OBJECT_STORAGE_SECURE = False
+
 OBJECT_STORAGE_DATA = {
-    "access-key": "minio-access-key",
-    "secret-key": "minio-secret-key",
-    "service": "minio",
-    "namespace": "kubeflow",
-    "port": 9000,
-    "secure": False,
+    "access-key": OBJECT_STORAGE_ACCESS_KEY,
+    "secret-key": OBJECT_STORAGE_SECRET_KEY,
+    "service": OBJECT_STORAGE_SERVICE,
+    "namespace": OBJECT_STORAGE_NAMESPACE,
+    "port": OBJECT_STORAGE_PORT,
+    "secure": OBJECT_STORAGE_SECURE,
 }
 
 
@@ -755,8 +768,8 @@ def test_get_storage_secrets_context_object_storage(harness: Harness, mocker):
         "s3_usehttps": "0",
         "s3_region": "us-east-1",
         "s3_useanoncredential": "false",
-        "s3_access_key": "minio-access-key",
-        "s3_secret_access_key": "minio-secret-key",
+        "s3_access_key": OBJECT_STORAGE_ACCESS_KEY,
+        "s3_secret_access_key": OBJECT_STORAGE_SECRET_KEY,
     }
 
 
@@ -777,10 +790,10 @@ def test_get_storage_secrets_context_s3_credentials(harness: Harness, mocker):
         "secret_name": "kserve-controller-s3",
         "s3_endpoint": "my-s3.example.com:9000",
         "s3_usehttps": "1",
-        "s3_region": "eu-west-2",
+        "s3_region": S3_CREDENTIALS_REGION,
         "s3_useanoncredential": "false",
-        "s3_access_key": "s3-access-key",
-        "s3_secret_access_key": "s3-secret-key",
+        "s3_access_key": S3_CREDENTIALS_ACCESS_KEY,
+        "s3_secret_access_key": S3_CREDENTIALS_SECRET_KEY,
     }
 
 
@@ -855,8 +868,8 @@ def test_get_storage_secrets_context_s3_incomplete_data_blocked(harness: Harness
     harness.add_relation("s3-credentials", "s3-integrator")
     # endpoint is missing from the relation data
     harness.charm.s3_requirer.get_storage_connection_info.return_value = {
-        "access-key": "s3-access-key",
-        "secret-key": "s3-secret-key",
+        "access-key": S3_CREDENTIALS_ACCESS_KEY,
+        "secret-key": S3_CREDENTIALS_SECRET_KEY,
     }
 
     with pytest.raises(ErrorWithStatus) as exc_info:
