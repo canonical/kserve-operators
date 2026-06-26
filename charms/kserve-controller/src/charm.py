@@ -16,7 +16,7 @@ import json
 import logging
 from base64 import b64encode
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, TypedDict
 from urllib.parse import urlparse
 
 import tenacity
@@ -109,6 +109,18 @@ SERVICE_ACCOUNTS_FILES = [
 NO_MINIO_RELATION_DATA = {}
 
 METRICS_PORT = 8080
+
+
+class S3SecretContext(TypedDict):
+    """Template context for rendering the s3 Secret manifest."""
+
+    secret_name: str
+    s3_endpoint: str
+    s3_usehttps: str
+    s3_region: str
+    s3_useanoncredential: str
+    s3_access_key: str
+    s3_secret_access_key: str
 
 
 # For errors when a K8s object exists while it shouldn't
@@ -593,7 +605,7 @@ class KServeControllerCharm(CharmBase):
             self.service_accounts_manifests_wrapper,
         )
 
-    def _resolve_storage_secrets_context(self):
+    def _resolve_storage_secrets_context(self) -> Optional[S3SecretContext]:
         """Resolve the s3 Secret rendering context from the active storage relation.
 
         Returns the rendering context for the s3 Secret, sourced from whichever
@@ -623,7 +635,7 @@ class KServeControllerCharm(CharmBase):
         # No storage relation is present.
         return None
 
-    def _get_object_storage_credentials_context(self):
+    def _get_object_storage_credentials_context(self) -> Optional[S3SecretContext]:
         """Build the s3 Secret context from the object-storage (SDI) relation."""
         interfaces = self._get_interfaces()
         object_storage_data = self._get_object_storage(interfaces, NO_MINIO_RELATION_DATA)
@@ -632,17 +644,17 @@ class KServeControllerCharm(CharmBase):
         if object_storage_data == NO_MINIO_RELATION_DATA:
             return None
 
-        return {
-            "secret_name": f"{self.app.name}-s3",
-            "s3_endpoint": f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
-            "s3_usehttps": OBJECT_STORAGE_USEHTTPS,
-            "s3_region": S3_REGION,
-            "s3_useanoncredential": S3_USEANONCREDENTIALS,
-            "s3_access_key": object_storage_data["access-key"],
-            "s3_secret_access_key": object_storage_data["secret-key"],
-        }
+        return S3SecretContext(
+            secret_name=f"{self.app.name}-s3",
+            s3_endpoint=f"{object_storage_data['service']}.{object_storage_data['namespace']}:{object_storage_data['port']}",  # noqa: E501
+            s3_usehttps=OBJECT_STORAGE_USEHTTPS,
+            s3_region=S3_REGION,
+            s3_useanoncredential=S3_USEANONCREDENTIALS,
+            s3_access_key=object_storage_data["access-key"],
+            s3_secret_access_key=object_storage_data["secret-key"],
+        )
 
-    def _get_s3_credentials_context(self):
+    def _get_s3_credentials_context(self) -> S3SecretContext:
         """Build the s3 Secret context from the s3-credentials relation."""
         relation = self.model.get_relation(S3_CREDENTIALS_RELATION)
         connection_info = self.s3_requirer.get_storage_connection_info(relation)
@@ -667,15 +679,15 @@ class KServeControllerCharm(CharmBase):
         endpoint = raw_endpoint.split("/", 1)[0]
         usehttps = "1" if parsed_endpoint.scheme == "https" else "0"
 
-        return {
-            "secret_name": f"{self.app.name}-s3",
-            "s3_endpoint": endpoint,
-            "s3_usehttps": usehttps,
-            "s3_region": connection_info.get("region") or S3_REGION,
-            "s3_useanoncredential": S3_USEANONCREDENTIALS,
-            "s3_access_key": connection_info["access-key"],
-            "s3_secret_access_key": connection_info["secret-key"],
-        }
+        return S3SecretContext(
+            secret_name=f"{self.app.name}-s3",
+            s3_endpoint=endpoint,
+            s3_usehttps=usehttps,
+            s3_region=connection_info.get("region") or S3_REGION,
+            s3_useanoncredential=S3_USEANONCREDENTIALS,
+            s3_access_key=connection_info["access-key"],
+            s3_secret_access_key=connection_info["secret-key"],
+        )
 
     def reconcile_authorization_policies(self):
         """Create and reconcile the allow-all AuthorizationPolicy.
