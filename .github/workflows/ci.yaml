@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc]
+        charm: [kserve-controller, kserve-llmisvc, lws-controller]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc]
+        charm: [kserve-controller, kserve-llmisvc, lws-controller]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -113,7 +113,6 @@ jobs:
       fail-fast: false
       matrix:
         charm:
-          - tests/integration/lws-controller-tester
           - tests/integration/gateway-metadata-provider-tester
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v49.0.1
     with:
@@ -124,14 +123,19 @@ jobs:
       contents: read
 
   integration:
-    name: Integration tests
+    name: Integration tests | ${{ matrix.charm }} | ${{ matrix.test-type }}
     needs:
       - build
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller]
-        test-type: [integration, integration-ambient]
+        include:
+          - charm: kserve-controller
+            test-type: integration
+          - charm: kserve-controller
+            test-type: integration-ambient
+          - charm: lws-controller
+            test-type: integration
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space
@@ -151,6 +155,7 @@ jobs:
           sudo concierge prepare --trace
 
       - name: Configure Cilium for Istio
+        if: matrix.charm == 'kserve-controller'
         run: |
           # for context, see https://docs.cilium.io/en/stable/network/servicemesh/istio/
           kubectl -n kube-system patch configmap cilium-config --type merge --patch '{"data":{"bpf-lb-sock-hostns-only":"true"}}'
@@ -176,7 +181,11 @@ jobs:
 
       - name: Get inference servers
         run: kubectl get inferenceservices -A
-        if: failure()
+        if: failure() && matrix.charm == 'kserve-controller'
+
+      - name: Get LeaderWorkerSets
+        run: kubectl get leaderworkersets -A
+        if: failure() && matrix.charm == 'lws-controller'
 
       - name: Get events
         run: kubectl get events -A

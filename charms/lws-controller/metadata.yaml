@@ -1,0 +1,28 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: lws-controller
+description: |
+  LeaderWorkerSet (LWS) Controller.
+summary: |
+  LeaderWorkerSet controller charm.
+charm-user: non-root
+containers:
+  lws-controller:
+    resource: lws-controller-image
+    uid: 584792
+    gid: 584792
+resources:
+  lws-controller-image:
+    type: oci-image
+    description: OCI image for the LeaderWorkerSet controller manager.
+    upstream-source: registry.k8s.io/lws/lws:v0.7.0
+provides:
+  lws-controller:
+    interface: lws-controller-sync
+  metrics-endpoint:
+    interface: prometheus_scrape
+requires:
+  logging:
+    interface: loki_push_api
+    optional: true

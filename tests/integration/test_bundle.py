@@ -28,7 +28,6 @@ from .helpers.cluster_setup import (
     install_envoy_gateway,
     install_gateway_api_crds,
     install_gie_crds,
-    install_lws,
 )
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
@@ -42,12 +41,11 @@ GATEWAY_API_VERSION = "v1.4.1"
 GIE_VERSION = "v1.3.0"
 ENVOY_GATEWAY_VERSION = "v1.6.3"
 ENVOY_AI_GATEWAY_VERSION = "v0.5.0"
-LWS_VERSION = "v0.7.0"
 GATEWAY_NAME = "kserve-ingress-gateway"
 CONTROLLER_APP = "kserve-controller"
 LLMISVC_APP = "kserve-llmisvc"
+LWS_APP = "lws-controller"
 GATEWAY_METADATA_PROVIDER_CHARM = "gateway-metadata-provider-tester"
-LWS_CONTROLLER_TESTER_CHARM = "lws-controller-tester"
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 # Images injected into the LLMInferenceService example templates at apply time.
 # They are sourced from the charms' default-custom-images.json so the tests
@@ -90,10 +88,11 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
 
     controller_charm = resolve_charm_path(charms_path=charms_path, charm_name=CONTROLLER_APP)
     llmisvc_charm = resolve_charm_path(charms_path=charms_path, charm_name=LLMISVC_APP)
-    lws_charm = resolve_test_charm_path(LWS_CONTROLLER_TESTER_CHARM)
+    lws_charm = resolve_charm_path(charms_path=charms_path, charm_name=LWS_APP)
     gateway_metadata_charm = resolve_test_charm_path(GATEWAY_METADATA_PROVIDER_CHARM)
     controller_resources = resolve_charm_resources(charm_name=CONTROLLER_APP)
     llmisvc_resources = resolve_charm_resources(charm_name=LLMISVC_APP)
+    lws_resources = resolve_charm_resources(charm_name=LWS_APP)
 
     for _, example_path in LLMISVC_EXAMPLES:
         if not example_path.exists():
@@ -122,11 +121,12 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
         gateway_namespace=juju.model,
     )
 
-    logger.info("Installing LWS Helm chart")
-    install_lws(version=LWS_VERSION)
-
-    logger.info("Deploying lws-controller tester charm")
-    juju.deploy(charm=str(lws_charm))
+    logger.info("Deploying lws-controller charm")
+    juju.deploy(
+        charm=str(lws_charm),
+        resources=lws_resources,
+        trust=True,
+    )
 
     logger.info("Deploying kserve-controller charm")
     juju.deploy(
@@ -173,7 +173,7 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
 
     logger.info("Relating charms")
     juju.integrate("kserve-controller:kserve-controller", "kserve-llmisvc:kserve-controller")
-    juju.integrate("lws-controller-tester:lws-controller", "kserve-llmisvc:lws-controller")
+    juju.integrate("lws-controller:lws-controller", "kserve-llmisvc:lws-controller")
     logger.info("Waiting for all charms to be active after relations")
     juju.wait(jubilant.all_active, successes=1)
 
@@ -217,13 +217,13 @@ def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
     juju.remove_application(LLMISVC_APP)
     juju.remove_application(GATEWAY_METADATA_PROVIDER_CHARM)
     juju.remove_application(CONTROLLER_APP)
-    juju.remove_application(LWS_CONTROLLER_TESTER_CHARM)
+    juju.remove_application(LWS_APP)
 
     logger.info("Waiting for charm applications to disappear from Juju model")
     juju.wait(
         lambda status: CONTROLLER_APP not in status.apps
         and LLMISVC_APP not in status.apps
-        and LWS_CONTROLLER_TESTER_CHARM not in status.apps,
+        and LWS_APP not in status.apps,
         successes=1,
     )
 
