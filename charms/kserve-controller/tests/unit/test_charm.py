@@ -903,6 +903,27 @@ def test_send_object_storage_manifests_no_relation(harness: Harness, mocker):
     mocked_send_manifests.assert_not_called()
 
 
+def test_send_object_storage_manifests_clears_stale_manifests(harness: Harness, mocker):
+    """No storage relation clears manifests on the established dispatcher relations.
+
+    When no storage relation is present but the secrets/service-accounts relations exist,
+    empty manifests are sent so resource-dispatcher removes the previously-created
+    Secret/ServiceAccount from user namespaces.
+    """
+    harness.begin()
+    harness.add_relation("secrets", "resource-dispatcher")
+    harness.add_relation("service-accounts", "resource-dispatcher")
+    mocked_secrets_send = mocker.patch.object(harness.charm.secrets_manifests_wrapper, "send_data")
+    mocked_service_accounts_send = mocker.patch.object(
+        harness.charm.service_accounts_manifests_wrapper, "send_data"
+    )
+
+    harness.charm.send_object_storage_manifests()
+
+    mocked_secrets_send.assert_called_once_with([])
+    mocked_service_accounts_send.assert_called_once_with([])
+
+
 @patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_standard_mode(
     _mocked_restart_controller_service,
