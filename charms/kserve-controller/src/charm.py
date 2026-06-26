@@ -617,7 +617,7 @@ class KServeControllerCharm(CharmBase):
 
         return self._get_object_storage_context()
 
-    def _get_object_storage_context(self):
+    def _get_object_storage_credentials_context(self):
         """Build the s3 Secret context from the object-storage (SDI) relation."""
         interfaces = self._get_interfaces()
         object_storage_data = self._get_object_storage(interfaces, NO_MINIO_RELATION_DATA)
