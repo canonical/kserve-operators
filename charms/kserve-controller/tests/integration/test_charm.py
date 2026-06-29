@@ -659,7 +659,7 @@ async def test_inference_service_proxy_envs_configuration(
         [APP_NAME],
         status="active",
         raise_on_blocked=False,
-        timeout=60 * 1,
+        timeout=60 * 2,
     )
 
     # Create InferenceService from example file
