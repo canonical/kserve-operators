@@ -6,7 +6,7 @@
 from types import SimpleNamespace
 
 import pytest
-from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from ops.model import ModelError
 from ops.pebble import PathError
 
@@ -55,13 +55,22 @@ def test_upload_certs_path_error_raises_runtime_error():
 
 def test_upload_manager_config_path_error_raises_runtime_error():
     """Path/protocol push failures during manager config push should raise."""
+    fake_self = SimpleNamespace(model=SimpleNamespace(unit=SimpleNamespace(status=None)))
+    fake_self._check_container_connection = (
+        lambda container: LWSControllerCharm._check_container_connection(fake_self, container)
+    )
     with pytest.raises(GenericCharmRuntimeError, match="Failed to push manager config"):
-        LWSControllerCharm._upload_manager_config(SimpleNamespace(), _ContainerPushFails(), "cfg")
+        LWSControllerCharm._upload_manager_config(fake_self, _ContainerPushFails(), "cfg")
 
 
-def test_upload_manager_config_skipped_when_container_disconnected():
-    """Manager config push should silently skip when the container is unreachable."""
-    LWSControllerCharm._upload_manager_config(SimpleNamespace(), _ContainerDisconnected(), "cfg")
+def test_upload_manager_config_blocks_when_container_disconnected():
+    """Manager config push should raise ErrorWithStatus when the container is unreachable."""
+    fake_self = SimpleNamespace()
+    fake_self._check_container_connection = (
+        lambda container: LWSControllerCharm._check_container_connection(fake_self, container)
+    )
+    with pytest.raises(ErrorWithStatus):
+        LWSControllerCharm._upload_manager_config(fake_self, _ContainerDisconnected(), "cfg")
 
 
 def test_restart_controller_service_short_circuits_on_missing_service():

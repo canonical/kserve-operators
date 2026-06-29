@@ -306,38 +306,33 @@ class LWSControllerCharm(CharmBase):
         if stuck:
             raise ObjectStillExistsError(", ".join(stuck))
 
-    def _delete_crds_and_wait(self, client: Client, base_manifests: list) -> None:
-        """Delete the LeaderWorkerSet CRD(s) and block until they are gone.
+    def _delete_base_resources_and_wait(self, client: Client, base_manifests: list) -> None:
+        """Delete all base resources in finalizer-safe order and block until gone.
 
-        Deleting the CRD while the controller still runs cascades to its CRs and
-        lets the controller clear their finalizers; it must be fully gone before
-        the remaining resources are deleted.
+        The CRD is deleted first so its removal cascades to all CRs and lets the
+        controller clear their finalizers; we wait for it to disappear before
+        deleting the rest (webhooks, RBAC, Service), whose API endpoints survive
+        CRD deletion. Deletion is async, so each phase blocks to avoid tearing
+        the workload down while resources still linger.
         """
+        if not base_manifests:
+            return
         crd_manifests = [
             resource
             for resource in base_manifests
             if isinstance(resource, CustomResourceDefinition)
         ]
-        if not crd_manifests:
-            return
-        delete_many(client, crd_manifests, ignore_missing=True, logger=log)
-        self._ensure_all_deleted(client, crd_manifests)
-
-    def _delete_base_resources_and_wait(self, client: Client, base_manifests: list) -> None:
-        """Delete the remaining base resources (webhooks, RBAC, Service) and wait.
-
-        Their API endpoints survive CRD deletion, so block until they are
-        actually gone. The CRDs were already waited on separately, so skip them
-        here.
-        """
-        if not base_manifests:
-            return
-        self.base_resource_handler.delete(ignore_missing=True)
         non_crd_manifests = [
             resource
             for resource in base_manifests
             if not isinstance(resource, CustomResourceDefinition)
         ]
+
+        if crd_manifests:
+            delete_many(client, crd_manifests, ignore_missing=True, logger=log)
+            self._ensure_all_deleted(client, crd_manifests)
+
+        self.base_resource_handler.delete(ignore_missing=True)
         self._ensure_all_deleted(client, non_crd_manifests)
 
     def _on_remove(self, _):
@@ -351,7 +346,6 @@ class LWSControllerCharm(CharmBase):
             # Delete the CRD first (cascading to its CRs) and wait, then the
             # remaining base resources. Block on each so the workload isn't torn
             # down while resources still linger.
-            self._delete_crds_and_wait(client, base_manifests)
             self._delete_base_resources_and_wait(client, base_manifests)
         except ApiError as e:
             if e.status.code != 404:
@@ -412,12 +406,7 @@ class LWSControllerCharm(CharmBase):
         self, container: Container, destination_path: str, certs_store: StoredState
     ) -> None:
         """Upload generated certs into the controller container."""
-        try:
-            self._check_container_connection(container)
-        except ErrorWithStatus as error:
-            self.model.unit.status = error.status
-            return
-
+        self._check_container_connection(container)
         try:
             container.push(f"{destination_path}/tls.key", certs_store.key, make_dirs=True)
             container.push(f"{destination_path}/tls.crt", certs_store.cert, make_dirs=True)
@@ -468,9 +457,7 @@ class LWSControllerCharm(CharmBase):
 
     def _upload_manager_config(self, container: Container, manager_config: str) -> None:
         """Push the LWS controller-manager configuration file into the container."""
-        if not container.can_connect():
-            log.info("Skipping manager config push, container is not reachable")
-            return
+        self._check_container_connection(container)
         try:
             container.push(MANAGER_CONFIG_DEST, manager_config, make_dirs=True)
         except (ProtocolError, PathError) as e:
