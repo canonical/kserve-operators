@@ -24,10 +24,10 @@ spec:
           - hf://EleutherAI/pythia-70m
           - /mnt/models
         env:
-          - name: HF_HUB_DISABLE_XET
-            value: "1"
           - name: HF_HUB_ENABLE_HF_TRANSFER
-            value: "1"
+            value: "0"
+          - name: HF_HUB_DOWNLOAD_TIMEOUT
+            value: "60"
         volumeMounts:
           - name: kserve-pvc-source
             mountPath: /mnt/models
