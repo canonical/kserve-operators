@@ -247,6 +247,13 @@ jobs:
           path: ${{ github.workspace }}/tests/integration/
 
       - name: Run bundle integration tests
+        env:
+          # Credentials for the S3 bucket hosting the test model. Provided via
+          # repository/organization secrets; the bundle tests inject them into
+          # the storage-initializer of the LLMInferenceService examples.
+          AWS_ACCESS_KEY_ID: ${{ secrets.LLM_STORAGE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-central-1
         run: |
           juju add-model kubeflow --config automatically-retry-hooks=false
           tox -e bundle-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/

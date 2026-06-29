@@ -4,6 +4,7 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 
 import jubilant
@@ -59,9 +60,21 @@ KSERVE_LLMISVC_IMAGES = json.loads(
 )
 STORAGE_INITIALIZER_IMAGE = KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"]
 VLLM_IMAGE = KSERVE_LLMISVC_IMAGES["vllm"]
+# The test model is hosted in a Canonical-owned S3 bucket so the tests do not
+# depend on the Hugging Face CDN (which has proven flaky/slow). The bucket and
+# region have safe non-secret defaults; the AWS credentials must be supplied via
+# the environment (locally exported, or GitHub Actions secrets in CI) and are
+# never committed to the repo.
+AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
+MODEL_S3_URI = os.environ.get("TEST_MODEL_S3_URI", "s3://charmed-kubeflow-llm-storage/pythia-70m")
 LLMISVC_IMAGE_CONTEXT = {
     "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
     "vllm_image": VLLM_IMAGE,
+    "model_s3_uri": MODEL_S3_URI,
+    "aws_access_key_id": os.environ.get("AWS_ACCESS_KEY_ID", ""),
+    "aws_secret_access_key": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+    "aws_region": AWS_REGION,
+    "s3_endpoint": os.environ.get("S3_ENDPOINT", f"s3.{AWS_REGION}.amazonaws.com"),
 }
 # LLMInferenceService example templates to deploy and run predictions against,
 # as (custom-resource name, manifest template path) pairs. Each example is
