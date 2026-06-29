@@ -90,6 +90,7 @@ class ObjectStillExistsError(Exception):
 
     def __init__(self, resource_name: str):
         self.resource_name = resource_name
+        super().__init__(f"Resource still exists: {resource_name}")
 
 
 class LWSControllerCharm(CharmBase):

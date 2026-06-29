@@ -10,6 +10,7 @@ spec:
     strategy: Webhook
     webhook:
       clientConfig:
+        caBundle: {{ cert }}
         service:
           name: {{ webhook_service_name }}
           namespace: {{ namespace }}

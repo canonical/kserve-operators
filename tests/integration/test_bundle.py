@@ -67,12 +67,24 @@ VLLM_IMAGE = KSERVE_LLMISVC_IMAGES["vllm"]
 # never committed to the repo.
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
 MODEL_S3_URI = os.environ.get("TEST_MODEL_S3_URI", "s3://charmed-kubeflow-llm-storage/pythia-70m")
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+# The test model is fetched from S3 using these credentials. Without them the
+# suite would otherwise fail deep inside the prediction step with opaque S3
+# fetch errors, so skip the whole module up front with an actionable message.
+pytestmark = pytest.mark.skipif(
+    not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY),
+    reason=(
+        "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to fetch the test model "
+        "from S3; export them locally or provide them via CI secrets to run these tests."
+    ),
+)
 LLMISVC_IMAGE_CONTEXT = {
     "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
     "vllm_image": VLLM_IMAGE,
     "model_s3_uri": MODEL_S3_URI,
-    "aws_access_key_id": os.environ.get("AWS_ACCESS_KEY_ID", ""),
-    "aws_secret_access_key": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+    "aws_access_key_id": AWS_ACCESS_KEY_ID,
+    "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
     "aws_region": AWS_REGION,
     "s3_endpoint": os.environ.get("S3_ENDPOINT", f"s3.{AWS_REGION}.amazonaws.com"),
 }
