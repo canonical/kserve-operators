@@ -1,0 +1,120 @@
+# Source: https://github.com/kubernetes-sigs/lws/blob/v0.7.0/config/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ webhook_service_name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app_name }}
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    app.kubernetes.io/name: {{ app_name }}
+---
+# Source: https://github.com/kubernetes-sigs/lws/blob/v0.7.0/config/webhook/manifests.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: lws-mutating-webhook-configuration
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: {{ webhook_service_name }}
+        namespace: {{ namespace }}
+        path: /mutate-leaderworkerset-x-k8s-io-v1-leaderworkerset
+    failurePolicy: Fail
+    name: mleaderworkerset.kb.io
+    rules:
+      - apiGroups:
+          - leaderworkerset.x-k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - leaderworkersets
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: {{ webhook_service_name }}
+        namespace: {{ namespace }}
+        path: /mutate--v1-pod
+    failurePolicy: Fail
+    name: mpod.kb.io
+    objectSelector:
+      matchExpressions:
+        - key: leaderworkerset.sigs.k8s.io/name
+          operator: Exists
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
+    sideEffects: None
+---
+# Source: https://github.com/kubernetes-sigs/lws/blob/v0.7.0/config/webhook/manifests.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: lws-validating-webhook-configuration
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: {{ webhook_service_name }}
+        namespace: {{ namespace }}
+        path: /validate-leaderworkerset-x-k8s-io-v1-leaderworkerset
+    failurePolicy: Fail
+    name: vleaderworkerset.kb.io
+    rules:
+      - apiGroups:
+          - leaderworkerset.x-k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - leaderworkersets
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ cert }}
+      service:
+        name: {{ webhook_service_name }}
+        namespace: {{ namespace }}
+        path: /validate--v1-pod
+    failurePolicy: Fail
+    name: vpod.kb.io
+    objectSelector:
+      matchExpressions:
+        - key: leaderworkerset.sigs.k8s.io/name
+          operator: Exists
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+    sideEffects: None

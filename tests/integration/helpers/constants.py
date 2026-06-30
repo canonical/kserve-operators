@@ -9,7 +9,6 @@ NAMESPACE_DEFAULT = "default"
 NAMESPACE_KUBEFLOW = "kubeflow"
 NAMESPACE_ENVOY_GATEWAY = "envoy-gateway-system"
 NAMESPACE_ENVOY_AI_GATEWAY = "envoy-ai-gateway-system"
-NAMESPACE_LWS = "lws-system"
 
 # kserve-llmisvc workload and example defaults.
 LLMISVC_APP_NAME = "kserve-llmisvc"

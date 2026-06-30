@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   model:
-    uri: hf://EleutherAI/pythia-70m
+    uri: {{ model_s3_uri }}
     name: EleutherAI/pythia-70m
   storageInitializer:
     enabled: false
@@ -21,12 +21,20 @@ spec:
       - name: storage-initializer
         image: {{ storage_initializer_image }}
         args:
-          - hf://EleutherAI/pythia-70m
+          - {{ model_s3_uri }}
           - /mnt/models
         env:
-          - name: HF_HUB_DISABLE_XET
+          - name: AWS_ACCESS_KEY_ID
+            value: "{{ aws_access_key_id }}"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "{{ aws_secret_access_key }}"
+          - name: AWS_DEFAULT_REGION
+            value: "{{ aws_region }}"
+          - name: S3_ENDPOINT
+            value: "{{ s3_endpoint }}"
+          - name: S3_USE_HTTPS
             value: "1"
-          - name: HF_HUB_ENABLE_HF_TRANSFER
+          - name: S3_VERIFY_SSL
             value: "1"
         volumeMounts:
           - name: kserve-pvc-source
