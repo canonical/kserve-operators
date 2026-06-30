@@ -4,8 +4,7 @@ output "app_name" {
 
 output "provides" {
   value = {
-    lws_controller   = "lws-controller"
-    metrics_endpoint = "metrics-endpoint"
+    lws_controller = "lws-controller"
   }
 }
 

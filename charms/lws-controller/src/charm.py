@@ -24,7 +24,6 @@ from charmed_kubeflow_chisme.kubernetes import (
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import ApiError, Client
 from lightkube.core.exceptions import LoadResourceError
 from lightkube.generic_resource import load_in_cluster_generic_resources
@@ -59,7 +58,6 @@ CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs"
 MANAGER_CONFIG_DEST = "/tmp/lws/controller_manager_config.yaml"
 
 LWS_SYNC_RELATION = "lws-controller"
-METRICS_PORT = 8080
 HEALTH_PORT = 8081
 
 KRH_SCOPE_BASE = "lws-controller-base"
@@ -125,17 +123,6 @@ class LWSControllerCharm(CharmBase):
         ]:
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
-
-        self.unit.set_ports(METRICS_PORT)
-        self.prometheus_provider = MetricsEndpointProvider(
-            self,
-            jobs=[
-                {
-                    "job_name": "lws-controller",
-                    "static_configs": [{"targets": [f"*:{METRICS_PORT}"]}],
-                },
-            ],
-        )
 
     @property
     def _context(self):

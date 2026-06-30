@@ -1,13 +1,11 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Pebble layer and metrics-provider assertions."""
+"""Pebble layer assertions."""
 
-import dataclasses
+from ops.testing import State
 
-from ops.testing import Relation, State
-
-from charm import HEALTH_PORT, MANAGER_CONFIG_DEST, METRICS_PORT
+from charm import HEALTH_PORT, MANAGER_CONFIG_DEST
 
 from .helpers import get_layer
 
@@ -47,15 +45,3 @@ def test_controller_container_unreachable_does_not_add_layer(
     out = ctx.run(ctx.on.install(), state_in)
     plan = get_layer(out, "lws-controller")
     assert "lws-controller" not in plan.services
-
-
-def test_metrics_endpoint_relation_advertises_controller_job(ctx, base_state):
-    """The metrics-endpoint relation should advertise the controller scrape job."""
-    metrics_rel = Relation(endpoint="metrics-endpoint", interface="prometheus_scrape")
-    state_in = dataclasses.replace(base_state, relations=[metrics_rel])
-
-    out = ctx.run(ctx.on.relation_joined(metrics_rel), state_in)
-
-    out_rel = out.get_relation(metrics_rel.id)
-    scrape_jobs_raw = out_rel.local_app_data.get("scrape_jobs", "")
-    assert f"*:{METRICS_PORT}" in scrape_jobs_raw

@@ -20,8 +20,6 @@ resources:
 provides:
   lws-controller:
     interface: lws-controller-sync
-  metrics-endpoint:
-    interface: prometheus_scrape
 requires:
   logging:
     interface: loki_push_api
