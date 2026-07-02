@@ -118,7 +118,6 @@ class LWSControllerCharm(CharmBase):
             self.on.leader_elected,
             self.on.update_status,
             self.on[LWS_SYNC_RELATION].relation_changed,
-            self.on[LWS_SYNC_RELATION].relation_joined,
             self.on[LWS_SYNC_RELATION].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
@@ -173,9 +172,7 @@ class LWSControllerCharm(CharmBase):
                     self._controller_container_name: {
                         "override": "replace",
                         "summary": "LeaderWorkerSet Controller Manager",
-                        "command": (
-                            "/manager " f"--config={MANAGER_CONFIG_DEST} " "--zap-log-level=2"
-                        ),
+                        "command": f"/manager --config={MANAGER_CONFIG_DEST} --zap-log-level=2",
                         "startup": "enabled",
                         "environment": {
                             "POD_NAMESPACE": self.model.name,
@@ -410,7 +407,7 @@ class LWSControllerCharm(CharmBase):
         must satisfy the cert invariants the charm relies on, raising
         ``ErrorWithStatus(BlockedStatus)`` when it does not.
         """
-        raw = str(self.config.get("manager-config") or "").strip()
+        raw = str(self.config.get("manager-config", "")).strip()
         if not raw:
             return _MANAGER_CONFIG
 
