@@ -22,7 +22,6 @@ from lightkube.resources.core_v1 import Namespace
 from .constants import (
     NAMESPACE_ENVOY_AI_GATEWAY,
     NAMESPACE_ENVOY_GATEWAY,
-    NAMESPACE_LWS,
 )
 from .k8s import apply_yaml, get_client, wait_for_crd_established, wait_for_deployment_available
 from .kubectl import helm, kubectl
@@ -131,31 +130,6 @@ def install_envoy_ai_gateway(envoy_ai_gateway_version: str) -> None:
         ]
     )
     wait_for_deployment_available(NAMESPACE_ENVOY_AI_GATEWAY, "ai-gateway-controller")
-
-
-def install_lws(version: str) -> None:
-    """Install LeaderWorkerSet CRDs/controller via Helm."""
-    logger.info("Installing LWS via Helm (version %s)...", version)
-    helm(
-        [
-            "upgrade",
-            "-i",
-            "lws",
-            "oci://registry.k8s.io/lws/charts/lws",
-            "--version",
-            version,
-            "--namespace",
-            NAMESPACE_LWS,
-            "--create-namespace",
-            "--wait",
-            "--timeout",
-            "300s",
-        ]
-    )
-
-    wait_for_deployment_available(NAMESPACE_LWS, "lws-controller-manager")
-    wait_for_crd_established("leaderworkersets.leaderworkerset.x-k8s.io")
-    logger.info("LWS installed")
 
 
 def ensure_gateway(kserve_namespace: str, gateway_name: str, gateway_namespace: str) -> None:

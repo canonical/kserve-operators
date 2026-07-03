@@ -113,7 +113,6 @@ jobs:
       fail-fast: false
       matrix:
         charm:
-          - tests/integration/lws-controller-tester
           - tests/integration/gateway-metadata-provider-tester
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v49.0.1
     with:
