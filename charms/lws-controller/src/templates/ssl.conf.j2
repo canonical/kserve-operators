@@ -1,0 +1,33 @@
+[ req ]
+default_bits = 2048
+prompt = no
+default_md = sha256
+req_extensions = req_ext
+distinguished_name = dn
+[ dn ]
+C = GB
+ST = Canonical
+L = Canonical
+O = Canonical
+OU = Canonical
+CN = 127.0.0.1
+[ req_ext ]
+subjectAltName = @alt_names
+[ alt_names ]
+DNS.1 = {{ service_name }}
+DNS.2 = {{ service_name }}.{{ namespace }}
+DNS.3 = {{ service_name }}.{{ namespace }}.svc
+DNS.4 = {{ service_name }}.{{ namespace }}.svc.cluster
+DNS.5 = {{ service_name }}.{{ namespace }}.svc.cluster.local
+DNS.6 = {{ webhook_server_service }}
+DNS.7 = {{ webhook_server_service }}.{{ namespace }}
+DNS.8 = {{ webhook_server_service }}.{{ namespace }}.svc
+DNS.9 = {{ webhook_server_service }}.{{ namespace }}.svc.cluster
+DNS.10 = {{ webhook_server_service }}.{{ namespace }}.svc.cluster.local
+IP.1 = 127.0.0.1
+[ v3_ext ]
+authorityKeyIdentifier=keyid,issuer:always
+basicConstraints=CA:FALSE
+keyUsage=keyEncipherment,dataEncipherment,digitalSignature
+extendedKeyUsage=serverAuth,clientAuth
+subjectAltName=@alt_names

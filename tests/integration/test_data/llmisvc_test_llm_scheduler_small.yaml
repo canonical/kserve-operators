@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   model:
-    uri: {{ model_s3_uri }}
+    uri: s3://charmed-kubeflow-llm-storage/pythia-70m
     name: EleutherAI/pythia-70m
   storageInitializer:
     enabled: false
@@ -19,19 +19,21 @@ spec:
         emptyDir: {}
     initContainers:
       - name: storage-initializer
-        image: {{ storage_initializer_image }}
+        image: kserve/storage-initializer:v0.17.0
         args:
-          - {{ model_s3_uri }}
+          - s3://charmed-kubeflow-llm-storage/pythia-70m
           - /mnt/models
+        # NOTE: manual scratch file. Fill in the AWS credentials below before
+        # `kubectl apply`. Do NOT commit real credentials.
         env:
           - name: AWS_ACCESS_KEY_ID
-            value: "{{ aws_access_key_id }}"
+            value: "REPLACE_WITH_AWS_ACCESS_KEY_ID"
           - name: AWS_SECRET_ACCESS_KEY
-            value: "{{ aws_secret_access_key }}"
+            value: "REPLACE_WITH_AWS_SECRET_ACCESS_KEY"
           - name: AWS_DEFAULT_REGION
-            value: "{{ aws_region }}"
+            value: "eu-central-1"
           - name: S3_ENDPOINT
-            value: "{{ s3_endpoint }}"
+            value: "s3.eu-central-1.amazonaws.com"
           - name: S3_USE_HTTPS
             value: "1"
           - name: S3_VERIFY_SSL
@@ -41,7 +43,7 @@ spec:
             mountPath: /mnt/models
     containers:
       - name: main
-        image: {{ vllm_image }}
+        image: quay.io/pierdipi/vllm-cpu:latest
         securityContext:
           runAsNonRoot: false
         env:
