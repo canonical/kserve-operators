@@ -37,3 +37,13 @@ ISVC = lightkube.generic_resource.create_namespaced_resource(
 SKLEARN_INF_SVC_YAML = yaml.safe_load(Path(YAMLS_PREFIX + "sklearn-iris.yaml").read_text())
 SKLEARN_INF_SVC_OBJECT = lightkube.codecs.load_all_yaml(yaml.dump(SKLEARN_INF_SVC_YAML))[0]
 SKLEARN_INF_SVC_NAME = SKLEARN_INF_SVC_OBJECT.metadata.name
+
+# Sklearn ISVC backed by an S3 object storage model
+S3_MODEL_URL = (
+    "https://storage.googleapis.com/kfserving-examples/models/sklearn/1.0/model/model.joblib"
+)
+S3_BUCKET = "kserve-models"
+S3_MODEL_KEY = "sklearn/model.joblib"
+SKLEARN_S3_INF_SVC_YAML = yaml.safe_load(Path(YAMLS_PREFIX + "sklearn-iris-s3.yaml").read_text())
+SKLEARN_S3_INF_SVC_OBJECT = lightkube.codecs.load_all_yaml(yaml.dump(SKLEARN_S3_INF_SVC_YAML))[0]
+SKLEARN_S3_INF_SVC_NAME = SKLEARN_S3_INF_SVC_OBJECT.metadata.name

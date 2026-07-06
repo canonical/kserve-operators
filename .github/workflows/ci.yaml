@@ -131,9 +131,11 @@ jobs:
       matrix:
         include:
           - charm: kserve-controller
-            test-type: integration
+            test-type: integration-object-storage
           - charm: kserve-controller
             test-type: integration-ambient
+          - charm: kserve-controller
+            test-type: integration-s3
           - charm: lws-controller
             test-type: integration
     runs-on: ubuntu-24.04
