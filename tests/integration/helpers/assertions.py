@@ -37,7 +37,6 @@ from .constants import (
     LOCAL_AGGREGATED_METRICS_PORT,
     LOCAL_CONTROLLER_METRICS_PORT,
     NAMESPACE_DEFAULT,
-    NAMESPACE_ENVOY_GATEWAY,
 )
 from .k8s import (
     Gateway,
@@ -75,33 +74,6 @@ _COMPLETION_PAYLOAD = {
     "max_tokens": 32,
     "temperature": 0.2,
 }
-
-
-def assert_gateway_programmed(gateway_name: str, gateway_namespace: str) -> None:
-    logger.info("Waiting for Gateway '%s' to be programmed...", gateway_name)
-    client = get_client()
-    for attempt in RETRY_FOR_TEN_MINUTES:
-        with attempt:
-            gateway = client.get(Gateway, name=gateway_name, namespace=gateway_namespace)
-            conditions = (gateway.status or {}).get("conditions", [])
-            logger.info("Gateway conditions: %s", conditions)
-
-            true_conditions = {
-                condition.get("type")
-                for condition in conditions
-                if condition.get("status") == "True"
-            }
-            # "Accepted" alone only means the spec is valid; the data plane is
-            # not necessarily routable until "Programmed" is also True.
-            if {"Accepted", "Programmed"} <= true_conditions:
-                logger.info("Gateway is Accepted and Programmed")
-                return
-
-            logger.info(
-                "Gateway not ready yet. Conditions: %s",
-                [(c.get("type"), c.get("status"), c.get("reason")) for c in conditions],
-            )
-            raise AssertionError("Gateway not yet programmed")
 
 
 def assert_route_programmed(name: str = LLMISVC_NAME) -> None:
@@ -217,31 +189,33 @@ def assert_llmisvc_metrics_endpoints(namespace: str, app_name: str = LLMISVC_APP
         )
 
 
-def _gateway_services(gateway_name: str) -> list:
-    return list(
+def _gateway_ip(gateway_name: str, gateway_namespace: str):
+    """Return the Gateway's programmed LoadBalancer address (``.status.addresses``), or None."""
+    gateway = get_client().get(Gateway, name=gateway_name, namespace=gateway_namespace)
+    addresses = (gateway.status or {}).get("addresses", []) or []
+    for address in addresses:
+        value = address.get("value")
+        if value:
+            return value
+    return None
+
+
+def _gateway_lb_service_name(gateway_name: str, gateway_namespace: str) -> str:
+    """Return the Envoy-managed LoadBalancer Service backing the gateway."""
+    services = list(
         get_client().list(
             Service,
-            namespace=NAMESPACE_ENVOY_GATEWAY,
-            labels={"serving.kserve.io/gateway": gateway_name},
+            namespace=gateway_namespace,
+            labels={
+                "gateway.envoyproxy.io/owning-gateway-name": gateway_name,
+                "gateway.envoyproxy.io/owning-gateway-namespace": gateway_namespace,
+            },
         )
     )
-
-
-def _gateway_ip(gateway_name: str):
-    services = _gateway_services(gateway_name)
     if not services:
-        return None
-    load_balancer = services[0].status.loadBalancer if services[0].status else None
-    ingress = (load_balancer.ingress if load_balancer else None) or []
-    if not ingress:
-        return None
-    return ingress[0].ip
-
-
-def _gateway_service_name(gateway_name: str) -> str:
-    services = _gateway_services(gateway_name)
-    if not services:
-        raise AssertionError(f"No Envoy service found for gateway '{gateway_name}'")
+        raise AssertionError(
+            f"No Envoy service found for gateway '{gateway_namespace}/{gateway_name}'"
+        )
     return services[0].metadata.name
 
 
@@ -261,23 +235,29 @@ def _post_completion_and_assert(url: str, model: str, name: str) -> None:
 
 
 def assert_prediction(
-    gateway_name: str, name: str = LLMISVC_NAME, model: str = LLMISVC_MODEL_NAME
+    gateway_name: str,
+    gateway_namespace: str,
+    name: str = LLMISVC_NAME,
+    model: str = LLMISVC_MODEL_NAME,
 ) -> None:
     completions_path = f"/default/{name}/v1/completions"
 
-    gw_ip = _gateway_ip(gateway_name)
+    gw_ip = _gateway_ip(gateway_name, gateway_namespace)
     if gw_ip:
-        _post_completion_and_assert(f"http://{gw_ip}{completions_path}", model=model, name=name)
-        return
+        url = f"http://{gw_ip}{completions_path}"
+        for attempt in RETRY_FOR_TEN_MINUTES:
+            with attempt:
+                _post_completion_and_assert(url, model=model, name=name)
+                return
 
-    service_name = _gateway_service_name(gateway_name)
-    with port_forward(NAMESPACE_ENVOY_GATEWAY, f"svc/{service_name}", "8080:80"):
+    service_name = _gateway_lb_service_name(gateway_name, gateway_namespace)
+    with port_forward(gateway_namespace, f"svc/{service_name}", "8080:80"):
         for attempt in RETRY_FOR_TEN_MINUTES:
             with attempt:
                 _post_completion_and_assert(
                     f"http://127.0.0.1:8080{completions_path}", model=model, name=name
                 )
-                break
+                return
 
 
 def _list_resource_names(resource, labels: dict, namespaced: bool) -> list[str]:
@@ -310,10 +290,8 @@ def assert_no_charm_resources_left() -> None:
         ("cluster resources by instance", CLUSTER_RESOURCE_KINDS, selector_by_instance, False),
     ]
 
-    # Kubernetes garbage-collection of charm-owned resources (especially
-    # cluster-scoped ones like clusterroles/webhooks) can lag behind Juju
-    # reporting the applications as removed. Retry the check so GC has time to
-    # finish before we assert the cluster is clean.
+    # Cluster GC of charm-owned resources (especially cluster-scoped ones) can
+    # lag behind Juju reporting the apps removed, so retry before asserting.
     for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
             leftovers = []

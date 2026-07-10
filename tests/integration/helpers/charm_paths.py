@@ -54,8 +54,3 @@ def resolve_charm_resources(charm_name: str) -> dict[str, str]:
         resolved_resources[resource_name] = upstream_source
 
     return resolved_resources
-
-
-def resolve_test_charm_path(test_charm_name: str) -> Path:
-    directory = Path(__file__).resolve().parents[1] / test_charm_name
-    return _resolve_single_charm(directory, test_charm_name)
