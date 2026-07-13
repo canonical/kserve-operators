@@ -340,6 +340,7 @@ async def test_relate_to_object_store(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     """
     Test if the charm can relate to resource dispatcher and stay in Active state

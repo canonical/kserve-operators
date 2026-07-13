@@ -322,6 +322,7 @@ async def test_configmap_changes_with_config(
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
+@pytest.mark.abort_on_fail
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     """Test that the charm can relate to resource-dispatcher and stay in Active state.
 
