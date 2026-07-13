@@ -181,6 +181,7 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     logger.info("Relating charms")
     juju.integrate("kserve-controller:kserve-controller", "kserve-llmisvc:kserve-controller")
     juju.integrate("lws-controller:lws-controller", "kserve-llmisvc:lws-controller")
+
     logger.info("Waiting for all charms to be active after relations")
     juju.wait(jubilant.all_active, successes=1)
 

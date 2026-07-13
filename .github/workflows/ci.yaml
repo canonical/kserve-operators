@@ -107,21 +107,6 @@ jobs:
       actions: read  # Needed for GitHub API call to get workflow version (for private repositories)
       contents: read
 
-  build-test-charms:
-    name: Build charm | ${{ matrix.charm }}
-    strategy:
-      fail-fast: false
-      matrix:
-        charm:
-          - tests/integration/gateway-metadata-provider-tester
-    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v49.0.1
-    with:
-      path-to-charm-directory: ${{ matrix.charm }}
-      cache: true
-    permissions:
-      actions: read
-      contents: read
-
   integration:
     name: Integration tests | ${{ matrix.charm }} | ${{ matrix.test-type }}
     needs:
