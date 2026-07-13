@@ -1,0 +1,133 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: test-llm-prefill-decode
+  namespace: default
+spec:
+  model:
+    uri: s3://charmed-kubeflow-llm-storage/pythia-70m
+    name: EleutherAI/pythia-70m
+  storageInitializer:
+    enabled: false
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  # NOTE: If your GPU nodes are tainted/labelled, add nodeSelector/tolerations to
+  # spec.template and spec.prefill.template so the workers land on GPU nodes, e.g.:
+  #   nodeSelector:
+  #     nvidia.com/gpu.present: "true"
+  #   tolerations:
+  #     - key: nvidia.com/gpu
+  #       operator: Exists
+  #       effect: NoSchedule
+  template:
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: kserve/storage-initializer:v0.17.0
+        args:
+          - s3://charmed-kubeflow-llm-storage/pythia-70m
+          - /mnt/models
+        # NOTE: manual scratch file. Fill in the AWS credentials below before
+        # `kubectl apply`. Do NOT commit real credentials.
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            value: "<AWS_ACCESS_KEY_ID>"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "<AWS_SECRET_ACCESS_KEY>"
+          - name: AWS_DEFAULT_REGION
+            value: "eu-central-1"
+          - name: S3_ENDPOINT
+            value: "s3.eu-central-1.amazonaws.com"
+          - name: S3_USE_HTTPS
+            value: "1"
+          - name: S3_VERIFY_SSL
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+    containers:
+      - name: main
+        image: ghcr.io/llm-d/llm-d-cuda:v0.4.0
+        args:
+          - "--enforce-eager" # optional on GPU; drop to use CUDA graphs
+          - "--port"
+          - "8001"
+          - "--kv-transfer-config"
+          # kv_buffer_device defaults to "cuda" on GPU, so it is omitted here.
+          - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+        securityContext:
+          runAsNonRoot: false
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+        resources:
+          requests:
+            cpu: "1"
+            memory: "8Gi"
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"
+  prefill:
+    replicas: 1
+    template:
+      volumes:
+        - name: kserve-pvc-source
+          emptyDir: {}
+      initContainers:
+        - name: storage-initializer
+          image: kserve/storage-initializer:v0.17.0
+          args:
+            - s3://charmed-kubeflow-llm-storage/pythia-70m
+            - /mnt/models
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: "<AWS_ACCESS_KEY_ID>"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "<AWS_SECRET_ACCESS_KEY>"
+            - name: AWS_DEFAULT_REGION
+              value: "eu-central-1"
+            - name: S3_ENDPOINT
+              value: "s3.eu-central-1.amazonaws.com"
+            - name: S3_USE_HTTPS
+              value: "1"
+            - name: S3_VERIFY_SSL
+              value: "1"
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+      containers:
+        - name: main
+          image: ghcr.io/llm-d/llm-d-cuda:v0.4.0
+          args:
+            - "--enable-chunked-prefill"
+            - "--enforce-eager" # optional on GPU; drop to use CUDA graphs
+            - "--kv-transfer-config"
+            - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          securityContext:
+            runAsNonRoot: false
+          env:
+            - name: VLLM_LOGGING_LEVEL
+              value: INFO
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+              readOnly: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"

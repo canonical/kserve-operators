@@ -9,3 +9,5 @@ venv/
 *.tfstate*
 .coverage
 coverage.xml
+docs/
+.mypy_cache/

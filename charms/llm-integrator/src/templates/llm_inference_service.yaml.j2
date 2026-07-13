@@ -1,0 +1,129 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: {{ app_name }}
+  namespace: {{ namespace }}
+spec:
+  model:
+    uri: {{ model_uri }}
+    name: {{ model_name }}
+{% if is_s3 %}
+  storageInitializer:
+    enabled: false
+{% endif %}
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  template:
+{% if is_s3 %}
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: {{ storage_initializer_image }}
+        args:
+          - {{ model_uri }}
+          - /mnt/models
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            value: "{{ s3_access_key }}"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "{{ s3_secret_access_key }}"
+          - name: AWS_DEFAULT_REGION
+            value: "{{ s3_region }}"
+          - name: S3_ENDPOINT
+            value: "{{ s3_endpoint }}"
+          - name: S3_USE_HTTPS
+            value: "{{ s3_use_https }}"
+          - name: S3_VERIFY_SSL
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+{% endif %}
+    containers:
+      - name: main
+        image: {{ runtime_image }}
+        args:
+          - "--enforce-eager"
+          - "--port"
+          - "8001"
+        securityContext:
+          runAsNonRoot: false
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "1"
+{% if is_s3 %}
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+{% endif %}
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "4Gi"
+          limits:
+            cpu: "2"
+            memory: "8Gi"
+{% if enable_prefill_decode %}
+  prefill:
+    replicas: 1
+    template:
+{% if is_s3 %}
+      volumes:
+        - name: kserve-pvc-source
+          emptyDir: {}
+      initContainers:
+        - name: storage-initializer
+          image: {{ storage_initializer_image }}
+          args:
+            - {{ model_uri }}
+            - /mnt/models
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: "{{ s3_access_key }}"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "{{ s3_secret_access_key }}"
+            - name: AWS_DEFAULT_REGION
+              value: "{{ s3_region }}"
+            - name: S3_ENDPOINT
+              value: "{{ s3_endpoint }}"
+            - name: S3_USE_HTTPS
+              value: "{{ s3_use_https }}"
+            - name: S3_VERIFY_SSL
+              value: "1"
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+{% endif %}
+      containers:
+        - name: main
+          image: {{ runtime_image }}
+          args:
+            - "--enable-chunked-prefill"
+          securityContext:
+            runAsNonRoot: false
+          env:
+            - name: VLLM_LOGGING_LEVEL
+              value: INFO
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "1"
+{% if is_s3 %}
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+              readOnly: true
+{% endif %}
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+{% endif %}

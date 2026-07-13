@@ -5,6 +5,7 @@ output "app_name" {
 output "provides" {
   value = {
     metrics_endpoint = "metrics-endpoint"
+    kserve_llmisvc   = "kserve-llmisvc"
   }
 }
 
