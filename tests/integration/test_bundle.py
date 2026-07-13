@@ -11,46 +11,39 @@ import jubilant
 import pytest
 
 from .helpers.assertions import (
-    assert_gateway_programmed,
     assert_inferencepool_and_workload_resources,
     assert_llmisvc_metrics_endpoints,
     assert_no_charm_resources_left,
     assert_prediction,
     assert_route_programmed,
 )
-from .helpers.charm_paths import (
-    resolve_charm_path,
-    resolve_charm_resources,
-    resolve_test_charm_path,
-)
-from .helpers.cluster_setup import (
-    ensure_gateway,
-    install_envoy_ai_gateway,
-    install_envoy_gateway,
-    install_gateway_api_crds,
-    install_gie_crds,
+from .helpers.charm_paths import resolve_charm_path, resolve_charm_resources
+from .helpers.charms_dependencies import (
+    ENVOY_AI_CONTROLLER,
+    ENVOY_CONTROLLER,
+    ENVOY_INGRESS,
+    SELF_SIGNED_CERTIFICATES,
 )
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
 logger = logging.getLogger(__name__)
-# Quiet jubilant's per-poll wait logging, which is very verbose during the long
-# waits in these tests. See
-# https://documentation.ubuntu.com/jubilant/reference/jubilant/#jubilant.Juju.wait
+# Quiet jubilant's very verbose per-poll wait logging during the long waits.
 logging.getLogger("jubilant.wait").setLevel("WARNING")
 
-GATEWAY_API_VERSION = "v1.4.1"
-GIE_VERSION = "v1.3.0"
-ENVOY_GATEWAY_VERSION = "v1.6.3"
-ENVOY_AI_GATEWAY_VERSION = "v0.5.0"
-GATEWAY_NAME = "kserve-ingress-gateway"
 CONTROLLER_APP = "kserve-controller"
 LLMISVC_APP = "kserve-llmisvc"
 LWS_APP = "lws-controller"
-GATEWAY_METADATA_PROVIDER_CHARM = "gateway-metadata-provider-tester"
+# App names for the Charmhub dependencies (deploy coordinates live in
+# helpers/charms_dependencies.py). envoy-ingress-k8s creates the Gateway and
+# provides the gateway-metadata relation to kserve-controller.
+ENVOY_CONTROLLER_APP = ENVOY_CONTROLLER.charm
+ENVOY_AI_CONTROLLER_APP = ENVOY_AI_CONTROLLER.charm
+ENVOY_INGRESS_APP = ENVOY_INGRESS.charm
+CERTIFICATES_APP = SELF_SIGNED_CERTIFICATES.charm
+GATEWAY_NAME = ENVOY_INGRESS_APP
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
-# Images injected into the LLMInferenceService example templates at apply time.
-# They are sourced from the charms' default-custom-images.json so the tests
-# exercise the same images the charms ship by default.
+# Images injected into the example manifests, sourced from the charms'
+# default-custom-images.json so tests use the images the charms ship.
 REPO_ROOT = Path(__file__).parent.parent.parent
 KSERVE_CONTROLLER_IMAGES = json.loads(
     (REPO_ROOT / "charms/kserve-controller/src/default-custom-images.json").read_text()
@@ -60,25 +53,25 @@ KSERVE_LLMISVC_IMAGES = json.loads(
 )
 STORAGE_INITIALIZER_IMAGE = KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"]
 VLLM_IMAGE = KSERVE_LLMISVC_IMAGES["vllm"]
-# The test model is hosted in a Canonical-owned S3 bucket so the tests do not
-# depend on the Hugging Face CDN (which has proven flaky/slow). The bucket and
-# region have safe non-secret defaults; the AWS credentials must be supplied via
-# the environment (locally exported, or GitHub Actions secrets in CI) and are
-# never committed to the repo.
+# The test model lives in a Canonical S3 bucket (avoids the flaky HF CDN). The
+# AWS credentials are supplied via the environment (local export or CI secrets).
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
 MODEL_S3_URI = os.environ.get("TEST_MODEL_S3_URI", "s3://charmed-kubeflow-llm-storage/pythia-70m")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
-# The test model is fetched from S3 using these credentials. Without them the
-# suite would otherwise fail deep inside the prediction step with opaque S3
-# fetch errors, so skip the whole module up front with an actionable message.
-pytestmark = pytest.mark.skipif(
-    not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY),
-    reason=(
-        "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to fetch the test model "
-        "from S3; export them locally or provide them via CI secrets to run these tests."
-    ),
-)
+
+
+# Fail fast (rather than skip) if the S3 credentials for the test model are missing.
+@pytest.fixture(scope="session", autouse=True)
+def require_aws_credentials():
+    if not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY):
+        pytest.fail(
+            "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to fetch the test "
+            "model from S3; export them locally or provide them via CI secrets.",
+            pytrace=False,
+        )
+
+
 LLMISVC_IMAGE_CONTEXT = {
     "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
     "vllm_image": VLLM_IMAGE,
@@ -88,11 +81,8 @@ LLMISVC_IMAGE_CONTEXT = {
     "aws_region": AWS_REGION,
     "s3_endpoint": os.environ.get("S3_ENDPOINT", f"s3.{AWS_REGION}.amazonaws.com"),
 }
-# LLMInferenceService example templates to deploy and run predictions against,
-# as (custom-resource name, manifest template path) pairs. Each example is
-# applied, verified, predicted against, and then deleted before the next one so
-# the cluster's resource usage stays bounded (important on constrained CI
-# runners). Add a new example by appending another (name, path) tuple.
+# (name, manifest template) pairs. Each example is applied, verified, predicted
+# against, then deleted before the next so cluster usage stays bounded.
 LLMISVC_EXAMPLES = [
     (
         "test-llm-scheduler-small",
@@ -114,7 +104,6 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     controller_charm = resolve_charm_path(charms_path=charms_path, charm_name=CONTROLLER_APP)
     llmisvc_charm = resolve_charm_path(charms_path=charms_path, charm_name=LLMISVC_APP)
     lws_charm = resolve_charm_path(charms_path=charms_path, charm_name=LWS_APP)
-    gateway_metadata_charm = resolve_test_charm_path(GATEWAY_METADATA_PROVIDER_CHARM)
     controller_resources = resolve_charm_resources(charm_name=CONTROLLER_APP)
     llmisvc_resources = resolve_charm_resources(charm_name=LLMISVC_APP)
     lws_resources = resolve_charm_resources(charm_name=LWS_APP)
@@ -124,27 +113,14 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
             raise RuntimeError(f"LLMInferenceService manifest file not found: {example_path!s}")
 
     logger.info("Starting bundle integration test setup")
-    logger.info("Installing Gateway API CRDs")
-    install_gateway_api_crds(version=GATEWAY_API_VERSION)
 
-    logger.info("Installing Gateway API Inference Extension CRDs")
-    install_gie_crds(version=GIE_VERSION)
+    logger.info("Deploying Envoy gateway charm stack")
+    for dep in (ENVOY_CONTROLLER, ENVOY_AI_CONTROLLER, ENVOY_INGRESS, SELF_SIGNED_CERTIFICATES):
+        juju.deploy(dep.charm, channel=dep.channel, trust=dep.trust, config=dep.config)
 
-    logger.info("Installing Envoy Gateway")
-    install_envoy_gateway(
-        envoy_gateway_version=ENVOY_GATEWAY_VERSION,
-        envoy_ai_gateway_version=ENVOY_AI_GATEWAY_VERSION,
-    )
-
-    logger.info("Installing Envoy AI Gateway")
-    install_envoy_ai_gateway(envoy_ai_gateway_version=ENVOY_AI_GATEWAY_VERSION)
-
-    logger.info("Creating Gateway resource")
-    ensure_gateway(
-        kserve_namespace=juju.model,
-        gateway_name=GATEWAY_NAME,
-        gateway_namespace=juju.model,
-    )
+    logger.info("Relating Envoy charms")
+    juju.integrate(ENVOY_AI_CONTROLLER_APP, CERTIFICATES_APP)
+    juju.integrate(ENVOY_CONTROLLER_APP, ENVOY_AI_CONTROLLER_APP)
 
     logger.info("Deploying lws-controller charm")
     juju.deploy(
@@ -167,23 +143,10 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     logger.info("Waiting for kserve-controller to block on missing gateway-metadata relation")
     juju.wait(lambda status: status.apps[CONTROLLER_APP].is_blocked, successes=1)
 
-    logger.info("Deploying gateway metadata provider test charm")
-    juju.deploy(charm=str(gateway_metadata_charm))
-
-    logger.info("Waiting for gateway metadata provider application to appear")
-    juju.wait(lambda status: GATEWAY_METADATA_PROVIDER_CHARM in status.apps, successes=1)
-
-    logger.info("Relating gateway metadata provider to kserve-controller")
+    logger.info("Relating kserve-controller to the Envoy gateway metadata provider")
     juju.integrate(
-        "kserve-controller:gateway-metadata",
-        f"{GATEWAY_METADATA_PROVIDER_CHARM}:gateway-metadata",
-    )
-
-    logger.info("Waiting for kserve-controller and gateway metadata provider to be active")
-    juju.wait(
-        lambda status: status.apps[CONTROLLER_APP].is_active
-        and status.apps[GATEWAY_METADATA_PROVIDER_CHARM].is_active,
-        successes=1,
+        f"{CONTROLLER_APP}:gateway-metadata",
+        f"{ENVOY_INGRESS_APP}:gateway-metadata",
     )
 
     logger.info("Deploying kserve-llmisvc charm")
@@ -199,11 +162,9 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     logger.info("Relating charms")
     juju.integrate("kserve-controller:kserve-controller", "kserve-llmisvc:kserve-controller")
     juju.integrate("lws-controller:lws-controller", "kserve-llmisvc:lws-controller")
+
     logger.info("Waiting for all charms to be active after relations")
     juju.wait(jubilant.all_active, successes=1)
-
-    logger.info("Waiting for Gateway to be programmed")
-    assert_gateway_programmed(gateway_name=GATEWAY_NAME, gateway_namespace=juju.model)
 
     logger.info("Charm setup complete")
 
@@ -230,7 +191,7 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
     assert_llmisvc_metrics_endpoints(namespace=juju.model)
 
     logger.info("Example '%s': testing prediction endpoint", example_name)
-    assert_prediction(gateway_name=GATEWAY_NAME, name=example_name)
+    assert_prediction(gateway_name=GATEWAY_NAME, gateway_namespace=juju.model, name=example_name)
 
     logger.info("Example '%s': deleting after validation", example_name)
     delete_llmisvc_example(name=example_name)
@@ -240,20 +201,21 @@ def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
     logger.info("Starting bundle cleanup test")
     logger.info("Removing charm applications from Juju model")
     juju.remove_application(LLMISVC_APP)
-    juju.remove_application(GATEWAY_METADATA_PROVIDER_CHARM)
     juju.remove_application(CONTROLLER_APP)
     juju.remove_application(LWS_APP)
+    for envoy_app in (
+        ENVOY_CONTROLLER_APP,
+        ENVOY_AI_CONTROLLER_APP,
+        ENVOY_INGRESS_APP,
+        CERTIFICATES_APP,
+    ):
+        juju.remove_application(envoy_app)
 
-    logger.info("Waiting for charm applications to disappear from Juju model")
+    logger.info("Waiting for kserve charm applications to disappear from Juju model")
     juju.wait(
         lambda status: CONTROLLER_APP not in status.apps
         and LLMISVC_APP not in status.apps
         and LWS_APP not in status.apps,
-        successes=1,
-    )
-
-    juju.wait(
-        lambda status: GATEWAY_METADATA_PROVIDER_CHARM not in status.apps,
         successes=1,
     )
 

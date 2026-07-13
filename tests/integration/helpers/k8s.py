@@ -21,18 +21,12 @@ from lightkube.generic_resource import (
     create_namespaced_resource,
 )
 from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
-from lightkube.resources.apps_v1 import Deployment
-
-from .retry import RETRY_FOR_THREE_MINUTES
 
 logger = logging.getLogger(__name__)
 
 FIELD_MANAGER = "kserve-bundle-tests"
 
-# Gateway API (gateway.networking.k8s.io/v1) resources the bundle creates and inspects.
-GatewayClass = create_global_resource(
-    "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses"
-)
+# Gateway API (gateway.networking.k8s.io/v1) resources the bundle inspects.
 Gateway = create_namespaced_resource("gateway.networking.k8s.io", "v1", "Gateway", "gateways")
 HTTPRoute = create_namespaced_resource("gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes")
 
@@ -69,55 +63,3 @@ def apply_yaml(manifest: str) -> None:
     client = get_client()
     for obj in lightkube.codecs.load_all_yaml(manifest):
         client.apply(obj)
-
-
-def _conditions(status) -> list:
-    """Return the ``conditions`` list from a typed or generic resource status."""
-    if status is None:
-        return []
-    if isinstance(status, dict):
-        return status.get("conditions", []) or []
-    return getattr(status, "conditions", []) or []
-
-
-def _condition_value(condition, key: str):
-    """Read a field from a condition entry, tolerating dict or model form."""
-    if isinstance(condition, dict):
-        return condition.get(key)
-    return getattr(condition, key, None)
-
-
-def wait_for_crd_established(crd_name: str) -> None:
-    """Block until the named CRD reports the ``Established`` condition."""
-    client = get_client()
-    logger.info("Waiting for CRD '%s' to be established...", crd_name)
-    for attempt in RETRY_FOR_THREE_MINUTES:
-        with attempt:
-            crd = client.get(CustomResourceDefinition, crd_name)
-            established = any(
-                _condition_value(c, "type") == "Established"
-                and _condition_value(c, "status") == "True"
-                for c in _conditions(crd.status)
-            )
-            if not established:
-                raise AssertionError(f"CRD '{crd_name}' is not Established yet")
-    logger.info("CRD '%s' is established", crd_name)
-
-
-def wait_for_deployment_available(namespace: str, name: str) -> None:
-    """Block until the named Deployment has finished rolling out."""
-    client = get_client()
-    logger.info("Waiting for deployment '%s/%s' to be available...", namespace, name)
-    for attempt in RETRY_FOR_THREE_MINUTES:
-        with attempt:
-            deployment = client.get(Deployment, name=name, namespace=namespace)
-            desired = (deployment.spec.replicas if deployment.spec else None) or 0
-            status = deployment.status
-            available = (getattr(status, "availableReplicas", None) or 0) if status else 0
-            updated = (getattr(status, "updatedReplicas", None) or 0) if status else 0
-            if desired == 0 or available < desired or updated < desired:
-                raise AssertionError(
-                    f"Deployment '{namespace}/{name}' not rolled out yet: "
-                    f"desired={desired}, available={available}, updated={updated}"
-                )
-    logger.info("Deployment '%s/%s' is available", namespace, name)

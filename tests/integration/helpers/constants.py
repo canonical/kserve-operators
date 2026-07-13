@@ -6,9 +6,6 @@
 
 # Kubernetes namespaces used across the bundle setup and assertions.
 NAMESPACE_DEFAULT = "default"
-NAMESPACE_KUBEFLOW = "kubeflow"
-NAMESPACE_ENVOY_GATEWAY = "envoy-gateway-system"
-NAMESPACE_ENVOY_AI_GATEWAY = "envoy-ai-gateway-system"
 
 # kserve-llmisvc workload and example defaults.
 LLMISVC_APP_NAME = "kserve-llmisvc"
