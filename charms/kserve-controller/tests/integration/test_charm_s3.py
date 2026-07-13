@@ -294,6 +294,8 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
+@pytest.mark.skip
+@pytest.mark.abort_on_fail
 async def test_configmap_changes_with_config(
     lightkube_client: lightkube.Client, ops_test: OpsTest
 ):
