@@ -370,6 +370,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_new_user_namespace_has_s3_manifests(
     ops_test: OpsTest, lightkube_client: lightkube.Client, test_namespace: str
 ):
@@ -397,6 +398,7 @@ async def test_new_user_namespace_has_s3_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
+@pytest.mark.abort_on_fail
 async def test_inference_service_from_s3_object_storage(
     test_namespace: str,
     lightkube_client: lightkube.Client,
@@ -433,6 +435,7 @@ async def test_inference_service_from_s3_object_storage(
 
 
 # Test Proxy configurations
+@pytest.mark.abort_on_fail
 async def test_inference_service_proxy_envs_configuration(
     test_namespace: str, ops_test: OpsTest, lightkube_client: lightkube.Client
 ):
@@ -491,6 +494,7 @@ async def test_inference_service_proxy_envs_configuration(
             assert no_proxy_env == test_no_proxy
 
 
+@pytest.mark.abort_on_fail
 async def test_blocked_on_invalid_config(ops_test: OpsTest):
     """
     Test whether the application is blocked on providing an invalid configuration.
@@ -506,6 +510,7 @@ async def test_blocked_on_invalid_config(ops_test: OpsTest):
 
 
 @pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
+@pytest.mark.abort_on_fail
 async def test_container_security_context(
     ops_test: OpsTest,
     lightkube_client: Client,
