@@ -205,6 +205,7 @@ async def test_relate_to_s3_integrator(ops_test: OpsTest):
     )
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
+
 @pytest.mark.skip
 @pytest.mark.parametrize(
     "inference_file",
