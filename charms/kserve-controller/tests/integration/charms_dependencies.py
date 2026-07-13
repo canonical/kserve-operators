@@ -19,6 +19,7 @@ MINIO = CharmSpec(
     config={"access-key": "minio", "secret-key": "minio-secret-key"},
 )
 RESOURCE_DISPATCHER = CharmSpec(
-    charm="resource-dispatcher", channel="latest/edge/pr-176", trust=True
+    charm="resource-dispatcher", channel="latest/edge", trust=True
 )
+RESOURCE_DISPATCHER_REVISION = 612
 S3_INTEGRATOR = CharmSpec(charm="s3-integrator", channel="2/edge", trust=False)

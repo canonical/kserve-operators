@@ -43,6 +43,7 @@ from tests.integration.charms_dependencies import (
     METACONTROLLER_OPERATOR,
     MINIO,
     RESOURCE_DISPATCHER,
+    RESOURCE_DISPATCHER_REVISION,
     S3_INTEGRATOR,
 )
 from tests.integration.constants import (
@@ -361,6 +362,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     await ops_test.model.deploy(
         RESOURCE_DISPATCHER.charm,
         channel=RESOURCE_DISPATCHER.channel,
+        revision=RESOURCE_DISPATCHER_REVISION,
         trust=RESOURCE_DISPATCHER.trust,
     )
     await ops_test.model.wait_for_idle(

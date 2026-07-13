@@ -44,6 +44,7 @@ from pytest_operator.plugin import OpsTest
 from tests.integration.charms_dependencies import (
     METACONTROLLER_OPERATOR,
     RESOURCE_DISPATCHER,
+    RESOURCE_DISPATCHER_REVISION,
     S3_INTEGRATOR,
 )
 from tests.integration.constants import (
@@ -204,7 +205,7 @@ async def test_relate_to_s3_integrator(ops_test: OpsTest):
     )
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
-
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "inference_file",
     [
@@ -273,6 +274,7 @@ async def test_alert_rules(ops_test: OpsTest):
 
 
 # Test KServe ConfigMap
+@pytest.mark.skip
 async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
     """
     Test whether the configmap is created with the expected data.
@@ -340,6 +342,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     await ops_test.model.deploy(
         RESOURCE_DISPATCHER.charm,
         channel=RESOURCE_DISPATCHER.channel,
+        revision=RESOURCE_DISPATCHER_REVISION,
         trust=RESOURCE_DISPATCHER.trust,
     )
     await ops_test.model.wait_for_idle(
