@@ -44,7 +44,7 @@ from pytest_operator.plugin import OpsTest
 from tests.integration.charms_dependencies import (
     METACONTROLLER_OPERATOR,
     RESOURCE_DISPATCHER,
-    RESOURCE_DISPATCHER_REVISION,
+    RESOURCE_DISPATCHER_OCI_IMAGE,
     S3_INTEGRATOR,
 )
 from tests.integration.constants import (
@@ -341,9 +341,9 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
         timeout=120,
     )
     await ops_test.model.deploy(
-        RESOURCE_DISPATCHER.charm,
+        entity_url=RESOURCE_DISPATCHER.charm,
         channel=RESOURCE_DISPATCHER.channel,
-        revision=RESOURCE_DISPATCHER_REVISION,
+        resources={"oci-image": RESOURCE_DISPATCHER_OCI_IMAGE},
         trust=RESOURCE_DISPATCHER.trust,
     )
     await ops_test.model.wait_for_idle(

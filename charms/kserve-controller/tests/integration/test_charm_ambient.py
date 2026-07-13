@@ -32,7 +32,7 @@ from tests.integration.charms_dependencies import (
     METACONTROLLER_OPERATOR,
     MINIO,
     RESOURCE_DISPATCHER,
-    RESOURCE_DISPATCHER_REVISION,
+    RESOURCE_DISPATCHER_OCI_IMAGE,
 )
 from tests.integration.constants import (
     APP_NAME,
@@ -337,9 +337,9 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
         timeout=120,
     )
     await ops_test.model.deploy(
-        RESOURCE_DISPATCHER.charm,
+        entity_url=RESOURCE_DISPATCHER.charm,
         channel=RESOURCE_DISPATCHER.channel,
-        revision=RESOURCE_DISPATCHER_REVISION,
+        resources={"oci-image": RESOURCE_DISPATCHER_OCI_IMAGE},
         trust=RESOURCE_DISPATCHER.trust,
     )
     await ops_test.model.wait_for_idle(
