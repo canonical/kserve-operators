@@ -201,6 +201,7 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     )
 
 
+@pytest.mark.abort_on_fail
 @pytest.mark.parametrize(
     "inference_file",
     [
@@ -241,12 +242,14 @@ def test_inference_service(
 
 
 # Test o11y
+@pytest.mark.abort_on_fail
 async def test_logging(ops_test: OpsTest):
     """Test logging is defined in relation data bag."""
     app = ops_test.model.applications[APP_NAME]
     await assert_logging(app)
 
 
+@pytest.mark.abort_on_fail
 async def test_metrics_endpoint(ops_test: OpsTest):
     """Test metrics_endpoints are defined in relation data bag and their accessibility.
     This function gets all the metrics_endpoints from the relation data bag, checks if
@@ -257,6 +260,7 @@ async def test_metrics_endpoint(ops_test: OpsTest):
     await assert_metrics_endpoint(app, metrics_port=8080, metrics_path="/metrics")
 
 
+@pytest.mark.abort_on_fail
 async def test_alert_rules(ops_test: OpsTest):
     """Test check charm alert rules and rules defined in relation data bag."""
     app = ops_test.model.applications[APP_NAME]
@@ -266,6 +270,7 @@ async def test_alert_rules(ops_test: OpsTest):
 
 
 # ConfigMap
+@pytest.mark.abort_on_fail
 async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: OpsTest):
     """
     Test whether the configmap is created with the expected data.
@@ -284,6 +289,7 @@ async def test_configmap_created(lightkube_client: lightkube.Client, ops_test: O
     assert inferenceservice_config.data == expected_configmap["data"]
 
 
+@pytest.mark.abort_on_fail
 async def test_configmap_changes_with_config(
     lightkube_client: lightkube.Client, ops_test: OpsTest
 ):
@@ -313,6 +319,7 @@ async def test_configmap_changes_with_config(
 
 
 # MLflow integration, via MinIO and Resource Dispatcher
+@pytest.mark.abort_on_fail
 async def test_relate_to_object_store(ops_test: OpsTest):
     """Test if the charm can relate to minio and stay in Active state"""
     await ops_test.model.deploy(
@@ -339,6 +346,7 @@ async def test_relate_to_object_store(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     """
     Test if the charm can relate to resource dispatcher and stay in Active state
@@ -387,6 +395,7 @@ async def test_deploy_resource_dispatcher(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_new_user_namespace_has_manifests(
     ops_test: OpsTest, lightkube_client: lightkube.Client, test_namespace: str
 ):
@@ -413,6 +422,7 @@ RETRY_FOR_THREE_MINUTES = Retrying(
 )
 
 
+@pytest.mark.abort_on_fail
 async def test_inference_service_proxy_envs_configuration(
     test_namespace: str, ops_test: OpsTest, lightkube_client: lightkube.Client
 ):
@@ -470,6 +480,7 @@ async def test_inference_service_proxy_envs_configuration(
             assert no_proxy_env == test_no_proxy
 
 
+@pytest.mark.abort_on_fail
 async def test_replace_object_storage_relation_with_s3_integrator(ops_test: OpsTest):
     """Swap the `object-storage` relation for `s3-credentials`.
 
@@ -503,6 +514,7 @@ async def test_replace_object_storage_relation_with_s3_integrator(ops_test: OpsT
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_user_namespace_has_new_manifests(
     ops_test: OpsTest, lightkube_client: lightkube.Client, test_namespace: str
 ):
@@ -531,6 +543,7 @@ async def test_user_namespace_has_new_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
+@pytest.mark.abort_on_fail
 async def test_block_when_both_storage_relations_related(ops_test: OpsTest):
     """Relating both storage backends blocks the charm; removing one recovers it.
 
@@ -565,6 +578,7 @@ async def test_block_when_both_storage_relations_related(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_blocked_on_invalid_config(ops_test: OpsTest):
     """
     Test whether the application is blocked on providing an invalid configuration.
@@ -579,6 +593,7 @@ async def test_blocked_on_invalid_config(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
 
 
+@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
 async def test_container_security_context(
     ops_test: OpsTest,
