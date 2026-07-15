@@ -1,3 +1,15 @@
+{% if is_s3 %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ s3_secret_name }}
+  namespace: {{ namespace }}
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "{{ s3_access_key }}"
+  AWS_SECRET_ACCESS_KEY: "{{ s3_secret_access_key }}"
+---
+{% endif %}
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
 metadata:
@@ -28,9 +40,15 @@ spec:
           - /mnt/models
         env:
           - name: AWS_ACCESS_KEY_ID
-            value: "{{ s3_access_key }}"
+            valueFrom:
+              secretKeyRef:
+                name: {{ s3_secret_name }}
+                key: AWS_ACCESS_KEY_ID
           - name: AWS_SECRET_ACCESS_KEY
-            value: "{{ s3_secret_access_key }}"
+            valueFrom:
+              secretKeyRef:
+                name: {{ s3_secret_name }}
+                key: AWS_SECRET_ACCESS_KEY
           - name: AWS_DEFAULT_REGION
             value: "{{ s3_region }}"
           - name: S3_ENDPOINT
@@ -86,9 +104,15 @@ spec:
             - /mnt/models
           env:
             - name: AWS_ACCESS_KEY_ID
-              value: "{{ s3_access_key }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ s3_secret_name }}
+                  key: AWS_ACCESS_KEY_ID
             - name: AWS_SECRET_ACCESS_KEY
-              value: "{{ s3_secret_access_key }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ s3_secret_name }}
+                  key: AWS_SECRET_ACCESS_KEY
             - name: AWS_DEFAULT_REGION
               value: "{{ s3_region }}"
             - name: S3_ENDPOINT

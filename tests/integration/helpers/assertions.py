@@ -94,6 +94,20 @@ def assert_llminferenceservice_absent(name: str, namespace: str) -> None:
             )
 
 
+def assert_secret_absent(name: str, namespace: str) -> None:
+    """Block until the named Secret no longer exists."""
+    client = get_client()
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            try:
+                client.get(Secret, name=name, namespace=namespace)
+            except ApiError as exc:
+                if exc.status.code == 404:
+                    return
+                raise
+            raise AssertionError(f"Secret '{namespace}/{name}' still exists after charm removal")
+
+
 def assert_route_programmed(name: str = LLMISVC_NAME, namespace: str = NAMESPACE_DEFAULT) -> None:
     route = get_client().get(HTTPRoute, name=f"{name}-kserve-route", namespace=namespace)
     parents = (route.status or {}).get("parents", [])

@@ -22,6 +22,7 @@ from charmed_kubeflow_chisme.kubernetes import (
 )
 from lightkube import ApiError
 from lightkube.generic_resource import create_namespaced_resource
+from lightkube.resources.core_v1 import Secret
 from object_storage import S3Requirer
 from ops import main
 from ops.charm import CharmBase
@@ -139,6 +140,15 @@ class LLMIntegratorCharm(CharmBase):
         """The configured model URI, stripped of surrounding whitespace."""
         return self.model.config.get("model-uri", "").strip()
 
+    @property
+    def _s3_secret_name(self) -> str:
+        """Name of the Kubernetes Secret holding the S3 credentials.
+
+        Stably derived from the app name (like the LLMInferenceService itself)
+        so create/update/delete are all idempotent.
+        """
+        return f"{self.app.name}-s3-creds"
+
     def _uri_scheme(self) -> str:
         """Return the model URI scheme: ``hf``, ``s3`` or ``""`` when unknown."""
         if self._model_uri.startswith(HF_URI_PREFIX):
@@ -180,6 +190,7 @@ class LLMIntegratorCharm(CharmBase):
             "storage_initializer_image": self.model.config.get(
                 "storage-initializer-image", ""
             ).strip(),
+            "s3_secret_name": self._s3_secret_name,
             "s3_endpoint": endpoint,
             "s3_use_https": "1" if parsed.scheme == "https" else "0",
             "s3_region": info.get("region") or DEFAULT_S3_REGION,
@@ -354,21 +365,39 @@ class LLMIntegratorCharm(CharmBase):
                 return
             raise
 
+    def _delete_resource(self, client, resource_type, name) -> None:
+        """Delete a namespaced resource by name, tolerating it already being gone.
+
+        A missing object (404) or a missing CRD ("no matches for kind") is
+        treated as success so cleanup is idempotent and robust to the
+        kserve-llmisvc charm having been removed first.
+        """
+        kind = getattr(resource_type, "__name__", str(resource_type))
+        try:
+            client.delete(resource_type, name=name, namespace=self.model.name)
+        except ApiError as e:
+            if e.status.code == 404 or "no matches for kind" in e.status.message:
+                log.info("%s %s already gone; nothing to delete.", kind, name)
+                return
+            log.warning("Failed to delete %s %s with error: %s", kind, name, e)
+            raise
+
     def _on_remove(self, _) -> None:
-        """Delete the LLMInferenceService and wait for it to be fully removed."""
+        """Delete everything the charm created and wait for full teardown.
+
+        The charm owns the ``LLMInferenceService`` CR and, for s3:// models, the
+        credentials ``Secret``. Both are requested for deletion up front (so the
+        Secret is removed even if the CR teardown is slow), then we wait for the
+        CR to actually disappear (KServe finalizers tear the workload down
+        asynchronously). The Secret has no finalizers and is removed immediately.
+        """
         self.unit.status = MaintenanceStatus("Removing k8s resources")
         client = self.resource_handler.lightkube_client
-        try:
-            client.delete(LLMInferenceService, name=self.app.name, namespace=self.model.name)
-        except ApiError as e:
-            # Tolerate the CR (or its CRD) already being gone, e.g. when
-            # kserve-llmisvc was removed first and cascaded the CRD deletion.
-            if e.status.code == 404 or "no matches for kind" in e.status.message:
-                log.info("LLMInferenceService (or its CRD) already gone; nothing to clean up.")
-                self.unit.status = MaintenanceStatus("K8s resources removed")
-                return
-            log.warning("Failed to delete LLMInferenceService with error: %s", e)
-            raise
+
+        self._delete_resource(client, LLMInferenceService, self.app.name)
+        # Always attempt the Secret delete (tolerating 404) so nothing is left
+        # behind even if the model-uri was switched away from s3:// beforehand.
+        self._delete_resource(client, Secret, self._s3_secret_name)
 
         try:
             self._ensure_resource_is_deleted(

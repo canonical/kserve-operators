@@ -118,6 +118,7 @@ def test_s3_context_maps_credentials(
 
     assert context["is_s3"] is True
     assert context["model_name"] == "pythia-70m"
+    assert context["s3_secret_name"] == "llm-integrator-s3-creds"
     assert context["s3_access_key"] == "AKIAEXAMPLE"
     assert context["s3_secret_access_key"] == "secretexample"
     assert context["s3_endpoint"] == "s3.eu-central-1.amazonaws.com"
@@ -236,6 +237,7 @@ def _render_s3_template(**overrides):
         "is_s3": True,
         "model_uri": "s3://my-bucket/models/pythia-70m",
         "storage_initializer_image": "si:img",
+        "s3_secret_name": "llm-integrator-s3-creds",
         "s3_access_key": "ak",
         "s3_secret_access_key": "sk",
         "s3_region": "eu-central-1",
@@ -258,17 +260,38 @@ def test_template_includes_storage_initializer_for_s3():
     assert rendered.count("name: storage-initializer") == 2
 
 
+def test_template_s3_keeps_credentials_in_secret_only():
+    """s3:// creds live in a Secret referenced via secretKeyRef, never inlined."""
+    rendered = _render_s3_template(
+        s3_access_key="AKIA_RAW_KEY", s3_secret_access_key="RAW_SECRET_VALUE"
+    )
+    # A dedicated Secret carries the raw credentials as stringData.
+    assert "kind: Secret" in rendered
+    assert "stringData:" in rendered
+    assert "name: llm-integrator-s3-creds" in rendered
+    # Workers reference the Secret rather than inlining values.
+    assert "secretKeyRef" in rendered
+    # The raw secret appears exactly once (in the Secret), not duplicated into
+    # the decode/prefill container env.
+    assert rendered.count("RAW_SECRET_VALUE") == 1
+    assert rendered.count("AKIA_RAW_KEY") == 1
+
+
 def test_template_omits_storage_initializer_for_hf():
     """A hf:// render relies on the built-in storage initializer (no manual one)."""
     rendered = _render_template(is_s3=False)
     assert "storageInitializer:" not in rendered
     assert "storage-initializer" not in rendered
     assert "kserve-pvc-source" not in rendered
+    assert "kind: Secret" not in rendered
 
 
 def test_remove_deletes_resource(ctx, ready_state, mock_krh_lightkube_client):
-    """The remove event deletes the LLMInferenceService and reports removal."""
+    """The remove event deletes the LLMInferenceService and its Secret."""
     out = ctx.run(ctx.on.remove(), ready_state)
 
-    mock_krh_lightkube_client.delete.assert_called_once()
+    deleted_kinds = {
+        call.args[0].__name__ for call in mock_krh_lightkube_client.delete.call_args_list
+    }
+    assert deleted_kinds == {"LLMInferenceService", "Secret"}
     assert_status(out, MaintenanceStatus, "K8s resources removed")

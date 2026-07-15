@@ -17,6 +17,7 @@ from .helpers.assertions import (
     assert_no_charm_resources_left,
     assert_prediction,
     assert_route_programmed,
+    assert_secret_absent,
 )
 from .helpers.charm_paths import resolve_charm_path, resolve_charm_resources
 from .helpers.charms_dependencies import (
@@ -52,7 +53,13 @@ LLM_INTEGRATOR_MODEL_NAME = "EleutherAI/pythia-70m"
 # 2/edge track (matching kserve-controller) takes credentials via a Juju secret.
 S3_INTEGRATOR_APP = "s3-integrator"
 S3_INTEGRATOR_CHANNEL = "2/edge"
-S3_SECRET_LABEL = "llm-integrator-s3-creds"
+# Juju user-secret label holding the S3 access/secret keys handed to
+# s3-integrator. Distinct from the K8s Secret the charm renders for the
+# workload (that one is named ``{app}-s3-creds`` and asserted on cleanup).
+S3_CREDS_JUJU_SECRET_LABEL = "s3-creds"
+# Name of the K8s Secret the llm-integrator charm creates for s3:// models
+# (``{app.name}-s3-creds``); asserted absent after the charm is removed.
+LLM_INTEGRATOR_S3_SECRET = f"{LLM_INTEGRATOR_APP}-s3-creds"
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 # Images injected into the example manifests, sourced from the charms'
 # default-custom-images.json so tests use the images the charms ship.
@@ -280,11 +287,11 @@ def test_deploy_llm_via_charm_s3(juju: jubilant.Juju, request: pytest.FixtureReq
     )
     secret_uri = juju.cli(
         "add-secret",
-        S3_SECRET_LABEL,
+        S3_CREDS_JUJU_SECRET_LABEL,
         f"access-key={AWS_ACCESS_KEY_ID}",
         f"secret-key={AWS_SECRET_ACCESS_KEY}",
     ).strip()
-    juju.cli("grant-secret", S3_SECRET_LABEL, S3_INTEGRATOR_APP)
+    juju.cli("grant-secret", S3_CREDS_JUJU_SECRET_LABEL, S3_INTEGRATOR_APP)
     juju.config(S3_INTEGRATOR_APP, {"credentials": secret_uri})
     juju.wait(lambda status: status.apps[S3_INTEGRATOR_APP].is_active, timeout=600)
 
@@ -332,6 +339,7 @@ def test_deploy_llm_via_charm_s3(juju: jubilant.Juju, request: pytest.FixtureReq
     juju.remove_application(LLM_INTEGRATOR_APP)
     juju.wait(lambda status: LLM_INTEGRATOR_APP not in status.apps, successes=1)
     assert_llminferenceservice_absent(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+    assert_secret_absent(name=LLM_INTEGRATOR_S3_SECRET, namespace=juju.model)
     juju.remove_application(S3_INTEGRATOR_APP)
     juju.wait(lambda status: S3_INTEGRATOR_APP not in status.apps, successes=1)
 
