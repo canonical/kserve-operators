@@ -17,6 +17,7 @@ output "requires" {
     logging          = "logging",
     object_storage   = "object-storage",
     require_cmr_mesh = "require-cmr-mesh",
+    s3_credentials   = "s3-credentials",
     secrets          = "secrets",
     service_accounts = "service-accounts",
     service_mesh     = "service-mesh"
