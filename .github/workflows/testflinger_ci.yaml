@@ -44,6 +44,8 @@ jobs:
         with:
           poll: true
           job-path: job.yaml
+          client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          client-secret: ${{ secrets.TESTFLINGER_SECRET_KEY }}
 
       - name: Display results
         id: get-results
