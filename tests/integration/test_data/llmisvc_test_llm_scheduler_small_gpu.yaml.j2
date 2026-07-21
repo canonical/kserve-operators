@@ -1,0 +1,54 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: test-llm-scheduler-small-gpu
+  namespace: default
+spec:
+  model:
+    uri: hf://Qwen/Qwen3-4B
+    name: Qwen/Qwen3-4B
+  storageInitializer:
+    enabled: false
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  template:
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: {{ storage_initializer_image }}
+        args:
+          - hf://Qwen/Qwen3-4B
+          - /mnt/models
+        env:
+          - name: HF_HUB_ENABLE_HF_TRANSFER
+            value: "0"
+          - name: HF_HUB_DOWNLOAD_TIMEOUT
+            value: "60"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+    containers:
+      - name: main
+        image: {{ vllm_image }}
+        securityContext:
+          runAsNonRoot: false
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "3Gi"
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "2"
+            memory: "8Gi"
+            nvidia.com/gpu: "1"

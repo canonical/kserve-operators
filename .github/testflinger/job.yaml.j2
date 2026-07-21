@@ -97,4 +97,4 @@ test_data:
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/tests/integration/gateway-metadata-provider-tester && ls *.charm'
     
     # run the bundle integration tests in the tox environment
-    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && env $(cat ~/.ssh/environment | xargs) ./venv/bin/tox -e bundle-integration -- --model kubeflow --keep-models --charms-path charms/ && env'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && env $(cat ~/.ssh/environment | xargs) ./venv/bin/tox -e bundle-integration-gpu -- --model kubeflow --keep-models --charms-path charms/'

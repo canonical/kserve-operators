@@ -11,6 +11,8 @@ NAMESPACE_DEFAULT = "default"
 LLMISVC_APP_NAME = "kserve-llmisvc"
 LLMISVC_NAME = "test-llm-scheduler-small"
 LLMISVC_MODEL_NAME = "EleutherAI/pythia-70m"
+LLMISVC_GPU_NAME = "test-llm-scheduler-small-gpu"
+LLMISVC_GPU_MODEL_NAME = "Qwen/Qwen3-4B"
 
 # Metrics ports exposed by the llmisvc service and the local ports we forward
 # them to when probing the Prometheus endpoints directly.
