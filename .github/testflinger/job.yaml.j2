@@ -51,10 +51,6 @@ test_data:
     scp attachments/test/concierge.yaml ubuntu@$DEVICE_IP:/home/ubuntu/
     ssh -t ubuntu@$DEVICE_IP 'ls'
     ssh -t ubuntu@$DEVICE_IP 'ls -alR'
-    ssh -t ubuntu@$DEVICE_IP 'ls /home/ubuntu/'
-    ssh -t ubuntu@$DEVICE_IP 'ls /home/ubuntu/attachments/test/'
-    ssh -t ubuntu@$DEVICE_IP 'cp attachments/test/concierge.yaml concierge.yaml'
-    ssh -t ubuntu@$DEVICE_IP 'ls /'
     ssh -t ubuntu@$DEVICE_IP 'sudo concierge prepare --trace'
     echo "--------------------------------------------------------------------------------------------------------------------"
     
@@ -76,6 +72,8 @@ test_data:
     done
     echo "--------------------------------------------------------------------------------------------------------------------"
     ssh -t ubuntu@$DEVICE_IP lsb_release -a
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Install the kserve components"
     # add the kubeflow model
     ssh -t ubuntu@$DEVICE_IP 'juju add-model kubeflow'
     # clone the kserve-operators repo and checkout the correct branch
@@ -87,6 +85,9 @@ test_data:
     ssh -t ubuntu@$DEVICE_IP 'python3 -m venv kserve-operators/venv'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && ./venv/bin/pip install tox'
     # pack the charms
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Pack the charms"
+    echo "--------------------------------------------------------------------------------------------------------------------"
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-controller && charmcraft pack'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-controller && ls *.charm'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-llmisvc && charmcraft pack'
@@ -95,6 +96,9 @@ test_data:
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/lws-controller && ls *.charm'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/llm-integrator && charmcraft pack'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/llm-integrator && ls *.charm'
-    
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Run the bundle integration tests"
+    echo "--------------------------------------------------------------------------------------------------------------------"
     # run the bundle integration tests in the tox environment
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && env $(cat ~/.ssh/environment | xargs) ./venv/bin/tox -e bundle-integration-gpu -- --model kubeflow --keep-models --charms-path charms/'
+    echo "--------------------------------------------------------------------------------------------------------------------"

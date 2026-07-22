@@ -26,6 +26,7 @@ from .helpers.charms_dependencies import (
     ENVOY_INGRESS,
     SELF_SIGNED_CERTIFICATES,
 )
+from .helpers.constants import LLMISVC_GPU_MODEL_NAME
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
 logger = logging.getLogger(__name__)
@@ -226,6 +227,35 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
 
     logger.info("Example '%s': testing prediction endpoint", example_name)
     assert_prediction(gateway_name=GATEWAY_NAME, gateway_namespace=juju.model, name=example_name)
+
+    logger.info("Example '%s': deleting after validation", example_name)
+    delete_llmisvc_example(name=example_name)
+
+
+@pytest.mark.gpu
+def test_run_gpu_example(juju: jubilant.Juju):
+    example_name, example_path = GPU_EXAMPLE
+    logger.info("Example '%s': applying LLMInferenceService", example_name)
+    apply_llmisvc_example(
+        manifest_path=str(example_path),
+        context=GPU_IMAGE_CONTEXT,
+        name=example_name,
+    )
+
+    logger.info("Example '%s': verifying generated resources", example_name)
+    assert_route_programmed(name=example_name)
+    assert_inferencepool_and_workload_resources(name=example_name)
+
+    logger.info("Example '%s': verifying observability metrics endpoints", example_name)
+    assert_llmisvc_metrics_endpoints(namespace=juju.model)
+
+    logger.info("Example '%s': testing prediction endpoint", example_name)
+    assert_prediction(
+        gateway_name=GATEWAY_NAME,
+        gateway_namespace=juju.model,
+        name=example_name,
+        model=LLMISVC_GPU_MODEL_NAME,
+    )
 
     logger.info("Example '%s': deleting after validation", example_name)
     delete_llmisvc_example(name=example_name)
