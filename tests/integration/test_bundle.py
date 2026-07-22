@@ -73,6 +73,7 @@ KSERVE_LLMISVC_IMAGES = json.loads(
 )
 STORAGE_INITIALIZER_IMAGE = KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"]
 VLLM_IMAGE = KSERVE_LLMISVC_IMAGES["vllm"]
+VLLM_GPU_IMAGE = KSERVE_LLMISVC_IMAGES["vllm_gpu"]
 # The test model lives in a Canonical S3 bucket (avoids the flaky HF CDN). The
 # AWS credentials are supplied via the environment (local export or CI secrets).
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
@@ -105,7 +106,7 @@ LLMISVC_IMAGE_CONTEXT = {
 # pulled directly via hf:// rather than from the S3 test bucket.
 GPU_IMAGE_CONTEXT = {
     "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
-    "vllm_image": VLLM_IMAGE,
+    "vllm_image": VLLM_GPU_IMAGE,
 }
 # (name, manifest template) pairs. Each example is applied, verified, predicted
 # against, then deleted before the next so cluster usage stays bounded.
