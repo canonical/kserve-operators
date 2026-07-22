@@ -12,10 +12,12 @@ import pytest
 
 from .helpers.assertions import (
     assert_inferencepool_and_workload_resources,
+    assert_llminferenceservice_absent,
     assert_llmisvc_metrics_endpoints,
     assert_no_charm_resources_left,
     assert_prediction,
     assert_route_programmed,
+    assert_secret_absent,
 )
 from .helpers.charm_paths import resolve_charm_path, resolve_charm_resources
 from .helpers.charms_dependencies import (
@@ -41,6 +43,23 @@ ENVOY_AI_CONTROLLER_APP = ENVOY_AI_CONTROLLER.charm
 ENVOY_INGRESS_APP = ENVOY_INGRESS.charm
 CERTIFICATES_APP = SELF_SIGNED_CERTIFICATES.charm
 GATEWAY_NAME = ENVOY_INGRESS_APP
+# The llm-integrator charm renders a single LLMInferenceService from config. It
+# supports hf:// (public model, no token) and s3:// (credentials supplied via an
+# s3-integrator relation) model URIs.
+LLM_INTEGRATOR_APP = "llm-integrator"
+LLM_INTEGRATOR_MODEL_URI = "hf://EleutherAI/pythia-70m"
+LLM_INTEGRATOR_MODEL_NAME = "EleutherAI/pythia-70m"
+# s3-integrator supplies the bucket credentials for an s3:// model URI. The
+# 2/edge track (matching kserve-controller) takes credentials via a Juju secret.
+S3_INTEGRATOR_APP = "s3-integrator"
+S3_INTEGRATOR_CHANNEL = "2/edge"
+# Juju user-secret label holding the S3 access/secret keys handed to
+# s3-integrator. Distinct from the K8s Secret the charm renders for the
+# workload (that one is named ``{app}-s3-creds`` and asserted on cleanup).
+S3_CREDS_JUJU_SECRET_LABEL = "s3-creds"
+# Name of the K8s Secret the llm-integrator charm creates for s3:// models
+# (``{app.name}-s3-creds``); asserted absent after the charm is removed.
+LLM_INTEGRATOR_S3_SECRET = f"{LLM_INTEGRATOR_APP}-s3-creds"
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 # Images injected into the example manifests, sourced from the charms'
 # default-custom-images.json so tests use the images the charms ship.
@@ -195,6 +214,134 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
 
     logger.info("Example '%s': deleting after validation", example_name)
     delete_llmisvc_example(name=example_name)
+
+
+@pytest.mark.abort_on_fail
+def test_deploy_llm_via_charm(juju: jubilant.Juju, request: pytest.FixtureRequest):
+    charms_path = request.config.getoption("--charms-path")
+    if not charms_path:
+        raise ValueError("--charms-path is required for bundle integration tests")
+
+    llm_integrator_charm = resolve_charm_path(
+        charms_path=charms_path, charm_name=LLM_INTEGRATOR_APP
+    )
+
+    logger.info("Deploying llm-integrator charm")
+    juju.deploy(
+        charm=str(llm_integrator_charm),
+        config={
+            "model-uri": LLM_INTEGRATOR_MODEL_URI,
+            "runtime-image": VLLM_IMAGE,
+        },
+        trust=True,
+    )
+
+    logger.info("Waiting for llm-integrator to block on missing kserve-llmisvc relation")
+    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP].is_blocked, successes=1)
+
+    logger.info("Relating llm-integrator to kserve-llmisvc")
+    juju.integrate(f"{LLM_INTEGRATOR_APP}:kserve-llmisvc", f"{LLMISVC_APP}:kserve-llmisvc")
+
+    logger.info("Waiting for llm-integrator to become active (LLMInferenceService Ready)")
+    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP].is_active, successes=1)
+
+    logger.info("Verifying charm-created LLMInferenceService resources")
+    assert_route_programmed(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+    assert_inferencepool_and_workload_resources(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+
+    logger.info("Testing prediction against charm-created LLMInferenceService")
+    assert_prediction(
+        gateway_name=GATEWAY_NAME,
+        gateway_namespace=juju.model,
+        name=LLM_INTEGRATOR_APP,
+        model=LLM_INTEGRATOR_MODEL_NAME,
+        namespace=juju.model,
+    )
+
+    logger.info("Removing llm-integrator charm and verifying its LLMInferenceService is cleaned up")
+    juju.remove_application(LLM_INTEGRATOR_APP)
+    juju.wait(lambda status: LLM_INTEGRATOR_APP not in status.apps, successes=1)
+    assert_llminferenceservice_absent(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+
+
+@pytest.mark.abort_on_fail
+def test_deploy_llm_via_charm_s3(juju: jubilant.Juju, request: pytest.FixtureRequest):
+    charms_path = request.config.getoption("--charms-path")
+    if not charms_path:
+        raise ValueError("--charms-path is required for bundle integration tests")
+
+    llm_integrator_charm = resolve_charm_path(
+        charms_path=charms_path, charm_name=LLM_INTEGRATOR_APP
+    )
+    bucket = MODEL_S3_URI.removeprefix("s3://").split("/", 1)[0]
+
+    logger.info("Deploying s3-integrator and providing S3 credentials via a Juju secret")
+    juju.deploy(
+        S3_INTEGRATOR_APP,
+        channel=S3_INTEGRATOR_CHANNEL,
+        config={
+            "endpoint": f"https://{LLMISVC_IMAGE_CONTEXT['s3_endpoint']}",
+            "region": AWS_REGION,
+            "bucket": bucket,
+        },
+    )
+    secret_uri = juju.cli(
+        "add-secret",
+        S3_CREDS_JUJU_SECRET_LABEL,
+        f"access-key={AWS_ACCESS_KEY_ID}",
+        f"secret-key={AWS_SECRET_ACCESS_KEY}",
+    ).strip()
+    juju.cli("grant-secret", S3_CREDS_JUJU_SECRET_LABEL, S3_INTEGRATOR_APP)
+    juju.config(S3_INTEGRATOR_APP, {"credentials": secret_uri})
+    juju.wait(lambda status: status.apps[S3_INTEGRATOR_APP].is_active, timeout=600)
+
+    logger.info("Deploying llm-integrator with an s3:// model URI")
+    juju.deploy(
+        charm=str(llm_integrator_charm),
+        config={
+            "model-uri": MODEL_S3_URI,
+            "model-name": LLM_INTEGRATOR_MODEL_NAME,
+            "runtime-image": VLLM_IMAGE,
+            "storage-initializer-image": STORAGE_INITIALIZER_IMAGE,
+        },
+        trust=True,
+    )
+
+    logger.info("Waiting for llm-integrator to block on the missing kserve-llmisvc relation")
+    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP].is_blocked, successes=1)
+
+    logger.info("Relating llm-integrator to kserve-llmisvc")
+    juju.integrate(f"{LLM_INTEGRATOR_APP}:kserve-llmisvc", f"{LLMISVC_APP}:kserve-llmisvc")
+
+    logger.info("llm-integrator stays blocked until the s3-credentials relation is added")
+    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP].is_blocked, successes=1)
+
+    logger.info("Relating llm-integrator to s3-integrator")
+    juju.integrate(f"{LLM_INTEGRATOR_APP}:s3-credentials", f"{S3_INTEGRATOR_APP}:s3-credentials")
+
+    logger.info("Waiting for llm-integrator to become active (LLMInferenceService Ready)")
+    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP].is_active, successes=1)
+
+    logger.info("Verifying charm-created LLMInferenceService resources")
+    assert_route_programmed(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+    assert_inferencepool_and_workload_resources(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+
+    logger.info("Testing prediction against the s3-backed LLMInferenceService")
+    assert_prediction(
+        gateway_name=GATEWAY_NAME,
+        gateway_namespace=juju.model,
+        name=LLM_INTEGRATOR_APP,
+        model=LLM_INTEGRATOR_MODEL_NAME,
+        namespace=juju.model,
+    )
+
+    logger.info("Removing llm-integrator and s3-integrator; verifying cleanup")
+    juju.remove_application(LLM_INTEGRATOR_APP)
+    juju.wait(lambda status: LLM_INTEGRATOR_APP not in status.apps, successes=1)
+    assert_llminferenceservice_absent(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+    assert_secret_absent(name=LLM_INTEGRATOR_S3_SECRET, namespace=juju.model)
+    juju.remove_application(S3_INTEGRATOR_APP)
+    juju.wait(lambda status: S3_INTEGRATOR_APP not in status.apps, successes=1)
 
 
 def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):

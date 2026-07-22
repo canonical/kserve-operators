@@ -1,0 +1,50 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: charm
+platforms:
+  ubuntu@24.04:amd64:
+
+parts:
+  poetry-deps:
+    plugin: nil
+    build-packages:
+      - curl
+    override-build: |
+      PIP_BREAK_SYSTEM_PACKAGES=true python3 -m pip install --user --upgrade pip==24.3.1
+      curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/uv/releases/download/0.5.15/uv-installer.sh | sh
+      if ! "$HOME/.local/bin/uv" python find '>=3.9'
+      then
+        "$HOME/.local/bin/uv" python install 3.10.12
+      fi
+      "$HOME/.local/bin/uv" tool install --no-python-downloads --python '>=3.9' poetry==2.0.0 --with poetry-plugin-export==1.8.0
+      ln -sf "$HOME/.local/bin/poetry" /usr/local/bin/poetry
+
+  charm-poetry:
+    plugin: poetry
+    source: .
+    after:
+      - poetry-deps
+    poetry-export-extra-args: ['--only', 'charm']
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - pkg-config
+    override-build: |
+      if [[ "$CRAFT_PLATFORM" == ubuntu@20.04:* || "$CRAFT_PLATFORM" == ubuntu@22.04:* ]]
+      then
+        snap install rustup --classic
+      else
+        apt-get install rustup -y
+      fi
+      rustup --version
+      rustup set profile minimal
+      rustup default 1.92.0
+      craftctl default
+      cp requirements.txt "$CRAFT_PART_INSTALL/requirements.txt"
+
+  files:
+    plugin: dump
+    source: .
+    stage:
+      - LICENSE

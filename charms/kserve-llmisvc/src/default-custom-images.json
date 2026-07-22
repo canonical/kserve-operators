@@ -1,6 +1,6 @@
 {
-  "llm_scheduler": "ghcr.io/llm-d/llm-d-inference-scheduler:v0.4.0",
+  "llm_scheduler": "docker.io/charmedkubeflow/llm-d-inference-scheduler:0.4.0-9b1ed88-20260717071101",
   "llm_workload": "ghcr.io/llm-d/llm-d-cuda:v0.4.0",
-  "llm_routing_sidecar": "ghcr.io/llm-d/llm-d-routing-sidecar:v0.4.0",
-  "vllm": "quay.io/pierdipi/vllm-cpu:latest"
+  "llm_routing_sidecar": "docker.io/charmedkubeflow/llm-d-routing-sidecar:0.4.0-26788a2-20260717115339",
+  "vllm": "docker.io/charmedkubeflow/vllm-cpu:0.19.0-e19f9a3-20260619133617"
 }

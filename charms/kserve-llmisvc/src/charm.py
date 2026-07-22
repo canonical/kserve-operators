@@ -52,6 +52,9 @@ SCHEDULER_CONFIG_FILES = ["src/templates/llmisvc_configs_manifests.yaml.j2"]
 CONTAINER_CERTS_DEST = "/tmp/k8s-webhook-server/serving-certs/"
 CONTROLLER_SYNC_RELATION = "kserve-controller"
 LWS_SYNC_RELATION = "lws-controller"
+# Readiness relation consumed by the llm-integrator charm. This charm is the
+# PROVIDER: it publishes ready=true only once it reaches ActiveStatus.
+LLM_INTEGRATOR_SYNC_RELATION = "kserve-llmisvc"
 METRICS_PORT = 8080
 METRICS_PROXY_CONTAINER = "metrics-proxy"
 METRICS_PROXY_PORT = 15090
@@ -141,6 +144,7 @@ class KServeLLMISVCCharm(CharmBase):
             self.on[CONTROLLER_SYNC_RELATION].relation_broken,
             self.on[LWS_SYNC_RELATION].relation_changed,
             self.on[LWS_SYNC_RELATION].relation_broken,
+            self.on[LLM_INTEGRATOR_SYNC_RELATION].relation_changed,
         ]:
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
@@ -393,6 +397,7 @@ class KServeLLMISVCCharm(CharmBase):
             try:
                 self.scheduler_config_resource_handler.apply()
                 self.unit.status = ActiveStatus()
+                self._publish_llmisvc_ready_data(ready=True)
                 log.info("llmisvc controller was ready. Applied all LLMInferenceServiceConfigs.")
             except ApiError as e:
                 if e.status.code == 500 and "connect: " in e.status.message:
@@ -404,6 +409,7 @@ class KServeLLMISVCCharm(CharmBase):
                     )
                     log.info(msg)
                     self.model.unit.status = MaintenanceStatus(msg)
+                    self._publish_llmisvc_ready_data(ready=False)
                 elif "no endpoints available" in e.status.message:
                     log.warning(
                         "Failed to create LLMInferenceServiceConfigs: %s", e.status.message
@@ -411,6 +417,7 @@ class KServeLLMISVCCharm(CharmBase):
                     msg = "Webhook Server Service endpoints not ready. Will apply LLMInferenceServiceConfigs later."  # noqa: E501
                     log.info(msg)
                     self.model.unit.status = MaintenanceStatus(msg)
+                    self._publish_llmisvc_ready_data(ready=False)
                 else:
                     log.warning("Unexpected ApiError happened: %s", e)
                     raise GenericCharmRuntimeError(
@@ -418,11 +425,31 @@ class KServeLLMISVCCharm(CharmBase):
                     ) from e
         except ErrorWithStatus as err:
             self.model.unit.status = err.status
+            self._publish_llmisvc_ready_data(ready=False)
             log.error("Failed to handle %s with error: %s", event, err)
             return
         except ApiError:
+            self._publish_llmisvc_ready_data(ready=False)
             log.exception("Kubernetes API error during reconcile")
             raise
+
+    def _publish_llmisvc_ready_data(self, ready: bool):
+        """Publish a readiness contract for llm-integrator synchronization.
+
+        Only the leader publishes. ready=true is published solely once the charm
+        has reached ActiveStatus (webhook, CRDs and LLMInferenceServiceConfigs
+        all applied); every other path publishes ready=false so consumers never
+        see readiness leak before the controller is truly active.
+        """
+        if not self.unit.is_leader():
+            return
+        for relation in self.model.relations.get(LLM_INTEGRATOR_SYNC_RELATION, []):
+            relation.data[self.app].update(
+                {
+                    "ready": str(ready).lower(),
+                    "namespace": self.model.name,
+                }
+            )
 
     @tenacity.retry(
         stop=tenacity.stop_after_delay(LLMISVC_DELETION_TIMEOUT),

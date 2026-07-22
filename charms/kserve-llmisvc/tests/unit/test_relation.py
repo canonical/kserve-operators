@@ -91,3 +91,40 @@ def test_lws_controller_relation_broken_returns_to_blocked(ctx, ready_state):
     lws_rel = next(r for r in ready_state.relations if r.endpoint == "lws-controller")
     out = ctx.run(ctx.on.relation_broken(lws_rel), ready_state)
     assert_status(out, BlockedStatus, "Please relate to lws-controller")
+
+
+def _llm_integrator_relation():
+    return Relation(
+        endpoint="kserve-llmisvc",
+        interface="kserve-llmisvc-sync",
+        remote_app_name="llm-integrator",
+    )
+
+
+def test_publishes_ready_true_when_active(
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
+):
+    """When the charm becomes Active it publishes ready=true to llm-integrator."""
+    llm_rel = _llm_integrator_relation()
+    state_in = State(
+        leader=True,
+        containers=both_containers,
+        relations=[controller_relation_ready, lws_relation_ready, llm_rel],
+    )
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    assert isinstance(out.unit_status, ActiveStatus)
+    assert out.get_relation(llm_rel.id).local_app_data["ready"] == "true"
+
+
+def test_publishes_ready_false_when_not_active(ctx, both_containers, lws_relation_ready):
+    """When the charm is not Active it publishes ready=false to llm-integrator."""
+    llm_rel = _llm_integrator_relation()
+    # kserve-controller relation missing -> Blocked -> ready must be false.
+    state_in = State(
+        leader=True,
+        containers=both_containers,
+        relations=[lws_relation_ready, llm_rel],
+    )
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    assert isinstance(out.unit_status, BlockedStatus)
+    assert out.get_relation(llm_rel.id).local_app_data["ready"] == "false"

@@ -28,6 +28,8 @@ resources:
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
+  kserve-llmisvc:
+    interface: kserve-llmisvc-sync
 requires:
   kserve-controller:
     interface: kserve-controller-sync

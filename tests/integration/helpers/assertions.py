@@ -7,6 +7,7 @@
 import logging
 
 import requests
+from lightkube import ApiError
 from lightkube.operators import in_
 from lightkube.resources.admissionregistration_v1 import (
     MutatingWebhookConfiguration,
@@ -41,6 +42,7 @@ from .constants import (
 from .k8s import (
     Gateway,
     HTTPRoute,
+    LLMInferenceService,
     generic_resource_for_crd,
     get_client,
 )
@@ -76,8 +78,38 @@ _COMPLETION_PAYLOAD = {
 }
 
 
-def assert_route_programmed(name: str = LLMISVC_NAME) -> None:
-    route = get_client().get(HTTPRoute, name=f"{name}-kserve-route", namespace=NAMESPACE_DEFAULT)
+def assert_llminferenceservice_absent(name: str, namespace: str) -> None:
+    """Block until the named LLMInferenceService no longer exists."""
+    client = get_client()
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            try:
+                client.get(LLMInferenceService, name=name, namespace=namespace)
+            except ApiError as exc:
+                if exc.status.code == 404:
+                    return
+                raise
+            raise AssertionError(
+                f"LLMInferenceService '{namespace}/{name}' still exists after charm removal"
+            )
+
+
+def assert_secret_absent(name: str, namespace: str) -> None:
+    """Block until the named Secret no longer exists."""
+    client = get_client()
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            try:
+                client.get(Secret, name=name, namespace=namespace)
+            except ApiError as exc:
+                if exc.status.code == 404:
+                    return
+                raise
+            raise AssertionError(f"Secret '{namespace}/{name}' still exists after charm removal")
+
+
+def assert_route_programmed(name: str = LLMISVC_NAME, namespace: str = NAMESPACE_DEFAULT) -> None:
+    route = get_client().get(HTTPRoute, name=f"{name}-kserve-route", namespace=namespace)
     parents = (route.status or {}).get("parents", [])
     condition_types = {
         condition.get("type")
@@ -89,19 +121,21 @@ def assert_route_programmed(name: str = LLMISVC_NAME) -> None:
     assert "ResolvedRefs" in condition_types or "Programmed" in condition_types
 
 
-def assert_inferencepool_and_workload_resources(name: str = LLMISVC_NAME) -> None:
+def assert_inferencepool_and_workload_resources(
+    name: str = LLMISVC_NAME, namespace: str = NAMESPACE_DEFAULT
+) -> None:
     client = get_client()
     inferencepool_resource = generic_resource_for_crd(
         "inferencepools.inference.networking.x-k8s.io"
     )
 
-    pools = client.list(inferencepool_resource, namespace=NAMESPACE_DEFAULT)
+    pools = client.list(inferencepool_resource, namespace=namespace)
     assert any(name in pool.metadata.name for pool in pools)
 
-    services = client.list(Service, namespace=NAMESPACE_DEFAULT)
+    services = client.list(Service, namespace=namespace)
     assert any(name in service.metadata.name for service in services)
 
-    pods = client.list(Pod, namespace=NAMESPACE_DEFAULT)
+    pods = client.list(Pod, namespace=namespace)
     assert any(name in pod.metadata.name for pod in pods)
 
 
@@ -239,8 +273,9 @@ def assert_prediction(
     gateway_namespace: str,
     name: str = LLMISVC_NAME,
     model: str = LLMISVC_MODEL_NAME,
+    namespace: str = NAMESPACE_DEFAULT,
 ) -> None:
-    completions_path = f"/default/{name}/v1/completions"
+    completions_path = f"/{namespace}/{name}/v1/completions"
 
     gw_ip = _gateway_ip(gateway_name, gateway_namespace)
     if gw_ip:
