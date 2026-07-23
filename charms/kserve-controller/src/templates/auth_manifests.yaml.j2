@@ -1,4 +1,4 @@
-# Source manifests/contrib/kserve/kserve_kubeflow.yaml and manifests/contrib/kserve/kserve/aggregated-roles.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -45,6 +45,7 @@ rules:
   verbs:
   - create
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -279,6 +280,7 @@ rules:
   - list
   - watch
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -305,6 +307,7 @@ aggregationRule:
   clusterRoleSelectors:
   - matchLabels:
       rbac.authorization.kubeflow.org/aggregate-to-kubeflow-kserve-admin: "true"
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -314,6 +317,7 @@ metadata:
     rbac.authorization.kubeflow.org/aggregate-to-kubeflow-admin: "true"
   name: kubeflow-kserve-admin
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -359,6 +363,7 @@ rules:
   - patch
   - update
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -392,6 +397,7 @@ rules:
   - get
   - list
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -410,6 +416,7 @@ subjects:
   name: {{ app_name }}
   namespace: {{ namespace }}
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -427,6 +434,7 @@ subjects:
   name: {{ app_name }}
   namespace: {{ namespace }}
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

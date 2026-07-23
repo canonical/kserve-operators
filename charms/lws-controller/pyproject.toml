@@ -1,0 +1,100 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+
+[tool.black]
+line-length = 99
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+
+[tool.pyright]
+extraPaths = ["lib"]
+
+[tool.flake8]
+max-line-length = 99
+max-doc-length = 99
+max-complexity = 10
+exclude = [".git", "__pycache__", ".tox", "build", "dist", "*.egg_info", "venv"]
+select = ["E", "W", "F", "C", "N", "R", "D", "H"]
+ignore = ["W503", "E501", "D107"]
+per-file-ignores = ["tests/*:D100,D101,D102,D103,D104"]
+docstring-convention = "google"
+copyright-check = "True"
+copyright-author = "Canonical Ltd."
+copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.charm]
+optional = true
+
+[tool.poetry.group.charm.dependencies]
+pyyaml = "==6.0.1"
+charmed-kubeflow-chisme = "^0.4.22"
+cosl = "^1.0.0"
+lightkube = "^0.17.1"
+lightkube-models = "^1.33.1.8"
+ops = "^2.22.0"
+serialized-data-interface = "^0.7.0"
+lightkube-extensions = "^0.3.0"
+tenacity = "^9.1.2"
+
+[tool.poetry.group.fmt]
+optional = true
+
+[tool.poetry.group.fmt.dependencies]
+black = "^25.1.0"
+isort = "^6.0.1"
+
+[tool.poetry.group.lint]
+optional = true
+
+[tool.poetry.group.lint.dependencies]
+black = "^25.1.0"
+codespell = "^2.4.1"
+flake8 = "^7.0.0"
+flake8-builtins = "^2.5.0"
+flake8-copyright = "^0.2.4"
+isort = "^6.0.1"
+pep8-naming = "^0.15.1"
+pyproject-flake8 = "^7.0.0"
+
+[tool.poetry.group.unit]
+optional = true
+
+[tool.poetry.group.unit.dependencies]
+charmed-kubeflow-chisme = "^0.4.22"
+cosl = "^1.0.0"
+coverage = "^7.9.1"
+lightkube = "^0.17.1"
+ops = { version = "^2.22.0", extras = ["testing"] }
+pytest = "^8.4.1"
+pytest-mock = "^3.14.1"
+serialized-data-interface = "^0.7.0"
+
+[tool.poetry.group.integration]
+optional = true
+
+[tool.poetry.group.integration.dependencies]
+jubilant = "^0.4.1"
+lightkube = "^0.17.1"
+lightkube-models = "^1.33.1.8"
+pytest = "^8.4.1"
+pyyaml = "==6.0.1"
+tenacity = "^9.1.2"
+
+[project]
+name = "lws-controller"
+requires-python = ">=3.12,<4.0"

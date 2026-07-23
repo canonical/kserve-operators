@@ -1,0 +1,13 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  custom_images:
+    type: string
+    default: |
+      llm_routing_sidecar: ''
+      llm_scheduler: ''
+      llm_workload: ''
+    description: >
+      YAML or JSON formatted input defining image overrides for routing sidecar,
+      scheduler, and workload templates.

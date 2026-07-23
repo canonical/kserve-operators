@@ -25,6 +25,8 @@ provides:
     interface: prometheus_scrape
   provide-cmr-mesh:
     interface: cross_model_mesh
+  kserve-controller:
+    interface: kserve-controller-sync
 requires:
   object-storage:
     interface: object-storage

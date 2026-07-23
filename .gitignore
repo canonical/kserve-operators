@@ -7,3 +7,7 @@ build/
 venv/
 .terraform*
 *.tfstate*
+.coverage
+coverage.xml
+docs/
+.mypy_cache/
