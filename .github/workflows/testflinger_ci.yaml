@@ -10,12 +10,11 @@ on:
         type: string
   push:
     branches: [ llmisvc-rewrite ] # to fix when merged to main
-  pull_request:
 
 jobs:
-  testflinger-vs:
+  testflinger:
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
-    timeout-minutes: 1440   # Time limit for this GitHub workflow job (not testflinger job!): 24 hours
+    timeout-minutes: 360   # Time limit for this GitHub workflow job (not testflinger job!): 6 hours
     steps:
       - uses: actions/checkout@v7
 
@@ -53,19 +52,19 @@ jobs:
           testflinger results ${{ steps.submit-job.outputs.id }} > results.json
           cat results.json
 
-      # - name: Check test status
-      #   run: |
-      #     set -e
-      #     testflinger results ${{ steps.submit-job.outputs.id }} > results.json
-      #     status=$(jq '.test_status' results.json)
-      #     if ! [[ "$status" =~ ^[0-9]+$ ]]; then
-      #       echo "Invalid or missing test_status in results.json"
-      #       exit 1
-      #     fi
-      #     if [ "$status" -ne 0 ]; then
-      #         echo "testflinger task failed with status $status"
-      #         jq -r '.test_output' results.json
-      #         exit 1
-      #     else
-      #         echo "testflinger task succeeded"
-      #     fi
+      - name: Check test status
+        run: |
+          set -e
+          testflinger results ${{ steps.submit-job.outputs.id }} > results.json
+          status=$(jq '.test_status' results.json)
+          if ! [[ "$status" =~ ^[0-9]+$ ]]; then
+            echo "Invalid or missing test_status in results.json"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+              echo "testflinger task failed with status $status"
+              jq -r '.test_output' results.json
+              exit 1
+          else
+              echo "testflinger task succeeded"
+          fi

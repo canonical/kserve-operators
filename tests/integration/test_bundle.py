@@ -232,6 +232,7 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
     delete_llmisvc_example(name=example_name)
 
 
+@pytest.mark.abort_on_fail
 @pytest.mark.gpu
 def test_run_gpu_example(juju: jubilant.Juju):
     example_name, example_path = GPU_EXAMPLE
