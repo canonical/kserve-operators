@@ -1,0 +1,41 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  model-uri:
+    type: string
+    default: ""
+    description: >
+      URI of the model to deploy. Two schemes are supported: Hugging Face URIs
+      (hf://), e.g. hf://meta-llama/Llama-3.1-8B-Instruct, and S3 URIs (s3://),
+      e.g. s3://my-bucket/models/llama-3.1-8b. When an s3:// URI is used the
+      charm must be related to an s3-integrator over the s3-credentials endpoint
+      to obtain the bucket credentials.
+  model-name:
+    type: string
+    default: ""
+    description: >
+      Optional name the served model is exposed as (spec.model.name of the
+      LLMInferenceService), e.g. llama-3.1-8b. When left empty it defaults to
+      the model reference derived from model-uri: the part after hf:// for
+      Hugging Face URIs, or the last path segment of the bucket key for s3://
+      URIs.
+  runtime-image:
+    type: string
+    default: ""
+    description: >
+      OCI image used as the model serving runtime (vLLM) container, e.g.
+      quay.io/pierdipi/vllm-cpu:latest.
+  storage-initializer-image:
+    type: string
+    default: "docker.io/charmedkubeflow/storage-initializer:0.17.0-07d37fb"
+    description: >
+      OCI image used for the storage-initializer init container that downloads
+      an s3:// model into the workload. Only used when model-uri is an s3:// URI.
+  enable-prefill-decode:
+    type: boolean
+    default: true
+    description: >
+      Deploy the model in prefill/decode (disaggregated) mode, adding a
+      dedicated prefill worker alongside the decode worker. When false, the
+      model is deployed as a single colocated worker.

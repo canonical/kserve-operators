@@ -1,0 +1,19 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  manager-config:
+    type: string
+    default: ""
+    description: |
+      Full YAML for the LWS controller-manager configuration
+      (config.lws.x-k8s.io/v1alpha1 Configuration). When empty, the charm's
+      built-in default is used. When set, it fully replaces the default
+      (no merging).
+
+      The charm manages the webhook serving certificates, so the override must:
+        - set internalCertManagement.enable: false (this key is required); and
+        - if webhook.certDir is set, it must be
+          /tmp/k8s-webhook-server/serving-certs.
+      Otherwise the unit goes to blocked.
+

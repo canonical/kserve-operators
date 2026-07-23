@@ -88,10 +88,16 @@ K8S_RESOURCE_FILES = [
     "src/templates/cluster_storage_containers.yaml.j2",
 ]
 
+KRH_SCOPE_K8S = "kserve-controller-k8s"
+KRH_SCOPE_CONFIG = "kserve-controller-config"
+KRH_SCOPE_CLUSTER_RUNTIMES = "kserve-controller-cluster-runtimes"
+
 # Relation names
 SDI_INGRESS_GATEWAY_RELATION = "ingress-gateway"
 SDI_LOCAL_GATEWAY_RELATION = "local-gateway"
 GATEWAY_METADATA_RELATION = "gateway-metadata"
+LLMISVC_SYNC_RELATION = "kserve-controller"
+SERVICE_MESH_RELATION = "service-mesh"
 OBJECT_STORAGE_RELATION = "object-storage"
 S3_CREDENTIALS_RELATION = "s3-credentials"
 
@@ -129,6 +135,7 @@ class ObjectStillExistsError(Exception):
 
     def __init__(self, resource_name: str):
         self.resource_name = resource_name
+        super().__init__(f"Resource still exists: {resource_name}")
 
 
 def parse_images_config(config: str) -> Dict:
@@ -197,6 +204,8 @@ class KServeControllerCharm(CharmBase):
             self.on[SDI_INGRESS_GATEWAY_RELATION].relation_broken,
             self.on[SDI_LOCAL_GATEWAY_RELATION].relation_broken,
             self.on[GATEWAY_METADATA_RELATION].relation_broken,
+            self.on[LLMISVC_SYNC_RELATION].relation_changed,
+            self.on[LLMISVC_SYNC_RELATION].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
 
@@ -266,6 +275,11 @@ class KServeControllerCharm(CharmBase):
         return self.model.get_relation(SDI_INGRESS_GATEWAY_RELATION) is not None
 
     @property
+    def _has_service_mesh_relation(self) -> bool:
+        """Returns whether the service-mesh relation is established."""
+        return self.model.get_relation(SERVICE_MESH_RELATION) is not None
+
+    @property
     def _context(self):
         """Returns a dictionary containing context to be used for rendering."""
         ca_context = b64encode(self._stored.ca.encode("ascii"))
@@ -313,6 +327,9 @@ class KServeControllerCharm(CharmBase):
                 field_manager=self._lightkube_field_manager,
                 template_files=K8S_RESOURCE_FILES,
                 context={**self._context, **self.images_context},
+                labels=create_charm_default_labels(
+                    self.app.name, self.model.name, scope=KRH_SCOPE_K8S
+                ),
                 logger=log,
             )
         return self._k8s_resource_handler
@@ -325,6 +342,9 @@ class KServeControllerCharm(CharmBase):
                 field_manager=self._lightkube_field_manager,
                 template_files=CONFIG_FILES,
                 context={**self.inference_service_context, **self.images_context},
+                labels=create_charm_default_labels(
+                    self.app.name, self.model.name, scope=KRH_SCOPE_CONFIG
+                ),
                 logger=log,
             )
         return self._cm_resource_handler
@@ -337,10 +357,22 @@ class KServeControllerCharm(CharmBase):
                 field_manager=self._lightkube_field_manager,
                 template_files=CLUSTER_RUNTIMES_FILES,
                 context={**self.images_context},
+                labels=create_charm_default_labels(
+                    self.app.name, self.model.name, scope=KRH_SCOPE_CLUSTER_RUNTIMES
+                ),
                 logger=log,
             )
         load_in_cluster_generic_resources(self._cluster_runtimes_resource_handler.lightkube_client)
         return self._cluster_runtimes_resource_handler
+
+    def _sync_handler_resource_types(
+        self, handler: KubernetesResourceHandler
+    ) -> LightkubeResourcesList:
+        """Set handler.resource_types from its current rendered manifests."""
+        manifests = list(handler.render_manifests())
+        if manifests:
+            handler.resource_types = {type(resource) for resource in manifests}
+        return manifests
 
     @property
     def _controller_pebble_layer(self):
@@ -694,7 +726,17 @@ class KServeControllerCharm(CharmBase):
 
         If in Standard mode then create an allow-all AuthorizationPolicy. Otherwise,
         in Knative mode, the function will remove any previously created policies.
+
+        Only reconcile if service-mesh relation is established (provides RBAC permissions).
         """
+        # Skip reconciliation if no service-mesh relation (would lack RBAC permissions)
+        if not self._has_service_mesh_relation:
+            log.debug(
+                "%s relation not established, skipping AuthorizationPolicy reconciliation",
+                SERVICE_MESH_RELATION,
+            )
+            return
+
         ap_standard = generate_allow_all_authorization_policy(self.app.name, self.model.name)
 
         policies = []
@@ -710,6 +752,11 @@ class KServeControllerCharm(CharmBase):
             self.inference_service_context = self.generate_inference_service_context()
             self.unit.status = MaintenanceStatus("Creating k8s resources")
             self.reconcile_authorization_policies()
+
+            self._sync_handler_resource_types(self.k8s_resource_handler)
+            self._sync_handler_resource_types(self.cm_resource_handler)
+            self._sync_handler_resource_types(self.cluster_runtimes_resource_handler)
+
             self.k8s_resource_handler.apply()
             self.cm_resource_handler.apply()
             self.send_object_storage_manifests()
@@ -775,41 +822,44 @@ class KServeControllerCharm(CharmBase):
                     raise GenericCharmRuntimeError(
                         f"Unexpected ApiError happened: {e.status.message}",
                     ) from e
+
+            self._publish_llmisvc_sync_data(ready=True)
         except ErrorWithStatus as err:
+            self._publish_llmisvc_sync_data(ready=False)
             self.model.unit.status = err.status
             log.error(f"Failed to handle {event} with error: {err}")
             return
         except ApiError as api_err:
+            self._publish_llmisvc_sync_data(ready=False)
             log.error(api_err)
             raise
+
+    def _publish_llmisvc_sync_data(self, ready: bool):
+        """Publish a simple readiness contract for llmisvc charm synchronization."""
+        if not self.unit.is_leader():
+            return
+
+        for relation in self.model.relations.get(LLMISVC_SYNC_RELATION, []):
+            relation.data[self.app].update(
+                {
+                    "ready": str(ready).lower(),
+                    "namespace": self.model.name,
+                    "deployment_mode": self._deployment_mode,
+                }
+            )
 
     def _on_remove(self, _):
         self.unit.status = MaintenanceStatus("Removing k8s resources")
 
-        # remove AuthorizationPolicies
-        self.policy_resource_manager.reconcile([], MeshType.istio, [])
+        self._reconcile_authorization_policies_on_remove()
 
         handlers = [
             self.k8s_resource_handler,
             self.cm_resource_handler,
         ]
         try:
-            runtimes_manifests = self.cluster_runtimes_resource_handler.render_manifests()
-            delete_many(
-                self.cluster_runtimes_resource_handler.lightkube_client,
-                runtimes_manifests,
-            )
-            for runtime_name, runtime_kind in _extract_runtimes_names(runtimes_manifests).items():
-                self.ensure_resource_is_deleted(
-                    client=self.cluster_runtimes_resource_handler.lightkube_client,
-                    resource_kind=runtime_kind,
-                    resource_name=runtime_name,
-                )
-            for handler in handlers:
-                delete_many(
-                    handler.lightkube_client,
-                    handler.render_manifests(),
-                )
+            self._remove_cluster_runtimes_resources()
+            self._delete_managed_resources(handlers)
         except ApiError as e:
             if e.status.code != 404:
                 log.warning(f"Failed to delete resources, with error: {e}")
@@ -821,6 +871,41 @@ class KServeControllerCharm(CharmBase):
             )
             raise e
         self.unit.status = MaintenanceStatus("K8s resources removed")
+
+    def _reconcile_authorization_policies_on_remove(self) -> None:
+        """Best-effort AuthorizationPolicy teardown during remove hook."""
+
+        # Always attempt to remove AuthorizationPolicies during teardown.
+        # The service-mesh relation may already be gone before this hook runs.
+        try:
+            self.policy_resource_manager.reconcile([], MeshType.istio, [])
+        except ApiError as e:
+            if e.status.code in (403, 404):
+                log.warning("Failed to reconcile AuthorizationPolicies during remove hook: %s", e)
+            else:
+                raise
+
+    def _remove_cluster_runtimes_resources(self) -> None:
+        """Delete ClusterServingRuntime resources and wait until they are gone."""
+        client = self.cluster_runtimes_resource_handler.lightkube_client
+        runtimes_manifests = self._sync_handler_resource_types(
+            self.cluster_runtimes_resource_handler
+        )
+        if runtimes_manifests:
+            delete_many(client, runtimes_manifests, logger=log)
+        for runtime_name, runtime_kind in _extract_runtimes_names(runtimes_manifests).items():
+            self.ensure_resource_is_deleted(
+                client=client,
+                resource_kind=runtime_kind,
+                resource_name=runtime_name,
+            )
+
+    def _delete_managed_resources(self, handlers: list[KubernetesResourceHandler]) -> None:
+        """Delete manifests managed by standard handlers, if present."""
+        for handler in handlers:
+            manifests = self._sync_handler_resource_types(handler)
+            if manifests:
+                delete_many(handler.lightkube_client, manifests, logger=log)
 
     @tenacity.retry(stop=tenacity.stop_after_delay(300), wait=tenacity.wait_fixed(5), reraise=True)
     def ensure_resource_is_deleted(self, client: Client, resource_kind, resource_name: str):
@@ -868,10 +953,10 @@ class KServeControllerCharm(CharmBase):
         deployment mode. Specifically:
         1. If both ingress-gateway and gateway-metadata relations are established, it will
            raise a BlockedStatus error.
-        2. If in Knative mode and there is no ingress-gateway relation established, it will
-           raise a BlockedStatus error.
-        3. If the Standard mode and there is no gateway-metadata or ingress-gateway relation
-           established, it will raise a BlockedStatus error.
+          2. If in Knative mode and there is no ingress-gateway relation established, it will
+              raise a BlockedStatus error.
+             3. If in Standard mode and there is no gateway-metadata relation or ingress-gateway
+                 relation, it will raise a BlockedStatus error.
         """
         if self._has_gateway_metadata_relation and self._has_ingress_gatway_relation:
             raise ErrorWithStatus(

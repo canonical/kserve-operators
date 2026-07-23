@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: llm-integrator
+description: |
+  Charm that renders and manages a single KServe LLMInferenceService from
+  Juju configuration, providing a simplified end-user LLM deployment workflow.
+summary: |
+  LLM integrator charm for KServe.
+charm-user: non-root
+requires:
+  kserve-llmisvc:
+    interface: kserve-llmisvc-sync
+    limit: 1
+  s3-credentials:
+    interface: s3
+    optional: true
+    limit: 1
