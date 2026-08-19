@@ -4,7 +4,9 @@
 """Pebble layer, ports and metrics-provider assertions."""
 
 import dataclasses
+import json
 
+from cosl import LZMABase64
 from ops.model import ActiveStatus, MaintenanceStatus
 from ops.testing import Relation, State
 
@@ -168,5 +170,19 @@ def test_grafana_dashboard_relation_publishes_bundled_dashboards(
     out_rel = out.get_relation(dashboard_rel.id)
     dashboards_raw = out_rel.local_app_data.get("dashboards", "")
     assert dashboards_raw
-    assert "kserve-llmisvc-controller" in dashboards_raw
-    assert "kserve-llmisvc-vllm" in dashboards_raw
+
+    # The databag stores each dashboard under "templates" keyed by source file,
+    # with LZMA+base64-compressed content, so parse and decompress rather than
+    # matching raw strings.
+    templates = json.loads(dashboards_raw)["templates"]
+    expected_keys = {
+        "file:kserve-llmisvc-controller.json",
+        "file:kserve-llmisvc-vllm.json",
+    }
+    assert expected_keys <= set(templates)
+
+    titles = {
+        json.loads(LZMABase64.decompress(templates[key]["content"]))["title"]
+        for key in expected_keys
+    }
+    assert titles == {"KServe LLMISVC - Controller", "KServe LLMISVC - vLLM Workloads"}
