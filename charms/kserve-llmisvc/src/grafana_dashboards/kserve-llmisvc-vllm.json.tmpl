@@ -1,0 +1,773 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": "${prometheusds}",
+      "description": "Requests currently running in the engine, summed across selected workers.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(vllm:num_requests_running{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "running",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Running requests",
+      "type": "stat"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Requests waiting in the queue to be scheduled.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(vllm:num_requests_waiting{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "waiting",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Waiting requests",
+      "type": "stat"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Peak KV cache utilisation across selected workers (1.0 = full).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.8 }, { "color": "red", "value": 0.95 }] },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "max(vllm:kv_cache_usage_perc{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "kv cache",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "KV cache usage (peak)",
+      "type": "stat"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Prefix cache hit ratio over the last 5 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.3 }, { "color": "green", "value": 0.6 }] },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:prefix_cache_hits_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])) / clamp_min(sum(rate(vllm:prefix_cache_queries_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])), 1)",
+          "legendFormat": "hit ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Prefix cache hit ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Running vs waiting requests per worker pod (prefill and decode).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "requests", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum by (k8s_pod_name) (vllm:num_requests_running{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "running: {{k8s_pod_name}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum by (k8s_pod_name) (vllm:num_requests_waiting{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "waiting: {{k8s_pod_name}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Requests by worker pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Prompt (input) and generation (output) token throughput.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "tokens/s", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:prompt_tokens_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "prompt tokens/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:generation_tokens_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "generation tokens/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Token throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Completed request rate by finished reason (stop, length, abort, ...).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "req/s", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 7,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum by (finished_reason) (rate(vllm:request_success_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "{{finished_reason}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Completed requests by finished reason",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Time to first token (TTFT) quantiles.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "seconds", "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 8,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Time to first token (TTFT)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Inter-token latency (time between output tokens) quantiles.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "seconds", "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "id": 9,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Inter-token latency (ITL)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "End-to-end request latency quantiles.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "seconds", "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "id": 10,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "End-to-end request latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Prefill and decode phase duration (p95).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "seconds", "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_prefill_time_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "prefill p95",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_decode_time_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "decode p95",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Prefill / decode time (p95)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "KV cache utilisation per worker pod, and request preemption rate.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "", "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "preemptions/s" },
+            "properties": [{ "id": "custom.axisPlacement", "value": "right" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "id": 12,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "max by (k8s_pod_name) (vllm:kv_cache_usage_perc{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "kv usage: {{k8s_pod_name}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:num_preemptions_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "preemptions/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "KV cache usage & preemptions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "HTTP requests/s at the vLLM API server, by status class (2xx/4xx/5xx).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "req/s", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 },
+      "id": 13,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum by (status) (rate(http_requests_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",k8s_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "API request rate by status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "HTTP request latency at the vLLM API server across all handlers.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "seconds", "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 },
+      "id": 14,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",k8s_pod_name=~\"$pod\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "API request latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "Average latency over the selected dashboard time range \u2014 stays populated between traffic bursts (unlike the trailing-window quantile panels).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "no traffic in range",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 46 },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:time_to_first_token_seconds_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[$__range])) / sum(rate(vllm:time_to_first_token_seconds_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[$__range]))",
+          "legendFormat": "TTFT avg",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:inter_token_latency_seconds_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[$__range])) / sum(rate(vllm:inter_token_latency_seconds_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[$__range]))",
+          "legendFormat": "ITL avg",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": "${prometheusds}",
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:e2e_request_latency_seconds_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[$__range])) / sum(rate(vllm:e2e_request_latency_seconds_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",model_name=~\"$model_name\",k8s_pod_name=~\"$pod\"}[$__range]))",
+          "legendFormat": "E2E avg",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Latency \u2014 average over selected range",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["kserve", "llmisvc", "vllm"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Loki datasource",
+        "multi": true,
+        "name": "lokids",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Prometheus datasource",
+        "multi": true,
+        "name": "prometheusds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "uid": "${prometheusds}" },
+        "definition": "label_values(up,juju_model)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju model",
+        "multi": true,
+        "name": "juju_model",
+        "options": [],
+        "query": { "query": "label_values(up,juju_model)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "uid": "${prometheusds}" },
+        "definition": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju model uuid",
+        "multi": true,
+        "name": "juju_model_uuid",
+        "options": [],
+        "query": { "query": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "uid": "${prometheusds}" },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju application",
+        "multi": true,
+        "name": "juju_application",
+        "options": [],
+        "query": { "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "uid": "${prometheusds}" },
+        "definition": "label_values(vllm:num_requests_running{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},model_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Model",
+        "multi": true,
+        "name": "model_name",
+        "options": [],
+        "query": { "query": "label_values(vllm:num_requests_running{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},model_name)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "uid": "${prometheusds}" },
+        "definition": "label_values(vllm:num_requests_running{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",model_name=~\"$model_name\"},k8s_pod_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Worker pod",
+        "multi": true,
+        "name": "pod",
+        "options": [],
+        "query": { "query": "label_values(vllm:num_requests_running{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",model_name=~\"$model_name\"},k8s_pod_name)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "KServe LLMISVC - vLLM Workloads",
+  "uid": "kserve-llmisvc-vllm",
+  "version": 1,
+  "weekStart": ""
+}

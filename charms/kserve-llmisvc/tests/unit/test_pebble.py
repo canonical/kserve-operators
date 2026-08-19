@@ -145,3 +145,29 @@ def test_metrics_endpoint_relation_data_has_both_jobs(
     assert f"*:{METRICS_PROXY_PORT}" in scrape_jobs_raw
     assert "llmisvc-controller" in scrape_jobs_raw
     assert "llmisvc-workload-aggregated" in scrape_jobs_raw
+
+
+# ---------------------------------------------------------------------------
+# GrafanaDashboardProvider
+# ---------------------------------------------------------------------------
+
+
+def test_grafana_dashboard_relation_publishes_bundled_dashboards(
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
+):
+    """The grafana-dashboard relation should publish the charm's bundled dashboards."""
+    dashboard_rel = Relation(endpoint="grafana-dashboard", interface="grafana_dashboard")
+    state_in = State(
+        leader=True,
+        containers=both_containers,
+        relations=[controller_relation_ready, lws_relation_ready, dashboard_rel],
+    )
+
+    out = ctx.run(ctx.on.relation_created(dashboard_rel), state_in)
+
+    out_rel = out.get_relation(dashboard_rel.id)
+    dashboards_raw = out_rel.local_app_data.get("dashboards", "")
+    assert dashboards_raw
+    assert "kserve-llmisvc-controller" in dashboards_raw
+    assert "kserve-llmisvc-vllm" in dashboards_raw
+
