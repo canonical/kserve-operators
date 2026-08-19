@@ -6,10 +6,8 @@ on:
       branch_name:
         description: 'branch name'
         required: true
-        default: 'llmisvc-rewrite'
+        default: 'main'
         type: string
-  push:
-    branches: [ llmisvc-rewrite ] # to fix when merged to main
 
 jobs:
   testflinger:
@@ -25,7 +23,7 @@ jobs:
           output_file: tmp_job.yaml
           strict: true
           variables: |
-            branch=${{ github.head_ref || github.ref_name }}
+            branch=${{ github.event.inputs.branch_name || github.head_ref || github.ref_name }}
 
       - name: Check job yaml
         run: |
