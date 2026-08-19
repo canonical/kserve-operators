@@ -1,0 +1,104 @@
+job_queue: nvidia-gpu-llmd
+provision_data:
+  distro: noble
+output_timeout: 3600 # 1 hour
+
+test_data:
+  attachments:
+    - local: 'concierge.yaml'
+      agent: 'concierge.yaml'
+  secrets:
+    VAR_AWS_DEFAULT_REGION: secret/region
+    VAR_AWS_ACCESS_KEY_ID: secret/aws_access_key
+    VAR_AWS_SECRET_ACCESS_KEY: secret/aws_secret_key
+  test_cmds: |
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Running test commands on the device"
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    # Set the AWS environment variables on the device
+    echo "Setting AWS environment variables on the device"
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "AWS_DEFAULT_REGION=$VAR_AWS_DEFAULT_REGION" > sshenv
+    echo "AWS_ACCESS_KEY_ID=$VAR_AWS_ACCESS_KEY_ID" >> sshenv
+    echo "AWS_SECRET_ACCESS_KEY=$VAR_AWS_SECRET_ACCESS_KEY" >> sshenv
+    head -n 1 sshenv
+    scp sshenv ubuntu@$DEVICE_IP:~/.ssh/environment
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Install helm"
+    # install helm
+    ssh -t ubuntu@$DEVICE_IP 'sudo apt-get install curl gpg apt-transport-https --yes'
+    ssh -t ubuntu@$DEVICE_IP 'curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null'
+    ssh -t ubuntu@$DEVICE_IP 'echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list'
+    ssh -t ubuntu@$DEVICE_IP 'sudo apt-get update'
+    ssh -t ubuntu@$DEVICE_IP 'sudo apt-get install -y --allow-downgrades "helm=3.20.2-1"'
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Check the installed versions"
+    ssh -t ubuntu@$DEVICE_IP 'helm version'
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Install terraform, concierge and juju snaps"
+    ssh -t ubuntu@$DEVICE_IP 'sudo snap install terraform --channel latest/stable --classic'
+    ssh -t ubuntu@$DEVICE_IP 'sudo snap install concierge --classic'
+    ssh -t ubuntu@$DEVICE_IP 'sudo snap install juju --channel 3.6/stable --classic'
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Check the installed versions"
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    ssh -t ubuntu@$DEVICE_IP 'juju version'
+    ssh -t ubuntu@$DEVICE_IP 'terraform version'
+    ssh -t ubuntu@$DEVICE_IP 'concierge version'
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Prepare the device with concierge"
+    # copy concierge.yaml to the device
+    scp attachments/test/concierge.yaml ubuntu@$DEVICE_IP:/home/ubuntu/
+    ssh -t ubuntu@$DEVICE_IP 'ls'
+    ssh -t ubuntu@$DEVICE_IP 'ls -alR'
+    ssh -t ubuntu@$DEVICE_IP 'sudo concierge prepare --trace'
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    
+    echo "Install the nvidia operator"
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    # install the nvidia operator
+    ssh -t ubuntu@$DEVICE_IP 'helm repo add nvidia https://helm.ngc.nvidia.com/nvidia'
+    ssh -t ubuntu@$DEVICE_IP 'helm repo update'
+    ssh -t ubuntu@$DEVICE_IP 'helm install --generate-name -n gpu-operator-resources --create-namespace nvidia/gpu-operator'
+
+    # Wait for gpu operator components to be ready
+    while ! ssh -t ubuntu@$DEVICE_IP 'kubectl logs -n gpu-operator-resources -l app=nvidia-operator-validator | grep "all validations are successful"'
+    do
+      echo "--------------------------------------------------------------------------------------------------------------------"
+      echo "waiting for validations"
+      ssh -t ubuntu@$DEVICE_IP 'kubectl get pods -n gpu-operator-resources'
+      sleep 60
+      echo "--------------------------------------------------------------------------------------------------------------------"
+    done
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    ssh -t ubuntu@$DEVICE_IP lsb_release -a
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Install the kserve components"
+    # add the kubeflow model
+    ssh -t ubuntu@$DEVICE_IP 'juju add-model kubeflow'
+    # clone the kserve-operators repo and checkout the correct branch
+    ssh -t ubuntu@$DEVICE_IP 'git clone https://github.com/canonical/kserve-operators.git'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && ls'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && git checkout {{ branch }}'
+    # install venv and tox 
+    ssh -t ubuntu@$DEVICE_IP 'sudo apt-get install python3-venv python3-pip --yes'
+    ssh -t ubuntu@$DEVICE_IP 'python3 -m venv kserve-operators/venv'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && ./venv/bin/pip install tox'
+    # pack the charms
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Pack the charms"
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-controller && charmcraft pack'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-controller && ls *.charm'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-llmisvc && charmcraft pack'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-llmisvc && ls *.charm'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/lws-controller && charmcraft pack'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/lws-controller && ls *.charm'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/llm-integrator && charmcraft pack'
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/llm-integrator && ls *.charm'
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "Run the bundle integration tests"
+    echo "--------------------------------------------------------------------------------------------------------------------"
+    # run the bundle integration tests in the tox environment
+    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && env $(cat ~/.ssh/environment | xargs) ./venv/bin/tox -e bundle-integration-gpu -- --model kubeflow --keep-models --charms-path charms/'
+    echo "--------------------------------------------------------------------------------------------------------------------"

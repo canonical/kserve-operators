@@ -33,11 +33,26 @@ def pytest_configure(config):
         "markers",
         "abort_on_fail: abort the entire test session if this test fails",
     )
+    config.addinivalue_line(
+        "markers",
+        "gpu: test requires GPU hardware; skipped unless --run-gpu-tests is passed",
+    )
     # Configure logging to display INFO level logs on CLI
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-gpu-tests"):
+        return
+    skip_gpu = pytest.mark.skip(
+        reason="GPU tests are skipped by default; pass --run-gpu-tests to enable"
+    )
+    for item in items:
+        if "gpu" in item.keywords:
+            item.add_marker(skip_gpu)
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -84,4 +99,10 @@ def pytest_addoption(parser):
     parser.addoption(
         "--charms-path",
         help="Path to directory where built charm files are stored.",
+    )
+    parser.addoption(
+        "--run-gpu-tests",
+        action="store_true",
+        default=False,
+        help="run tests marked 'gpu', which require GPU hardware",
     )
