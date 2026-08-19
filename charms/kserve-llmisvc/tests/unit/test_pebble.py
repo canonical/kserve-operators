@@ -170,4 +170,3 @@ def test_grafana_dashboard_relation_publishes_bundled_dashboards(
     assert dashboards_raw
     assert "kserve-llmisvc-controller" in dashboards_raw
     assert "kserve-llmisvc-vllm" in dashboards_raw
-
