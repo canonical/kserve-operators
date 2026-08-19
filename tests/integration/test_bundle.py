@@ -26,6 +26,7 @@ from .helpers.charms_dependencies import (
     ENVOY_INGRESS,
     SELF_SIGNED_CERTIFICATES,
 )
+from .helpers.constants import LLMISVC_GPU_MODEL_NAME
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ KSERVE_LLMISVC_IMAGES = json.loads(
 )
 STORAGE_INITIALIZER_IMAGE = KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"]
 VLLM_IMAGE = KSERVE_LLMISVC_IMAGES["vllm"]
+VLLM_GPU_IMAGE = KSERVE_LLMISVC_IMAGES["vllm_gpu"]
 # The test model lives in a Canonical S3 bucket (avoids the flaky HF CDN). The
 # AWS credentials are supplied via the environment (local export or CI secrets).
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
@@ -100,6 +102,12 @@ LLMISVC_IMAGE_CONTEXT = {
     "aws_region": AWS_REGION,
     "s3_endpoint": os.environ.get("S3_ENDPOINT", f"s3.{AWS_REGION}.amazonaws.com"),
 }
+# GPU example only needs the storage-initializer and vLLM images; the model is
+# pulled directly via hf:// rather than from the S3 test bucket.
+GPU_IMAGE_CONTEXT = {
+    "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
+    "vllm_image": VLLM_GPU_IMAGE,
+}
 # (name, manifest template) pairs. Each example is applied, verified, predicted
 # against, then deleted before the next so cluster usage stays bounded.
 LLMISVC_EXAMPLES = [
@@ -112,6 +120,12 @@ LLMISVC_EXAMPLES = [
         TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode.yaml.j2",
     ),
 ]
+# GPU example, run separately from LLMISVC_EXAMPLES since it requires GPU
+# hardware and is gated behind the 'gpu' marker / --run-gpu-tests option.
+GPU_EXAMPLE = (
+    "test-llm-scheduler-small-gpu",
+    TEST_DATA_DIR / "llmisvc_test_llm_scheduler_small_gpu.yaml.j2",
+)
 
 
 @pytest.mark.abort_on_fail
@@ -130,6 +144,8 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     for _, example_path in LLMISVC_EXAMPLES:
         if not example_path.exists():
             raise RuntimeError(f"LLMInferenceService manifest file not found: {example_path!s}")
+    if not GPU_EXAMPLE[1].exists():
+        raise RuntimeError(f"LLMInferenceService manifest file not found: {GPU_EXAMPLE[1]!s}")
 
     logger.info("Starting bundle integration test setup")
 
@@ -211,6 +227,36 @@ def test_run_example(juju: jubilant.Juju, example_name: str, example_path: Path)
 
     logger.info("Example '%s': testing prediction endpoint", example_name)
     assert_prediction(gateway_name=GATEWAY_NAME, gateway_namespace=juju.model, name=example_name)
+
+    logger.info("Example '%s': deleting after validation", example_name)
+    delete_llmisvc_example(name=example_name)
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.gpu
+def test_run_gpu_example(juju: jubilant.Juju):
+    example_name, example_path = GPU_EXAMPLE
+    logger.info("Example '%s': applying LLMInferenceService", example_name)
+    apply_llmisvc_example(
+        manifest_path=str(example_path),
+        context=GPU_IMAGE_CONTEXT,
+        name=example_name,
+    )
+
+    logger.info("Example '%s': verifying generated resources", example_name)
+    assert_route_programmed(name=example_name)
+    assert_inferencepool_and_workload_resources(name=example_name)
+
+    logger.info("Example '%s': verifying observability metrics endpoints", example_name)
+    assert_llmisvc_metrics_endpoints(namespace=juju.model)
+
+    logger.info("Example '%s': testing prediction endpoint", example_name)
+    assert_prediction(
+        gateway_name=GATEWAY_NAME,
+        gateway_namespace=juju.model,
+        name=example_name,
+        model=LLMISVC_GPU_MODEL_NAME,
+    )
 
     logger.info("Example '%s': deleting after validation", example_name)
     delete_llmisvc_example(name=example_name)
