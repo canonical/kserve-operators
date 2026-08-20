@@ -4,7 +4,9 @@
 """Pebble layer, ports and metrics-provider assertions."""
 
 import dataclasses
+import json
 
+from cosl import LZMABase64
 from ops.model import ActiveStatus, MaintenanceStatus
 from ops.testing import Relation, State
 
@@ -145,3 +147,42 @@ def test_metrics_endpoint_relation_data_has_both_jobs(
     assert f"*:{METRICS_PROXY_PORT}" in scrape_jobs_raw
     assert "llmisvc-controller" in scrape_jobs_raw
     assert "llmisvc-workload-aggregated" in scrape_jobs_raw
+
+
+# ---------------------------------------------------------------------------
+# GrafanaDashboardProvider
+# ---------------------------------------------------------------------------
+
+
+def test_grafana_dashboard_relation_publishes_bundled_dashboards(
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
+):
+    """The grafana-dashboard relation should publish the charm's bundled dashboards."""
+    dashboard_rel = Relation(endpoint="grafana-dashboard", interface="grafana_dashboard")
+    state_in = State(
+        leader=True,
+        containers=both_containers,
+        relations=[controller_relation_ready, lws_relation_ready, dashboard_rel],
+    )
+
+    out = ctx.run(ctx.on.relation_created(dashboard_rel), state_in)
+
+    out_rel = out.get_relation(dashboard_rel.id)
+    dashboards_raw = out_rel.local_app_data.get("dashboards", "")
+    assert dashboards_raw
+
+    # The databag stores each dashboard under "templates" keyed by source file,
+    # with LZMA+base64-compressed content, so parse and decompress rather than
+    # matching raw strings.
+    templates = json.loads(dashboards_raw)["templates"]
+    expected_keys = {
+        "file:kserve-llmisvc-controller.json",
+        "file:kserve-llmisvc-vllm.json",
+    }
+    assert expected_keys <= set(templates)
+
+    titles = {
+        json.loads(LZMABase64.decompress(templates[key]["content"]))["title"]
+        for key in expected_keys
+    }
+    assert titles == {"KServe LLMISVC - Controller", "KServe LLMISVC - vLLM Workloads"}
