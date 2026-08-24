@@ -165,11 +165,16 @@ def test_metrics_endpoint_relation_publishes_alert_rules(
     out_rel = out.get_relation(metrics_rel.id)
     alert_rules = json.loads(out_rel.local_app_data.get("alert_rules", "{}"))
     alert_names = {r["alert"] for group in alert_rules.get("groups", []) for r in group["rules"]}
-    assert {
+    assert alert_names == {
         "KServeLLMISVCTargetDown",
+        "KServeLLMISVCTargetUnstable",
+        "KServeLLMISVCReconcileErrors",
         "KServeLLMISVCReconcilePanics",
+        "KServeLLMISVCNoActiveLeader",
         "KServeLLMISVCKVCacheSaturated",
-    } <= alert_names
+        "KServeLLMISVCRequestPreemptions",
+        "KServeLLMISVCAPIServerErrors",
+    }
 
 
 # ---------------------------------------------------------------------------

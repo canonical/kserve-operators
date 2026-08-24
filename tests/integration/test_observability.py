@@ -23,6 +23,8 @@ import pytest
 from .helpers.constants import LLMISVC_APP_NAME, LLMISVC_MODEL_NAME, LLMISVC_NAME, NAMESPACE_DEFAULT
 from .helpers.cos import (
     alert_present,
+    bundled_alert_names,
+    bundled_dashboard_titles,
     dashboard_present,
     generate_inference_traffic,
     get_cos_address,
@@ -81,8 +83,10 @@ VLLM_METRIC_CANDIDATES = (
     "vllm:kv_cache_usage_perc",
     "vllm:gpu_cache_usage_perc",
 )
-EXPECTED_ALERTS = ("KServeLLMISVCTargetDown", "KServeLLMISVCKVCacheSaturated")
-EXPECTED_DASHBOARDS = ("KServe LLMISVC - Controller", "KServe LLMISVC - vLLM Workloads")
+ALERT_RULES_DIR = REPO_ROOT / "charms/kserve-llmisvc/src/prometheus_alert_rules"
+GRAFANA_DASHBOARDS_DIR = REPO_ROOT / "charms/kserve-llmisvc/src/grafana_dashboards"
+EXPECTED_ALERTS = bundled_alert_names(ALERT_RULES_DIR)
+EXPECTED_DASHBOARDS = bundled_dashboard_titles(GRAFANA_DASHBOARDS_DIR)
 
 
 @pytest.fixture(scope="module", autouse=True)

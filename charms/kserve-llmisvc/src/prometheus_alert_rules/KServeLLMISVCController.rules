@@ -7,9 +7,9 @@ groups:
     labels:
       severity: critical
     annotations:
-      summary: "{{ $labels.juju_charm }} target is down ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      summary: "{{ $labels.juju_application }} target is down ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
       description: |
-        A metrics target of {{ $labels.juju_charm }} on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable for more than 5 minutes.
+        A metrics target of {{ $labels.juju_application }} on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable for more than 5 minutes.
         LABELS = {{ $labels }}
 
   - alert: KServeLLMISVCTargetUnstable
@@ -18,9 +18,9 @@ groups:
     labels:
       severity: warning
     annotations:
-      summary: "{{ $labels.juju_charm }} target is unstable ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      summary: "{{ $labels.juju_application }} target is unstable ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
       description: |
-        A metrics target of {{ $labels.juju_charm }} on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable at least 50% of the time over the last 10 minutes.
+        A metrics target of {{ $labels.juju_application }} on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable at least 50% of the time over the last 10 minutes.
         LABELS = {{ $labels }}
 
   - alert: KServeLLMISVCReconcileErrors
@@ -29,9 +29,9 @@ groups:
     labels:
       severity: warning
     annotations:
-      summary: "{{ $labels.juju_charm }} controller {{ $labels.controller }} is failing reconciles ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      summary: "{{ $labels.juju_application }} controller {{ $labels.controller }} is failing reconciles ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
       description: |
-        The {{ $labels.controller }} controller of {{ $labels.juju_charm }} has been returning reconcile errors for more than 15 minutes; LLMInferenceService resources may not converge.
+        The {{ $labels.controller }} controller of {{ $labels.juju_application }} has been returning reconcile errors for more than 15 minutes; LLMInferenceService resources may not converge.
         LABELS = {{ $labels }}
 
   - alert: KServeLLMISVCReconcilePanics
@@ -40,9 +40,9 @@ groups:
     labels:
       severity: critical
     annotations:
-      summary: "{{ $labels.juju_charm }} controller panicked ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      summary: "{{ $labels.juju_application }} controller panicked ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
       description: |
-        The {{ $labels.juju_charm }} controller or webhook recorded a panic in the last 10 minutes on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }}.
+        The {{ $labels.juju_application }} controller or webhook recorded a panic in the last 10 minutes on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }}.
         LABELS = {{ $labels }}
 
   - alert: KServeLLMISVCNoActiveLeader
@@ -51,7 +51,7 @@ groups:
     labels:
       severity: warning
     annotations:
-      summary: "{{ $labels.juju_charm }} has no active leader ({{ $labels.juju_model }}/{{ $labels.juju_application }})"
+      summary: "{{ $labels.juju_application }} has no active leader ({{ $labels.juju_model }}/{{ $labels.juju_application }})"
       description: |
-        No {{ $labels.juju_charm }} unit has held controller leadership for more than 15 minutes; reconciliation is likely stalled.
+        No {{ $labels.juju_application }} unit has held controller leadership for more than 15 minutes; reconciliation is likely stalled.
         LABELS = {{ $labels }}

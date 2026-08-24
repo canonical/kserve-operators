@@ -14,10 +14,12 @@ import json
 import logging
 import re
 import subprocess
+from pathlib import Path
 from typing import Optional, cast
 
 import jubilant
 import requests
+import yaml
 
 from .constants import NAMESPACE_DEFAULT
 from .k8s import get_client
@@ -30,6 +32,30 @@ PROMETHEUS_APP = "prometheus"
 LOKI_APP = "loki"
 
 
+def bundled_alert_names(rules_dir: Path) -> tuple[str, ...]:
+    """Return the alert names declared in the ``*.rules`` files under ``rules_dir``."""
+    names: set[str] = set()
+    for rules_file in rules_dir.glob("*.rules"):
+        spec = yaml.safe_load(rules_file.read_text()) or {}
+        for group in spec.get("groups", []):
+            for rule in group.get("rules", []):
+                if "alert" in rule:
+                    names.add(rule["alert"])
+    assert names, f"no alert rules found under {rules_dir}"
+    return tuple(sorted(names))
+
+
+def bundled_dashboard_titles(dashboards_dir: Path) -> tuple[str, ...]:
+    """Return the top-level titles of the ``*.tmpl`` dashboards under ``dashboards_dir``."""
+    titles: set[str] = set()
+    for dashboard in dashboards_dir.glob("*.tmpl"):
+        title = json.loads(dashboard.read_text()).get("title")
+        if title:
+            titles.add(title)
+    assert titles, f"no dashboards found under {dashboards_dir}"
+    return tuple(sorted(titles))
+
+
 def get_cos_address(juju: jubilant.Juju) -> str:
     """Return the base URL Traefik proxies the COS services on."""
     task = juju.run(f"{TRAEFIK_APP}/0", "show-proxied-endpoints")
@@ -38,10 +64,15 @@ def get_cos_address(juju: jubilant.Juju) -> str:
 
 
 def get_grafana_access(juju: jubilant.Juju) -> tuple[str, str]:
-    """Return the Grafana base URL and admin password."""
+    """Return the Grafana proxied URL and admin password.
+
+    The URL is built from Traefik's base URL (matching the other COS helpers)
+    rather than the action result, since only ``admin-password`` is guaranteed.
+    """
     task = juju.run(f"{GRAFANA_APP}/0", "get-admin-password")
     assert task.return_code == 0, "get-admin-password action failed"
-    return task.results["url"], task.results["admin-password"]
+    url = f"{get_cos_address(juju)}/{cast(str, juju.model)}-{GRAFANA_APP}"
+    return url, task.results["admin-password"]
 
 
 def _host(url: str) -> str:

@@ -19,22 +19,19 @@ from .charms_dependencies import (
     ENVOY_INGRESS,
     SELF_SIGNED_CERTIFICATES,
 )
+from .constants import CONTROLLER_APP_NAME, LLMISVC_APP_NAME, LWS_APP_NAME
 
 logger = logging.getLogger(__name__)
-
-CONTROLLER_APP = "kserve-controller"
-LLMISVC_APP = "kserve-llmisvc"
-LWS_APP = "lws-controller"
 
 
 def deploy_serving_stack(juju: jubilant.Juju, charms_path: str) -> None:
     """Deploy and relate the Envoy gateway + KServe serving charms, waiting for active."""
-    controller_charm = resolve_charm_path(charms_path=charms_path, charm_name=CONTROLLER_APP)
-    llmisvc_charm = resolve_charm_path(charms_path=charms_path, charm_name=LLMISVC_APP)
-    lws_charm = resolve_charm_path(charms_path=charms_path, charm_name=LWS_APP)
-    controller_resources = resolve_charm_resources(charm_name=CONTROLLER_APP)
-    llmisvc_resources = resolve_charm_resources(charm_name=LLMISVC_APP)
-    lws_resources = resolve_charm_resources(charm_name=LWS_APP)
+    controller_charm = resolve_charm_path(charms_path=charms_path, charm_name=CONTROLLER_APP_NAME)
+    llmisvc_charm = resolve_charm_path(charms_path=charms_path, charm_name=LLMISVC_APP_NAME)
+    lws_charm = resolve_charm_path(charms_path=charms_path, charm_name=LWS_APP_NAME)
+    controller_resources = resolve_charm_resources(charm_name=CONTROLLER_APP_NAME)
+    llmisvc_resources = resolve_charm_resources(charm_name=LLMISVC_APP_NAME)
+    lws_resources = resolve_charm_resources(charm_name=LWS_APP_NAME)
 
     logger.info("Deploying Envoy gateway charm stack")
     for dep in (ENVOY_CONTROLLER, ENVOY_AI_CONTROLLER, ENVOY_INGRESS, SELF_SIGNED_CERTIFICATES):
@@ -56,19 +53,23 @@ def deploy_serving_stack(juju: jubilant.Juju, charms_path: str) -> None:
     )
 
     logger.info("Waiting for kserve-controller to block on missing gateway-metadata relation")
-    juju.wait(lambda status: CONTROLLER_APP in status.apps, successes=1)
-    juju.wait(lambda status: status.apps[CONTROLLER_APP].is_blocked, successes=1)
+    juju.wait(lambda status: CONTROLLER_APP_NAME in status.apps, successes=1)
+    juju.wait(lambda status: status.apps[CONTROLLER_APP_NAME].is_blocked, successes=1)
 
     logger.info("Relating kserve-controller to the Envoy gateway metadata provider")
-    juju.integrate(f"{CONTROLLER_APP}:gateway-metadata", f"{ENVOY_INGRESS.charm}:gateway-metadata")
+    juju.integrate(
+        f"{CONTROLLER_APP_NAME}:gateway-metadata", f"{ENVOY_INGRESS.charm}:gateway-metadata"
+    )
 
     logger.info("Deploying kserve-llmisvc charm")
     juju.deploy(charm=str(llmisvc_charm), resources=llmisvc_resources, trust=True)
-    juju.wait(lambda status: LLMISVC_APP in status.apps, successes=1)
+    juju.wait(lambda status: LLMISVC_APP_NAME in status.apps, successes=1)
 
     logger.info("Relating kserve charms")
-    juju.integrate("kserve-controller:kserve-controller", "kserve-llmisvc:kserve-controller")
-    juju.integrate("lws-controller:lws-controller", "kserve-llmisvc:lws-controller")
+    juju.integrate(
+        f"{CONTROLLER_APP_NAME}:kserve-controller", f"{LLMISVC_APP_NAME}:kserve-controller"
+    )
+    juju.integrate(f"{LWS_APP_NAME}:lws-controller", f"{LLMISVC_APP_NAME}:lws-controller")
 
     logger.info("Waiting for all charms to be active")
     juju.wait(jubilant.all_active, successes=1)

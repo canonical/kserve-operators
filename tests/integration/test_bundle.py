@@ -26,7 +26,10 @@ from .helpers.charms_dependencies import (
     ENVOY_INGRESS,
     SELF_SIGNED_CERTIFICATES,
 )
+from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
+from .helpers.constants import LLMISVC_APP_NAME as LLMISVC_APP
 from .helpers.constants import LLMISVC_GPU_MODEL_NAME
+from .helpers.constants import LWS_APP_NAME as LWS_APP
 from .helpers.deploy import deploy_serving_stack
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
@@ -34,9 +37,6 @@ logger = logging.getLogger(__name__)
 # Quiet jubilant's very verbose per-poll wait logging during the long waits.
 logging.getLogger("jubilant.wait").setLevel("WARNING")
 
-CONTROLLER_APP = "kserve-controller"
-LLMISVC_APP = "kserve-llmisvc"
-LWS_APP = "lws-controller"
 # App names for the Charmhub dependencies (deploy coordinates live in
 # helpers/charms_dependencies.py). envoy-ingress-k8s creates the Gateway and
 # provides the gateway-metadata relation to kserve-controller.
