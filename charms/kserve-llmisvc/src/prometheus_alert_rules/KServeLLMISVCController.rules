@@ -1,0 +1,57 @@
+groups:
+- name: KServeLLMISVCController
+  rules:
+  - alert: KServeLLMISVCTargetDown
+    expr: up{} < 1
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "{{ $labels.juju_charm }} target is down ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      description: |
+        A metrics target of {{ $labels.juju_charm }} on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable for more than 5 minutes.
+        LABELS = {{ $labels }}
+
+  - alert: KServeLLMISVCTargetUnstable
+    expr: avg_over_time(up{}[10m]) < 0.5
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: "{{ $labels.juju_charm }} target is unstable ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      description: |
+        A metrics target of {{ $labels.juju_charm }} on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable at least 50% of the time over the last 10 minutes.
+        LABELS = {{ $labels }}
+
+  - alert: KServeLLMISVCReconcileErrors
+    expr: sum by (juju_model, juju_application, juju_unit, controller) (rate(controller_runtime_reconcile_errors_total{}[5m])) > 0
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "{{ $labels.juju_charm }} controller {{ $labels.controller }} is failing reconciles ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      description: |
+        The {{ $labels.controller }} controller of {{ $labels.juju_charm }} has been returning reconcile errors for more than 15 minutes; LLMInferenceService resources may not converge.
+        LABELS = {{ $labels }}
+
+  - alert: KServeLLMISVCReconcilePanics
+    expr: increase(controller_runtime_reconcile_panics_total{}[10m]) > 0 or increase(controller_runtime_webhook_panics_total{}[10m]) > 0
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: "{{ $labels.juju_charm }} controller panicked ({{ $labels.juju_model }}/{{ $labels.juju_unit }})"
+      description: |
+        The {{ $labels.juju_charm }} controller or webhook recorded a panic in the last 10 minutes on unit {{ $labels.juju_model }}/{{ $labels.juju_unit }}.
+        LABELS = {{ $labels }}
+
+  - alert: KServeLLMISVCNoActiveLeader
+    expr: sum by (juju_model, juju_application) (leader_election_master_status{}) < 1
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "{{ $labels.juju_charm }} has no active leader ({{ $labels.juju_model }}/{{ $labels.juju_application }})"
+      description: |
+        No {{ $labels.juju_charm }} unit has held controller leadership for more than 15 minutes; reconciliation is likely stalled.
+        LABELS = {{ $labels }}
