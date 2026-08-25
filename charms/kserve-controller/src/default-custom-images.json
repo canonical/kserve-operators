@@ -9,7 +9,7 @@
     "serving_runtimes__huggingfaceserver__multinode": "ghcr.io/canonical/huggingfaceserver:0.15.2-gpu-66de825",
     "serving_runtimes__lgbserver": "docker.io/charmedkubeflow/lgbserver:0.15.2-e1c439c",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
-    "serving_runtimes__paddleserver": "docker.io/charmedkubeflow/paddleserver:0.15.2-5442b3b",
+    "serving_runtimes__paddleserver": "docker.io/charmedkubeflow/paddleserver:0.15.2-8ecbed2-20260825092925",
     "serving_runtimes__pmmlserver": "docker.io/charmedkubeflow/pmmlserver:0.15.2-331628b",
     "serving_runtimes__sklearnserver": "docker.io/charmedkubeflow/sklearnserver:0.15.2-2994414",
     "serving_runtimes__tensorflow_serving": "charmedkubeflow/tensorflow-serving:2.6.2-3f1565f",
