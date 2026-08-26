@@ -16,5 +16,5 @@
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
     "serving_runtimes__torchserve": "docker.io/charmedkubeflow/torchserve-kfs:0.9.0-9379e1b-20260825092925",
     "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
-    "serving_runtimes__xgbserver": "docker.io/charmedkubeflow/xgbserver:0.17.0-dfa4177"
+    "serving_runtimes__xgbserver": "docker.io/charmedkubeflow/xgbserver:0.17.0-9379e1b-20260825092924"
 }
