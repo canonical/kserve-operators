@@ -19,7 +19,7 @@ resources:
   kserve-controller-image:
     type: oci-image
     description: OCI image for kserve controller
-    upstream-source: docker.io/charmedkubeflow/kserve-controller:0.15.2-441ba7f
+    upstream-source: docker.io/charmedkubeflow/kserve-controller:0.15.2-8ecbed2-20260825092928
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
