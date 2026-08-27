@@ -149,6 +149,34 @@ def test_metrics_endpoint_relation_data_has_both_jobs(
     assert "llmisvc-workload-aggregated" in scrape_jobs_raw
 
 
+def test_metrics_endpoint_relation_publishes_alert_rules(
+    ctx, both_containers, controller_relation_ready, lws_relation_ready
+):
+    """The metrics-endpoint relation should publish the bundled Prometheus alert rules."""
+    metrics_rel = Relation(endpoint="metrics-endpoint", interface="prometheus_scrape")
+    state_in = State(
+        leader=True,
+        containers=both_containers,
+        relations=[controller_relation_ready, lws_relation_ready, metrics_rel],
+    )
+
+    out = ctx.run(ctx.on.relation_joined(metrics_rel), state_in)
+
+    out_rel = out.get_relation(metrics_rel.id)
+    alert_rules = json.loads(out_rel.local_app_data.get("alert_rules", "{}"))
+    alert_names = {r["alert"] for group in alert_rules.get("groups", []) for r in group["rules"]}
+    assert alert_names == {
+        "KServeLLMISVCTargetDown",
+        "KServeLLMISVCTargetUnstable",
+        "KServeLLMISVCReconcileErrors",
+        "KServeLLMISVCReconcilePanics",
+        "KServeLLMISVCNoActiveLeader",
+        "KServeLLMISVCKVCacheSaturated",
+        "KServeLLMISVCRequestPreemptions",
+        "KServeLLMISVCAPIServerErrors",
+    }
+
+
 # ---------------------------------------------------------------------------
 # GrafanaDashboardProvider
 # ---------------------------------------------------------------------------
