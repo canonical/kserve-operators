@@ -37,6 +37,10 @@ def pytest_configure(config):
         "markers",
         "gpu: test requires GPU hardware; skipped unless --run-gpu-tests is passed",
     )
+    config.addinivalue_line(
+        "markers",
+        "cos: observability test that stands up cos-lite; run via the cos-integration tox env",
+    )
     # Configure logging to display INFO level logs on CLI
     logging.basicConfig(
         level=logging.INFO,
