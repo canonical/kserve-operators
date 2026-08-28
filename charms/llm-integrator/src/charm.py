@@ -25,11 +25,13 @@ from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret
 from object_storage import S3Requirer
 from ops import main
-from ops.charm import CharmBase
+from ops.charm import CharmBase, SecretChangedEvent
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
     MaintenanceStatus,
+    ModelError,
+    SecretNotFoundError,
     StatusBase,
     WaitingStatus,
 )
@@ -54,6 +56,9 @@ S3_URI_PREFIX = "s3://"
 
 # Default S3 region used when the s3-credentials relation does not provide one.
 DEFAULT_S3_REGION = "us-east-1"
+
+# Field name expected inside the Juju user secret referenced by hf-token-secret.
+HF_TOKEN_SECRET_KEY = "token"
 
 # How long to wait for the LLMInferenceService CR to finish terminating during
 # removal. KServe attaches finalizers and tears down the underlying Deployments
@@ -80,6 +85,11 @@ class ObjectStillExistsError(Exception):
         super().__init__(f"Resource still exists: {resource_name}")
 
 
+def _is_secret_permission_denied(exc: BaseException) -> bool:
+    """True when a ModelError signals the secret exists but was not granted."""
+    return isinstance(exc, ModelError) and "permission denied" in str(exc).lower()
+
+
 class LLMIntegratorCharm(CharmBase):
     """Render and manage a single LLMInferenceService from Juju config."""
 
@@ -101,6 +111,7 @@ class LLMIntegratorCharm(CharmBase):
             self.on[LLMISVC_SYNC_RELATION].relation_broken,
             self.on[S3_CREDENTIALS_RELATION].relation_changed,
             self.on[S3_CREDENTIALS_RELATION].relation_broken,
+            self.on.secret_changed,
         ]:
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
@@ -130,9 +141,12 @@ class LLMIntegratorCharm(CharmBase):
             "runtime_image": self.model.config.get("runtime-image", "").strip(),
             "enable_prefill_decode": bool(self.model.config.get("enable-prefill-decode", True)),
             "is_s3": self._uri_scheme() == "s3",
+            "use_hf_token": self._use_hf_token(),
         }
         if context["is_s3"]:
             context.update(self._s3_context())
+        elif context["use_hf_token"]:
+            context.update(self._hf_context())
         return context
 
     @property
@@ -148,6 +162,19 @@ class LLMIntegratorCharm(CharmBase):
         so create/update/delete are all idempotent.
         """
         return f"{self.app.name}-s3-creds"
+
+    @property
+    def _hf_secret_name(self) -> str:
+        """Name of the Kubernetes Secret holding the Hugging Face token.
+
+        Stably derived from the app name so create/update/delete are idempotent.
+        """
+        return f"{self.app.name}-hf-token"
+
+    @property
+    def _hf_token_secret_id(self) -> str:
+        """URI of the Juju user secret configured via hf-token-secret."""
+        return self.model.config.get("hf-token-secret", "").strip()
 
     def _uri_scheme(self) -> str:
         """Return the model URI scheme: ``hf``, ``s3`` or ``""`` when unknown."""
@@ -196,6 +223,52 @@ class LLMIntegratorCharm(CharmBase):
             "s3_region": info.get("region") or DEFAULT_S3_REGION,
             "s3_access_key": info.get("access-key", ""),
             "s3_secret_access_key": info.get("secret-key", ""),
+        }
+
+    def _hf_token(self) -> str:
+        """Return the Hugging Face token, or "" when unset/unavailable.
+
+        Reads the Juju user secret referenced by hf-token-secret. Tolerant by
+        design: an unset, ungranted or malformed secret yields "" so the render
+        context can be built without raising; ``_validate_hf_token`` surfaces the
+        actionable error to the operator.
+        """
+        secret_id = self._hf_token_secret_id
+        if not secret_id:
+            return ""
+        try:
+            secret = self.model.get_secret(id=secret_id)
+            return secret.get_content(refresh=True).get(HF_TOKEN_SECRET_KEY, "")
+        except (SecretNotFoundError, ModelError):
+            return ""
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_is_secret_permission_denied),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_fixed(5),
+        reraise=True,
+    )
+    def _fetch_hf_secret_content(self, secret_id: str) -> dict:
+        """Read the hf-token-secret content, retrying briefly on a grant race.
+
+        ``juju config`` and ``juju grant-secret`` are separate commands, so a
+        config-changed hook can fire before the grant lands; a short retry
+        absorbs that window.
+        """
+        return self.model.get_secret(id=secret_id).get_content(refresh=True)
+
+    def _use_hf_token(self) -> bool:
+        """True when an hf:// model should be served with a Hugging Face token."""
+        return self._uri_scheme() == "hf" and bool(self._hf_token())
+
+    def _hf_context(self) -> dict:
+        """Build the storage-initializer render context for a gated hf:// model."""
+        return {
+            "storage_initializer_image": self.model.config.get(
+                "storage-initializer-image", ""
+            ).strip(),
+            "hf_secret_name": self._hf_secret_name,
+            "hf_token": self._hf_token(),
         }
 
     @property
@@ -251,12 +324,53 @@ class LLMIntegratorCharm(CharmBase):
             )
         if not self.model.config.get("runtime-image", "").strip():
             raise ErrorWithStatus("Missing required config: runtime-image", BlockedStatus)
+        needs_storage_initializer = self._uri_scheme() == "s3" or self._use_hf_token()
         if (
-            self._uri_scheme() == "s3"
+            needs_storage_initializer
             and not self.model.config.get("storage-initializer-image", "").strip()
         ):
             raise ErrorWithStatus(
                 "Missing required config: storage-initializer-image", BlockedStatus
+            )
+
+    def _validate_hf_token(self) -> None:
+        """Validate the hf-token-secret configuration when set.
+
+        The token is optional (public hf:// models need none). When configured
+        it must reference a granted Juju secret that carries the token under the
+        expected key, and only makes sense for an hf:// model URI. Every failure
+        here is a user-actionable misconfiguration (Blocked).
+        """
+        secret_id = self._hf_token_secret_id
+        if not secret_id:
+            return
+        if self._uri_scheme() != "hf":
+            raise ErrorWithStatus(
+                "hf-token-secret is only supported with an hf:// model-uri",
+                BlockedStatus,
+            )
+        try:
+            content = self._fetch_hf_secret_content(secret_id)
+        except SecretNotFoundError:
+            raise ErrorWithStatus(
+                f"HF token secret {secret_id} does not exist",
+                BlockedStatus,
+            )
+        except ModelError as err:
+            if _is_secret_permission_denied(err):
+                raise ErrorWithStatus(
+                    f"HF token secret {secret_id} not granted to this app; run "
+                    f"'juju grant-secret <secret> {self.app.name}'",
+                    BlockedStatus,
+                )
+            raise ErrorWithStatus(
+                f"Could not read HF token secret {secret_id}",
+                BlockedStatus,
+            )
+        if not content.get(HF_TOKEN_SECRET_KEY):
+            raise ErrorWithStatus(
+                f"HF token secret must contain a '{HF_TOKEN_SECRET_KEY}' key",
+                BlockedStatus,
             )
 
     def _validate_s3(self) -> None:
@@ -331,13 +445,26 @@ class LLMIntegratorCharm(CharmBase):
 
     def _on_event(self, event) -> None:
         """Main reconcile loop for the llm-integrator charm."""
+        # Ignore secret-changed notifications for secrets we do not consume.
+        if isinstance(event, SecretChangedEvent) and (
+            not self._hf_token_secret_id or event.secret.id != self._hf_token_secret_id
+        ):
+            return
         try:
             self._validate_llmisvc_relation()
             self._validate_config()
+            self._validate_hf_token()
             self._validate_s3()
 
             self.unit.status = MaintenanceStatus("Applying LLMInferenceService")
             self.resource_handler.apply()
+
+            # Prune the HF token Secret when the token is no longer in use (e.g.
+            # the config was cleared) since apply() does not remove it.
+            if not self._use_hf_token():
+                self._delete_resource(
+                    self.resource_handler.lightkube_client, Secret, self._hf_secret_name
+                )
 
             self.unit.status = self._llm_isvc_status()
         except ErrorWithStatus as err:
@@ -395,9 +522,10 @@ class LLMIntegratorCharm(CharmBase):
         client = self.resource_handler.lightkube_client
 
         self._delete_resource(client, LLMInferenceService, self.app.name)
-        # Always attempt the Secret delete (tolerating 404) so nothing is left
-        # behind even if the model-uri was switched away from s3:// beforehand.
+        # Always attempt the Secret deletes (tolerating 404) so nothing is left
+        # behind even if the model-uri was switched away from s3:///hf:// first.
         self._delete_resource(client, Secret, self._s3_secret_name)
+        self._delete_resource(client, Secret, self._hf_secret_name)
 
         try:
             self._ensure_resource_is_deleted(

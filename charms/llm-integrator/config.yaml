@@ -31,7 +31,19 @@ options:
     default: "docker.io/charmedkubeflow/storage-initializer:0.17.0-07d37fb"
     description: >
       OCI image used for the storage-initializer init container that downloads
-      an s3:// model into the workload. Only used when model-uri is an s3:// URI.
+      the model into the workload. Used when model-uri is an s3:// URI, or when
+      model-uri is an hf:// URI and hf-token-secret is set (gated/private
+      Hugging Face models).
+  hf-token-secret:
+    type: secret
+    description: >
+      URI of a Juju user secret holding the Hugging Face access token used to
+      download gated or private hf:// models. The secret must expose the token
+      under a "token" key. Create and grant it before configuring, e.g.
+      `juju add-secret my-hf-token token=hf_xxx` then
+      `juju grant-secret my-hf-token llm-integrator`, and set this option to the
+      resulting `secret:...` URI. Only used with hf:// model URIs; leave unset
+      for public models.
   enable-prefill-decode:
     type: boolean
     default: true

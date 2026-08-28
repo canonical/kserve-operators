@@ -46,10 +46,21 @@ ENVOY_INGRESS_APP = ENVOY_INGRESS.charm
 CERTIFICATES_APP = SELF_SIGNED_CERTIFICATES.charm
 GATEWAY_NAME = ENVOY_INGRESS_APP
 # The llm-integrator charm renders a single LLMInferenceService from config. It
-# supports hf:// (public model, no token) and s3:// (credentials supplied via an
+# supports hf:// (public or gated) and s3:// (credentials supplied via an
 # s3-integrator relation) model URIs.
 LLM_INTEGRATOR_APP = "llm-integrator"
-LLM_INTEGRATOR_MODEL_URI = "hf://EleutherAI/pythia-70m"
+# The hf:// test exercises a gated model (google/gemma-3-270m-it), pulled with a
+# Hugging Face token supplied through a Juju user secret. The token is read from
+# the environment (local export or CI secret).
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+HF_MODEL_URI = "hf://google/gemma-3-270m-it"
+HF_MODEL_NAME = "google/gemma-3-270m-it"
+# Juju user-secret label holding the HF token handed to llm-integrator. Distinct
+# from the K8s Secret the charm renders for the workload (named
+# ``{app}-hf-token``, asserted absent after removal).
+HF_TOKEN_JUJU_SECRET_LABEL = "hf-token"
+LLM_INTEGRATOR_HF_SECRET = f"{LLM_INTEGRATOR_APP}-hf-token"
+# The s3:// test uses the small public pythia model staged in the S3 test bucket.
 LLM_INTEGRATOR_MODEL_NAME = "EleutherAI/pythia-70m"
 # s3-integrator supplies the bucket credentials for an s3:// model URI. The
 # 2/edge track (matching kserve-controller) takes credentials via a Juju secret.
@@ -90,6 +101,17 @@ def require_aws_credentials():
         pytest.fail(
             "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to fetch the test "
             "model from S3; export them locally or provide them via CI secrets.",
+            pytrace=False,
+        )
+
+
+# Fail fast (rather than skip) if the HF token for the gated model is missing.
+@pytest.fixture(scope="session", autouse=True)
+def require_hf_token():
+    if not HF_TOKEN:
+        pytest.fail(
+            "HF_TOKEN must be set to fetch the gated model via hf://; export it "
+            "locally or provide it via CI secrets.",
             pytrace=False,
         )
 
@@ -214,15 +236,28 @@ def test_deploy_llm_via_charm(juju: jubilant.Juju, request: pytest.FixtureReques
         charms_path=charms_path, charm_name=LLM_INTEGRATOR_APP
     )
 
-    logger.info("Deploying llm-integrator charm")
+    logger.info("Providing the Hugging Face token via a Juju secret")
+    secret_uri = juju.cli(
+        "add-secret",
+        HF_TOKEN_JUJU_SECRET_LABEL,
+        f"token={HF_TOKEN}",
+    ).strip()
+
+    logger.info("Deploying llm-integrator with a gated hf:// model URI")
     juju.deploy(
         charm=str(llm_integrator_charm),
         config={
-            "model-uri": LLM_INTEGRATOR_MODEL_URI,
+            "model-uri": HF_MODEL_URI,
+            "model-name": HF_MODEL_NAME,
             "runtime-image": VLLM_IMAGE,
+            "storage-initializer-image": STORAGE_INITIALIZER_IMAGE,
+            "hf-token-secret": secret_uri,
         },
         trust=True,
     )
+
+    logger.info("Granting the HF token secret to llm-integrator")
+    juju.cli("grant-secret", HF_TOKEN_JUJU_SECRET_LABEL, LLM_INTEGRATOR_APP)
 
     logger.info("Waiting for llm-integrator to block on missing kserve-llmisvc relation")
     juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP].is_blocked, successes=1)
@@ -242,14 +277,15 @@ def test_deploy_llm_via_charm(juju: jubilant.Juju, request: pytest.FixtureReques
         gateway_name=GATEWAY_NAME,
         gateway_namespace=juju.model,
         name=LLM_INTEGRATOR_APP,
-        model=LLM_INTEGRATOR_MODEL_NAME,
+        model=HF_MODEL_NAME,
         namespace=juju.model,
     )
 
-    logger.info("Removing llm-integrator charm and verifying its LLMInferenceService is cleaned up")
+    logger.info("Removing llm-integrator charm and verifying its resources are cleaned up")
     juju.remove_application(LLM_INTEGRATOR_APP)
     juju.wait(lambda status: LLM_INTEGRATOR_APP not in status.apps, successes=1)
     assert_llminferenceservice_absent(name=LLM_INTEGRATOR_APP, namespace=juju.model)
+    assert_secret_absent(name=LLM_INTEGRATOR_HF_SECRET, namespace=juju.model)
 
 
 @pytest.mark.abort_on_fail
