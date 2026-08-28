@@ -366,7 +366,7 @@ jobs:
       # Pin < 4.4.1 (amd64 rev 8022): 4.4.1 hard-switched candid -> Ubuntu One auth, breaking release tokens.
       charmcraft-snap-revision: 8022
     secrets:
-      charmhub-token: ${{ secrets.CHARMCRAFT_TOKEN_EDGE_PR }}
+      charmhub-token: ${{ secrets.CHARMHUB_TOKEN_EDGE_PR }}
     permissions:
       actions: read  # Needed for GitHub API call to get workflow version (for private repositories)
       contents: read
