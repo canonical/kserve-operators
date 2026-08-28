@@ -29,7 +29,7 @@ jobs:
       # Pin < 4.4.1 (amd64 rev 8022): 4.4.1 hard-switched candid -> Ubuntu One auth, breaking release tokens.
       charmcraft-snap-revision: 8022
     secrets:
-      charmhub-token: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
+      charmhub-token: ${{ secrets.CHARMCRAFT_TOKEN_EDGE }}
     permissions:
       actions: read
       contents: write  # Needed to create git tags
