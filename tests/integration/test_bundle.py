@@ -19,23 +19,24 @@ from .helpers.assertions import (
     assert_route_programmed,
     assert_secret_absent,
 )
-from .helpers.charm_paths import resolve_charm_path, resolve_charm_resources
+from .helpers.charm_paths import resolve_charm_path
 from .helpers.charms_dependencies import (
     ENVOY_AI_CONTROLLER,
     ENVOY_CONTROLLER,
     ENVOY_INGRESS,
     SELF_SIGNED_CERTIFICATES,
 )
+from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
+from .helpers.constants import LLMISVC_APP_NAME as LLMISVC_APP
 from .helpers.constants import LLMISVC_GPU_MODEL_NAME
+from .helpers.constants import LWS_APP_NAME as LWS_APP
+from .helpers.deploy import deploy_serving_stack
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
 logger = logging.getLogger(__name__)
 # Quiet jubilant's very verbose per-poll wait logging during the long waits.
 logging.getLogger("jubilant.wait").setLevel("WARNING")
 
-CONTROLLER_APP = "kserve-controller"
-LLMISVC_APP = "kserve-llmisvc"
-LWS_APP = "lws-controller"
 # App names for the Charmhub dependencies (deploy coordinates live in
 # helpers/charms_dependencies.py). envoy-ingress-k8s creates the Gateway and
 # provides the gateway-metadata relation to kserve-controller.
@@ -134,13 +135,6 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
     if not charms_path:
         raise ValueError("--charms-path is required for bundle integration tests")
 
-    controller_charm = resolve_charm_path(charms_path=charms_path, charm_name=CONTROLLER_APP)
-    llmisvc_charm = resolve_charm_path(charms_path=charms_path, charm_name=LLMISVC_APP)
-    lws_charm = resolve_charm_path(charms_path=charms_path, charm_name=LWS_APP)
-    controller_resources = resolve_charm_resources(charm_name=CONTROLLER_APP)
-    llmisvc_resources = resolve_charm_resources(charm_name=LLMISVC_APP)
-    lws_resources = resolve_charm_resources(charm_name=LWS_APP)
-
     for _, example_path in LLMISVC_EXAMPLES:
         if not example_path.exists():
             raise RuntimeError(f"LLMInferenceService manifest file not found: {example_path!s}")
@@ -148,59 +142,7 @@ def test_setup_charms(juju: jubilant.Juju, request: pytest.FixtureRequest):
         raise RuntimeError(f"LLMInferenceService manifest file not found: {GPU_EXAMPLE[1]!s}")
 
     logger.info("Starting bundle integration test setup")
-
-    logger.info("Deploying Envoy gateway charm stack")
-    for dep in (ENVOY_CONTROLLER, ENVOY_AI_CONTROLLER, ENVOY_INGRESS, SELF_SIGNED_CERTIFICATES):
-        juju.deploy(dep.charm, channel=dep.channel, trust=dep.trust, config=dep.config)
-
-    logger.info("Relating Envoy charms")
-    juju.integrate(ENVOY_AI_CONTROLLER_APP, CERTIFICATES_APP)
-    juju.integrate(ENVOY_CONTROLLER_APP, ENVOY_AI_CONTROLLER_APP)
-
-    logger.info("Deploying lws-controller charm")
-    juju.deploy(
-        charm=str(lws_charm),
-        resources=lws_resources,
-        trust=True,
-    )
-
-    logger.info("Deploying kserve-controller charm")
-    juju.deploy(
-        charm=str(controller_charm),
-        resources=controller_resources,
-        config={"deployment-mode": "standard"},
-        trust=True,
-    )
-
-    logger.info("Waiting for kserve-controller application to appear")
-    juju.wait(lambda status: CONTROLLER_APP in status.apps, successes=1)
-
-    logger.info("Waiting for kserve-controller to block on missing gateway-metadata relation")
-    juju.wait(lambda status: status.apps[CONTROLLER_APP].is_blocked, successes=1)
-
-    logger.info("Relating kserve-controller to the Envoy gateway metadata provider")
-    juju.integrate(
-        f"{CONTROLLER_APP}:gateway-metadata",
-        f"{ENVOY_INGRESS_APP}:gateway-metadata",
-    )
-
-    logger.info("Deploying kserve-llmisvc charm")
-    juju.deploy(
-        charm=str(llmisvc_charm),
-        resources=llmisvc_resources,
-        trust=True,
-    )
-
-    logger.info("Waiting for kserve-llmisvc application to appear")
-    juju.wait(lambda status: LLMISVC_APP in status.apps, successes=1)
-
-    logger.info("Relating charms")
-    juju.integrate("kserve-controller:kserve-controller", "kserve-llmisvc:kserve-controller")
-    juju.integrate("lws-controller:lws-controller", "kserve-llmisvc:lws-controller")
-
-    logger.info("Waiting for all charms to be active after relations")
-    juju.wait(jubilant.all_active, successes=1)
-
+    deploy_serving_stack(juju, charms_path)
     logger.info("Charm setup complete")
 
 

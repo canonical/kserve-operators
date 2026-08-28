@@ -1,0 +1,35 @@
+groups:
+- name: KServeLLMISVCWorkloads
+  rules:
+  - alert: KServeLLMISVCKVCacheSaturated
+    expr: vllm:kv_cache_usage_perc{} > 0.95
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "vLLM KV cache saturated for {{ $labels.model_name }} ({{ $labels.k8s_pod_name }})"
+      description: |
+        The KV cache of vLLM worker {{ $labels.k8s_pod_name }} serving {{ $labels.model_name }} has been above 95% for more than 10 minutes; requests may be preempted or rejected.
+        LABELS = {{ $labels }}
+
+  - alert: KServeLLMISVCRequestPreemptions
+    expr: sum by (juju_model, juju_application, model_name, k8s_pod_name) (rate(vllm:num_preemptions_total{}[5m])) > 0
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "vLLM is preempting requests for {{ $labels.model_name }} ({{ $labels.k8s_pod_name }})"
+      description: |
+        vLLM worker {{ $labels.k8s_pod_name }} serving {{ $labels.model_name }} has been preempting running requests for more than 15 minutes, indicating sustained memory pressure.
+        LABELS = {{ $labels }}
+
+  - alert: KServeLLMISVCAPIServerErrors
+    expr: sum by (juju_model, juju_application, k8s_pod_name) (rate(http_requests_total{status="5xx"}[5m])) > 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "vLLM API server returning 5xx errors ({{ $labels.k8s_pod_name }})"
+      description: |
+        The vLLM API server on {{ $labels.k8s_pod_name }} has been returning 5xx responses for more than 10 minutes.
+        LABELS = {{ $labels }}
