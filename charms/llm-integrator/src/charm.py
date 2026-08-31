@@ -324,7 +324,12 @@ class LLMIntegratorCharm(CharmBase):
             )
         if not self.model.config.get("runtime-image", "").strip():
             raise ErrorWithStatus("Missing required config: runtime-image", BlockedStatus)
-        needs_storage_initializer = self._uri_scheme() == "s3" or self._use_hf_token()
+        # An hf-token-secret on an hf:// model makes the charm render a manual
+        # storage-initializer, so the image is required. Key this off config
+        # alone (no secret read) so a missing image is reported directly instead
+        # of being hidden until the secret is granted.
+        hf_token_configured = self._uri_scheme() == "hf" and bool(self._hf_token_secret_id)
+        needs_storage_initializer = self._uri_scheme() == "s3" or hf_token_configured
         if (
             needs_storage_initializer
             and not self.model.config.get("storage-initializer-image", "").strip()
