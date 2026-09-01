@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Install charmcraft
         run: |
-          sudo snap install charmcraft --classic --channel latest/stable
+          sudo snap install charmcraft --classic
       - name: Run charmcraft promote
         run: |
           charmcraft promote --name ${{ github.event.inputs.charm-name }} \
