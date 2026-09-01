@@ -1,7 +1,7 @@
 {
     "llm_scheduler": "docker.io/charmedkubeflow/llm-d-inference-scheduler:0.4.0-66449f9-20260724073351",
     "llm_workload": "ghcr.io/llm-d/llm-d-cuda:v0.4.0",
-    "llm_routing_sidecar": "docker.io/charmedkubeflow/llm-d-routing-sidecar:0.4.0-26788a2-20260717115339",
+    "llm_routing_sidecar": "docker.io/charmedkubeflow/llm-d-routing-sidecar:0.4.0-5f4a278-20260901032408",
     "vllm": "docker.io/charmedkubeflow/vllm-cpu:0.19.0-5f4a278-20260825092922",
     "vllm_gpu": "docker.io/charmedkubeflow/vllm-cuda-gpu:0.19.0-e511371-20260702095505"
 }
