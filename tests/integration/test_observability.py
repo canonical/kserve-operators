@@ -33,6 +33,7 @@ from .helpers.cos import (
     published_loki_logs,
     published_prometheus_alerts,
     query_prometheus,
+    workload_environment_value,
 )
 from .helpers.deploy import deploy_serving_stack
 from .helpers.llmisvc_ops import apply_llmisvc_example
@@ -67,7 +68,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 IMAGE_CONTEXT = {
     "storage_initializer_image": KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"],
-    "vllm_image": KSERVE_LLMISVC_IMAGES["vllm"],
+    "vllm_image": "ghcr.io/welpaolo/vllm-cpu:0.19.0",
     "model_s3_uri": MODEL_S3_URI,
     "aws_access_key_id": AWS_ACCESS_KEY_ID,
     "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
@@ -108,7 +109,7 @@ def _integrate(juju: jubilant.Juju, provider: str, requirer: str) -> None:
 
 
 @pytest.mark.abort_on_fail
-def test_deploy_stack_and_model(juju: jubilant.Juju, request: pytest.FixtureRequest):
+def test_deploy_stack(juju: jubilant.Juju, request: pytest.FixtureRequest):
     charms_path = request.config.getoption("--charms-path")
     if not charms_path:
         raise ValueError("--charms-path is required for the observability integration test")
@@ -116,9 +117,6 @@ def test_deploy_stack_and_model(juju: jubilant.Juju, request: pytest.FixtureRequ
         raise RuntimeError(f"LLMInferenceService manifest not found: {CPU_EXAMPLE!s}")
 
     deploy_serving_stack(juju, charms_path)
-
-    logger.info("Applying CPU LLMInferenceService example")
-    apply_llmisvc_example(manifest_path=str(CPU_EXAMPLE), context=IMAGE_CONTEXT, name=LLMISVC_NAME)
 
 
 @pytest.mark.abort_on_fail
@@ -144,6 +142,13 @@ def test_relate_to_cos(juju: jubilant.Juju):
 
     logger.info("Waiting for all charms to be active after COS relations")
     juju.wait(jubilant.all_active, successes=1)
+
+
+@pytest.mark.abort_on_fail
+def test_deploy_model_with_loki_forwarding():
+    """Create the workload only after its Loki endpoint is available in config."""
+    logger.info("Applying CPU LLMInferenceService example with Loki forwarding enabled")
+    apply_llmisvc_example(manifest_path=str(CPU_EXAMPLE), context=IMAGE_CONTEXT, name=LLMISVC_NAME)
 
 
 @pytest.mark.abort_on_fail
@@ -181,3 +186,13 @@ def test_cos_data_published(juju: jubilant.Juju):
             logger.info("Checking charm logs reached Loki...")
             logs = published_loki_logs(juju, "juju_application", LLMISVC_APP_NAME)
             assert logs and logs.get("data", {}).get("result"), "no kserve-llmisvc logs in Loki"
+
+            logger.info("Checking vLLM workload received the Loki endpoint...")
+            loki_url = workload_environment_value(LLMISVC_NAME, "LOKI_URL")
+            assert loki_url and loki_url.endswith("/loki/api/v1/push")
+
+            logger.info("Checking vLLM workload logs reached Loki...")
+            workload_logs = published_loki_logs(juju, "app", "vllm")
+            assert workload_logs and workload_logs.get("data", {}).get(
+                "result"
+            ), "no vLLM workload logs in Loki"

@@ -26,6 +26,10 @@ spec:
         value: INFO
       - name: HF_HUB_CACHE
         value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+      - name: LOKI_URL
+        value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
       image: {% endraw %}{{ workload_image }}{% raw %}
       imagePullPolicy: IfNotPresent
       livenessProbe:
@@ -256,6 +260,10 @@ spec:
         value: INFO
       - name: HF_HUB_CACHE
         value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+      - name: LOKI_URL
+        value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
       image: {% endraw %}{{ workload_image }}{% raw %}
       imagePullPolicy: IfNotPresent
       livenessProbe:
@@ -485,6 +493,10 @@ spec:
         value: /models
       - name: VLLM_RANDOMIZE_DP_DUMMY_INPUTS
         value: "1"
+{% endraw %}{% if loki_url %}{% raw %}
+      - name: LOKI_URL
+        value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
       image: {% endraw %}{{ workload_image }}{% raw %}
       imagePullPolicy: IfNotPresent
       name: main
@@ -555,6 +567,10 @@ spec:
           value: INFO
         - name: HF_HUB_CACHE
           value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+        - name: LOKI_URL
+          value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
         image: {% endraw %}{{ workload_image }}{% raw %}
         imagePullPolicy: IfNotPresent
         livenessProbe:
@@ -736,6 +752,10 @@ spec:
           value: INFO
         - name: HF_HUB_CACHE
           value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+        - name: LOKI_URL
+          value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
         image: {% endraw %}{{ workload_image }}{% raw %}
         imagePullPolicy: IfNotPresent
         livenessProbe:
@@ -912,6 +932,10 @@ spec:
           value: INFO
         - name: HF_HUB_CACHE
           value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+        - name: LOKI_URL
+          value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
         image: {% endraw %}{{ workload_image }}{% raw %}
         imagePullPolicy: IfNotPresent
         name: main
@@ -1159,6 +1183,10 @@ spec:
         value: INFO
       - name: HF_HUB_CACHE
         value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+      - name: LOKI_URL
+        value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
       image: {% endraw %}{{ workload_image }}{% raw %}
       imagePullPolicy: IfNotPresent
       livenessProbe:
@@ -1339,6 +1367,10 @@ spec:
         value: INFO
       - name: HF_HUB_CACHE
         value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+      - name: LOKI_URL
+        value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
       image: {% endraw %}{{ workload_image }}{% raw %}
       imagePullPolicy: IfNotPresent
       livenessProbe:
@@ -1566,6 +1598,10 @@ spec:
         value: INFO
       - name: HF_HUB_CACHE
         value: /models
+{% endraw %}{% if loki_url %}{% raw %}
+      - name: LOKI_URL
+        value: {% endraw %}{{ loki_url }}{% raw %}
+{% endraw %}{% endif %}{% raw %}
       image: {% endraw %}{{ workload_image }}{% raw %}
       imagePullPolicy: IfNotPresent
       name: main
