@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.testing import State
+from ops.testing import Secret, State
 
 from .helpers import assert_status
 
@@ -127,6 +127,138 @@ def test_s3_context_maps_credentials(
     assert context["storage_initializer_image"]
 
 
+def test_hf_token_context_maps_secret(ctx, llmisvc_relation_ready, hf_token_secret):
+    """A granted hf-token-secret enables the token path and exposes render fields."""
+    config = {
+        "model-uri": "hf://google/gemma-3-270m-it",
+        "runtime-image": "img:latest",
+        "storage-initializer-image": "si:img",
+        "hf-token-secret": hf_token_secret.id,
+    }
+    state_in = State(
+        leader=True,
+        config=config,
+        relations=[llmisvc_relation_ready],
+        secrets=[hf_token_secret],
+    )
+    with ctx(ctx.on.config_changed(), state_in) as manager:
+        manager.run()
+        context = manager.charm._context
+
+    assert context["use_hf_token"] is True
+    assert context["is_s3"] is False
+    assert context["hf_secret_name"] == "llm-integrator-hf-token"
+    assert context["hf_token"] == "hf_secrettoken"
+    assert context["storage_initializer_image"] == "si:img"
+
+
+def test_hf_public_model_needs_no_token(ctx, ready_state):
+    """A public hf:// model without a token does not enable the token path."""
+    with ctx(ctx.on.config_changed(), ready_state) as manager:
+        manager.run()
+        assert manager.charm._context["use_hf_token"] is False
+
+
+def test_secret_changed_for_configured_token_reconciles(
+    ctx, llmisvc_relation_ready, hf_token_secret, mock_krh_apply
+):
+    """A secret-changed for the configured token secret triggers a reconcile."""
+    config = {
+        "model-uri": "hf://google/gemma-3-270m-it",
+        "runtime-image": "img:latest",
+        "storage-initializer-image": "si:img",
+        "hf-token-secret": hf_token_secret.id,
+    }
+    state_in = State(
+        leader=True,
+        config=config,
+        relations=[llmisvc_relation_ready],
+        secrets=[hf_token_secret],
+    )
+    ctx.run(ctx.on.secret_changed(hf_token_secret), state_in)
+    mock_krh_apply.assert_called_once()
+
+
+def test_secret_changed_for_unrelated_secret_ignored(
+    ctx, llmisvc_relation_ready, hf_token_secret, mock_krh_apply
+):
+    """A secret-changed for a secret the charm does not consume is ignored."""
+    other_secret = Secret(tracked_content={"token": "unrelated"})
+    config = {
+        "model-uri": "hf://google/gemma-3-270m-it",
+        "runtime-image": "img:latest",
+        "storage-initializer-image": "si:img",
+        "hf-token-secret": hf_token_secret.id,
+    }
+    state_in = State(
+        leader=True,
+        config=config,
+        relations=[llmisvc_relation_ready],
+        secrets=[hf_token_secret, other_secret],
+    )
+    ctx.run(ctx.on.secret_changed(other_secret), state_in)
+    mock_krh_apply.assert_not_called()
+
+
+def test_hf_token_missing_storage_initializer_image_blocks(
+    ctx, llmisvc_relation_ready, hf_token_secret
+):
+    """A gated hf:// model requires the storage-initializer image."""
+    config = {
+        "model-uri": "hf://google/gemma-3-270m-it",
+        "runtime-image": "img:latest",
+        "storage-initializer-image": "",
+        "hf-token-secret": hf_token_secret.id,
+    }
+    state_in = State(
+        leader=True,
+        config=config,
+        relations=[llmisvc_relation_ready],
+        secrets=[hf_token_secret],
+    )
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    assert_status(out, BlockedStatus, "storage-initializer-image")
+
+
+def test_hf_token_on_non_hf_uri_blocks(
+    ctx, llmisvc_relation_ready, s3_relation, mock_s3_connection_info, hf_token_secret
+):
+    """Setting hf-token-secret with a non-hf:// model-uri blocks the charm."""
+    config = {
+        "model-uri": "s3://my-bucket/models/pythia-70m",
+        "runtime-image": "img:latest",
+        "storage-initializer-image": "si:img",
+        "hf-token-secret": hf_token_secret.id,
+    }
+    state_in = State(
+        leader=True,
+        config=config,
+        relations=[llmisvc_relation_ready, s3_relation],
+        secrets=[hf_token_secret],
+    )
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    assert_status(out, BlockedStatus, "only supported with an hf://")
+
+
+def test_hf_token_secret_missing_key_blocks(ctx, llmisvc_relation_ready):
+    """A token secret without the expected 'token' key blocks the charm."""
+    bad_secret = Secret(tracked_content={"wrong-key": "value"})
+    config = {
+        "model-uri": "hf://google/gemma-3-270m-it",
+        "runtime-image": "img:latest",
+        "storage-initializer-image": "si:img",
+        "hf-token-secret": bad_secret.id,
+    }
+    state_in = State(
+        leader=True,
+        config=config,
+        relations=[llmisvc_relation_ready],
+        secrets=[bad_secret],
+    )
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    assert_status(out, BlockedStatus, "'token' key")
+
+
 def test_ready_and_cr_ready_becomes_active(
     ctx, ready_state, mock_krh_apply, mock_krh_lightkube_client
 ):
@@ -217,6 +349,7 @@ def _render_template(**overrides):
         "runtime_image": "img:latest",
         "enable_prefill_decode": True,
         "is_s3": False,
+        "use_hf_token": False,
     }
     context.update(overrides)
     return Template(template_path.read_text()).render(context)
@@ -230,6 +363,15 @@ def test_template_includes_prefill_block_when_enabled():
 def test_template_omits_prefill_block_when_disabled():
     """The rendered manifest omits the prefill worker in single/colocated mode."""
     assert "prefill:" not in _render_template(enable_prefill_decode=False)
+
+
+def test_template_main_port_override_only_in_disaggregated_mode():
+    """vLLM overrides to :8001 only in disaggregated mode (routing sidecar owns 8000)."""
+    disaggregated = _render_template(enable_prefill_decode=True)
+    assert "8001" in disaggregated
+    single = _render_template(enable_prefill_decode=False)
+    assert "--port" not in single
+    assert "8001" not in single
 
 
 def _render_s3_template(**overrides):
@@ -284,6 +426,47 @@ def test_template_omits_storage_initializer_for_hf():
     assert "storage-initializer" not in rendered
     assert "kserve-pvc-source" not in rendered
     assert "kind: Secret" not in rendered
+
+
+def _render_hf_token_template(**overrides):
+    hf_overrides = {
+        "use_hf_token": True,
+        "model_uri": "hf://google/gemma-3-270m-it",
+        "model_name": "google/gemma-3-270m-it",
+        "storage_initializer_image": "si:img",
+        "hf_secret_name": "llm-integrator-hf-token",
+        "hf_token": "hf_RAWTOKEN",
+    }
+    hf_overrides.update(overrides)
+    return _render_template(**hf_overrides)
+
+
+def test_template_includes_storage_initializer_for_hf_token():
+    """A gated hf:// render injects a manual initializer that reads HF_TOKEN."""
+    rendered = _render_hf_token_template()
+    assert "storageInitializer:" in rendered
+    assert "enabled: false" in rendered
+    assert "name: storage-initializer" in rendered
+    assert "kserve-pvc-source" in rendered
+    assert "HF_TOKEN" in rendered
+    assert "secretKeyRef" in rendered
+    assert "name: llm-integrator-hf-token" in rendered
+    # Both the decode and prefill workers get their own storage-initializer.
+    assert rendered.count("name: storage-initializer") == 2
+    # The token flows through a Secret only; no ServiceAccount is involved.
+    assert "ServiceAccount" not in rendered
+    assert "serviceAccountName" not in rendered
+
+
+def test_template_hf_token_kept_in_secret_only():
+    """hf:// token lives in a Secret referenced via secretKeyRef, never inlined."""
+    rendered = _render_hf_token_template(hf_token="hf_RAWTOKEN")
+    assert "kind: Secret" in rendered
+    assert "stringData:" in rendered
+    assert "name: llm-integrator-hf-token" in rendered
+    # The raw token appears exactly once (in the Secret), not duplicated into
+    # the decode/prefill container env.
+    assert rendered.count("hf_RAWTOKEN") == 1
 
 
 def test_remove_deletes_resource(ctx, ready_state, mock_krh_lightkube_client):
