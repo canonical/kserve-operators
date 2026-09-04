@@ -56,6 +56,7 @@ LWS_SYNC_RELATION = "lws-controller"
 # Readiness relation consumed by the llm-integrator charm. This charm is the
 # PROVIDER: it publishes ready=true only once it reaches ActiveStatus.
 LLM_INTEGRATOR_SYNC_RELATION = "kserve-llmisvc"
+LOGGING_RELATION = "logging"
 METRICS_PORT = 8080
 METRICS_PROXY_CONTAINER = "metrics-proxy"
 METRICS_PROXY_PORT = 15090
@@ -146,6 +147,10 @@ class KServeLLMISVCCharm(CharmBase):
             self.on[LWS_SYNC_RELATION].relation_changed,
             self.on[LWS_SYNC_RELATION].relation_broken,
             self.on[LLM_INTEGRATOR_SYNC_RELATION].relation_changed,
+            self.on[LOGGING_RELATION].relation_joined,
+            self.on[LOGGING_RELATION].relation_changed,
+            self.on[LOGGING_RELATION].relation_departed,
+            self.on[LOGGING_RELATION].relation_broken,
         ]:
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
@@ -185,7 +190,25 @@ class KServeLLMISVCCharm(CharmBase):
             "scheduler_image": self.images_context.get("llm_scheduler", ""),
             "workload_image": self.images_context.get("llm_workload", ""),
             "llm_routing_sidecar": self.images_context.get("llm_routing_sidecar", ""),
+            "loki_url": self._loki_url,
         }
+
+    @property
+    def _loki_url(self) -> str:
+        """Return a Loki Push API endpoint published through the logging relation."""
+        for relation in self.model.relations.get(LOGGING_RELATION, []):
+            for unit in sorted(relation.units, key=lambda remote_unit: remote_unit.name):
+                endpoint = relation.data[unit].get("endpoint")
+                if not endpoint:
+                    continue
+                try:
+                    url = json.loads(endpoint).get("url")
+                except (json.JSONDecodeError, TypeError):
+                    log.warning("Ignoring malformed Loki endpoint from %s", unit.name)
+                    continue
+                if isinstance(url, str) and url:
+                    return url
+        return ""
 
     @property
     def base_resource_handler(self):
@@ -364,6 +387,7 @@ class KServeLLMISVCCharm(CharmBase):
 
             self.custom_images = parse_images_config(self.model.config["custom_images"])
             self.images_context = self.get_images(DEFAULT_IMAGES, self.custom_images)
+            self._scheduler_config_resource_handler = None
 
             self.unit.status = MaintenanceStatus("Creating k8s resources")
 
