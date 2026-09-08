@@ -11,9 +11,7 @@ spec:
     prometheus.io/path: "/metrics"
   template:
     containers:
-    - command:
-      - vllm
-      - serve
+    - args:
       - /mnt/models
       - --served-model-name
       - '{{ .Spec.Model.Name }}'
@@ -237,7 +235,7 @@ spec:
         fi
 
         START_RANK=0
-        eval "vllm serve \
+        eval "/opt/pebble/vllmd.sh \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8001 \
@@ -468,7 +466,7 @@ spec:
         fi
 
         START_RANK=$(( ${LWS_WORKER_INDEX:-0} * {{ or .Spec.Parallelism.DataLocal 1 }} ))
-        eval "vllm serve \
+        eval "/opt/pebble/vllmd.sh \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8001 \
@@ -552,9 +550,7 @@ spec:
   prefill:
     template:
       containers:
-      - command:
-        - vllm
-        - serve
+      - args:
         - /mnt/models
         - --served-model-name
         - '{{ .Spec.Model.Name }}'
@@ -729,7 +725,7 @@ spec:
           fi
 
           START_RANK=0
-          eval "vllm serve \
+          eval "/opt/pebble/vllmd.sh \
             /mnt/models \
             --served-model-name '{{ .Spec.Model.Name }}' \
             --port 8000 \
@@ -909,7 +905,7 @@ spec:
           fi
 
           START_RANK=$(( ${LWS_WORKER_INDEX:-0} * {{ or .Spec.Prefill.Parallelism.DataLocal 1 }} ))
-          eval "vllm serve \
+          eval "/opt/pebble/vllmd.sh \
             /mnt/models \
             --served-model-name '{{ .Spec.Model.Name }}' \
             --port 8000 \
@@ -1168,9 +1164,7 @@ spec:
     prometheus.io/path: "/metrics"
   template:
     containers:
-    - command:
-      - vllm
-      - serve
+    - args:
       - /mnt/models
       - --served-model-name
       - '{{ .Spec.Model.Name }}'
@@ -1344,7 +1338,7 @@ spec:
         fi
 
         START_RANK=0
-        eval "vllm serve \
+        eval "/opt/pebble/vllmd.sh \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8000 \
@@ -1575,7 +1569,7 @@ spec:
         fi
 
         START_RANK=$(( ${LWS_WORKER_INDEX:-0} * {{ or .Spec.Parallelism.DataLocal 1 }} ))
-        eval "vllm serve \
+        eval "/opt/pebble/vllmd.sh \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8000 \
