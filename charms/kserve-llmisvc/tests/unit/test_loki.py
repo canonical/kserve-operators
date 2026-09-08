@@ -42,6 +42,10 @@ def test_vllm_templates_render_loki_url():
 
     assert rendered.count("name: LOKI_URL") == 9
     assert rendered.count(f"value: {LOKI_URL}") == 9
+    assert rendered.count("/opt/pebble/vllmd.sh") == 6
+    assert rendered.count("args:\n      - /mnt/models") == 2
+    assert rendered.count("args:\n        - /mnt/models") == 1
+    assert "vllm serve" not in rendered
 
 
 def test_vllm_templates_omit_loki_url_without_cos():
