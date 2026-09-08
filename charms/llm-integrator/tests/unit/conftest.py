@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from lightkube import ApiError
-from ops.testing import Context, Relation, State
+from ops.testing import Context, Relation, Secret, State
 
 from charm import LLMISVC_SYNC_RELATION, S3_CREDENTIALS_RELATION, LLMIntegratorCharm
 
@@ -141,6 +141,12 @@ def s3_relation():
         remote_app_name="s3-integrator",
         remote_app_data={"bucket": "my-bucket"},
     )
+
+
+@pytest.fixture
+def hf_token_secret():
+    """A granted Juju user secret carrying a Hugging Face token."""
+    return Secret(tracked_content={"token": "hf_secrettoken"})
 
 
 @pytest.fixture

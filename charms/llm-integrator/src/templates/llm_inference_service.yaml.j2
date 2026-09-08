@@ -1,3 +1,4 @@
+{%- set needs_storage_initializer = is_s3 or use_hf_token %}
 {% if is_s3 %}
 apiVersion: v1
 kind: Secret
@@ -9,6 +10,16 @@ stringData:
   AWS_ACCESS_KEY_ID: "{{ s3_access_key }}"
   AWS_SECRET_ACCESS_KEY: "{{ s3_secret_access_key }}"
 ---
+{% elif use_hf_token %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ hf_secret_name }}
+  namespace: {{ namespace }}
+type: Opaque
+stringData:
+  HF_TOKEN: "{{ hf_token }}"
+---
 {% endif %}
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
@@ -19,7 +30,7 @@ spec:
   model:
     uri: {{ model_uri }}
     name: {{ model_name }}
-{% if is_s3 %}
+{% if needs_storage_initializer %}
   storageInitializer:
     enabled: false
 {% endif %}
@@ -28,7 +39,7 @@ spec:
     scheduler: {}
     route: {}
   template:
-{% if is_s3 %}
+{% if needs_storage_initializer %}
     volumes:
       - name: kserve-pvc-source
         emptyDir: {}
@@ -39,6 +50,7 @@ spec:
           - {{ model_uri }}
           - /mnt/models
         env:
+{% if is_s3 %}
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -57,6 +69,17 @@ spec:
             value: "{{ s3_use_https }}"
           - name: S3_VERIFY_SSL
             value: "1"
+{% elif use_hf_token %}
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ hf_secret_name }}
+                key: HF_TOKEN
+          - name: HF_HUB_ENABLE_HF_TRANSFER
+            value: "0"
+          - name: HF_HUB_DOWNLOAD_TIMEOUT
+            value: "60"
+{% endif %}
         volumeMounts:
           - name: kserve-pvc-source
             mountPath: /mnt/models
@@ -66,8 +89,13 @@ spec:
         image: {{ runtime_image }}
         args:
           - "--enforce-eager"
+{% if enable_prefill_decode %}
+          # Disaggregated mode injects an llm-d-routing-sidecar on 8000, so the
+          # model server must listen on 8001. Single mode has no sidecar and
+          # serves directly on KServe's default 8000.
           - "--port"
           - "8001"
+{% endif %}
         securityContext:
           runAsNonRoot: false
         env:
@@ -75,7 +103,7 @@ spec:
             value: INFO
           - name: VLLM_CPU_KVCACHE_SPACE
             value: "1"
-{% if is_s3 %}
+{% if needs_storage_initializer %}
         volumeMounts:
           - name: kserve-pvc-source
             mountPath: /mnt/models
@@ -92,7 +120,7 @@ spec:
   prefill:
     replicas: 1
     template:
-{% if is_s3 %}
+{% if needs_storage_initializer %}
       volumes:
         - name: kserve-pvc-source
           emptyDir: {}
@@ -103,6 +131,7 @@ spec:
             - {{ model_uri }}
             - /mnt/models
           env:
+{% if is_s3 %}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -121,6 +150,17 @@ spec:
               value: "{{ s3_use_https }}"
             - name: S3_VERIFY_SSL
               value: "1"
+{% elif use_hf_token %}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ hf_secret_name }}
+                  key: HF_TOKEN
+            - name: HF_HUB_ENABLE_HF_TRANSFER
+              value: "0"
+            - name: HF_HUB_DOWNLOAD_TIMEOUT
+              value: "60"
+{% endif %}
           volumeMounts:
             - name: kserve-pvc-source
               mountPath: /mnt/models
@@ -137,7 +177,7 @@ spec:
               value: INFO
             - name: VLLM_CPU_KVCACHE_SPACE
               value: "1"
-{% if is_s3 %}
+{% if needs_storage_initializer %}
           volumeMounts:
             - name: kserve-pvc-source
               mountPath: /mnt/models

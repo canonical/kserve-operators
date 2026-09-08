@@ -13,7 +13,9 @@ providers:
       load-balancer:
         enabled: true
         l2-mode: true
-        cidrs: 10.64.140.43/32
+        # /29 (8 addresses) so both the KServe gateway and cos-lite's traefik can
+        # each get a LoadBalancer IP (the observability test needs a second one).
+        cidrs: 10.64.140.40/29
     bootstrap-constraints:
       root-disk: 2G
 
