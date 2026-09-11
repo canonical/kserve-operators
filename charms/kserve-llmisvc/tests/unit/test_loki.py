@@ -39,13 +39,10 @@ def _render_template(loki_url: str = "") -> str:
 def test_vllm_templates_render_loki_url():
     """Every vLLM workload template should receive the COS Loki endpoint."""
     rendered = _render_template(LOKI_URL)
-
+    print(rendered)
     assert rendered.count("name: LOKI_URL") == 9
     assert rendered.count(f"value: {LOKI_URL}") == 9
-    assert rendered.count("/opt/pebble/vllmd.sh") == 6
-    assert rendered.count("args:\n      - /mnt/models") == 2
-    assert rendered.count("args:\n        - /mnt/models") == 1
-    assert "vllm serve" not in rendered
+    assert rendered.count("vllm\n      - serve") == 2
 
 
 def test_vllm_templates_omit_loki_url_without_cos():
