@@ -11,7 +11,9 @@ spec:
     prometheus.io/path: "/metrics"
   template:
     containers:
-    - args:
+    - command:
+      - vllm
+      - serve
       - /mnt/models
       - --served-model-name
       - '{{ .Spec.Model.Name }}'
@@ -235,7 +237,7 @@ spec:
         fi
 
         START_RANK=0
-        eval "/opt/pebble/vllmd.sh \
+        eval "vllm serve \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8001 \
@@ -550,7 +552,9 @@ spec:
   prefill:
     template:
       containers:
-      - args:
+      - command:
+        - vllm
+        - serve
         - /mnt/models
         - --served-model-name
         - '{{ .Spec.Model.Name }}'
@@ -725,7 +729,7 @@ spec:
           fi
 
           START_RANK=0
-          eval "/opt/pebble/vllmd.sh \
+          eval "vllm serve \
             /mnt/models \
             --served-model-name '{{ .Spec.Model.Name }}' \
             --port 8000 \
@@ -905,7 +909,7 @@ spec:
           fi
 
           START_RANK=$(( ${LWS_WORKER_INDEX:-0} * {{ or .Spec.Prefill.Parallelism.DataLocal 1 }} ))
-          eval "/opt/pebble/vllmd.sh \
+          eval "vllm serve \
             /mnt/models \
             --served-model-name '{{ .Spec.Model.Name }}' \
             --port 8000 \
@@ -1164,7 +1168,9 @@ spec:
     prometheus.io/path: "/metrics"
   template:
     containers:
-    - args:
+    - command:
+      - vllm
+      - serve
       - /mnt/models
       - --served-model-name
       - '{{ .Spec.Model.Name }}'
@@ -1338,7 +1344,7 @@ spec:
         fi
 
         START_RANK=0
-        eval "/opt/pebble/vllmd.sh \
+        eval "vllm serve \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8000 \
@@ -1569,7 +1575,7 @@ spec:
         fi
 
         START_RANK=$(( ${LWS_WORKER_INDEX:-0} * {{ or .Spec.Parallelism.DataLocal 1 }} ))
-        eval "/opt/pebble/vllmd.sh \
+        eval "vllm serve \
           /mnt/models \
           --served-model-name '{{ .Spec.Model.Name }}' \
           --port 8000 \
