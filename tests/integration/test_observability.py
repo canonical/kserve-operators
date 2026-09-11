@@ -193,6 +193,7 @@ def test_cos_data_published(juju: jubilant.Juju):
 
             logger.info("Checking vLLM workload logs reached Loki...")
             workload_logs = published_loki_logs(juju, "app", "vllm")
+            logger.info("vLLM workload logs: %s", workload_logs)
             assert workload_logs and workload_logs.get("data", {}).get(
                 "result"
             ), "no vLLM workload logs in Loki"
