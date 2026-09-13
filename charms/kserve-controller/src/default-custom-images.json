@@ -14,7 +14,7 @@
     "serving_runtimes__predictiveserver": "docker.io/charmedkubeflow/predictiveserver:0.17.0-e95a900",
     "serving_runtimes__sklearnserver": "docker.io/charmedkubeflow/sklearnserver:0.17.0-5f4a278-20260825092927",
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
-    "serving_runtimes__torchserve": "docker.io/charmedkubeflow/torchserve-kfs:0.9.0-5f4a278-20260825092927",
+    "serving_runtimes__torchserve": "docker.io/charmedkubeflow/torchserve-kfs:0.9.0-5f4a278-20260901032407",
     "serving_runtimes__tritonserver": "nvcr.io/nvidia/tritonserver:23.05-py3",
     "serving_runtimes__xgbserver": "docker.io/charmedkubeflow/xgbserver:0.17.0-5f4a278-20260825092923"
 }
