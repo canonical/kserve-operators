@@ -5,7 +5,7 @@
 
 from lightkube.generic_resource import create_namespaced_resource
 
-APP_NAME = "keda"
+APP_NAME = "keda-controller"
 
 IMAGE_RESOURCES = {
     "keda-operator-image": "ghcr.io/kedacore/keda:2.17.3",

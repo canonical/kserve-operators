@@ -14,7 +14,7 @@ resources once KEDA is deployed.
 ## Deploy
 
 ```bash
-juju deploy keda --trust
+juju deploy keda-controller --trust
 ```
 
 `--trust` is required: the charm needs cluster-scoped permissions to install the
@@ -28,7 +28,7 @@ CRDs, RBAC, the APIService and the webhook configuration.
 | `log-level` | `info` | Operator log level (`debug`, `info`, `error`, or an integer > 0). |
 
 ```bash
-juju config keda watch-namespace=my-namespace
+juju config keda-controller watch-namespace=my-namespace
 ```
 
 ## Relations

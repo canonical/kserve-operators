@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc, lws-controller, llm-integrator, keda]
+        charm: [kserve-controller, kserve-llmisvc, lws-controller, llm-integrator, keda-controller]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc, lws-controller, llm-integrator, keda]
+        charm: [kserve-controller, kserve-llmisvc, lws-controller, llm-integrator, keda-controller]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -123,7 +123,7 @@ jobs:
             test-type: integration-s3
           - charm: lws-controller
             test-type: integration
-          - charm: keda
+          - charm: keda-controller
             test-type: integration
     runs-on: ubuntu-24.04
     steps:

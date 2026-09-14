@@ -1,6 +1,6 @@
-resource "juju_application" "keda" {
+resource "juju_application" "keda_controller" {
   charm {
-    name     = "keda"
+    name     = "keda-controller"
     base     = var.base
     channel  = var.channel
     revision = var.revision
