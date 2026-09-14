@@ -1,0 +1,17 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  watch-namespace:
+    type: string
+    default: ""
+    description: |
+      Namespace KEDA restricts its watch to. Empty (the default) means
+      cluster-wide: KEDA reconciles ScaledObjects in every namespace. Set to a
+      single namespace name to scope KEDA to that namespace only.
+  log-level:
+    type: string
+    default: info
+    description: |
+      Log level for the KEDA operator. One of: debug, info, error, or any
+      integer value greater than 0.

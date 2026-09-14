@@ -11,3 +11,6 @@ venv/
 coverage.xml
 docs/
 .mypy_cache/
+
+# Local clones of upstream repos, for reference only
+upstream/

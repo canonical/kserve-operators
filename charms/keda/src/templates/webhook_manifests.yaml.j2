@@ -1,0 +1,155 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: keda-admission
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ app_name }}-webhooks
+      namespace: {{ namespace }}
+      path: /validate-keda-sh-v1alpha1-scaledobject
+    caBundle: {{ cert }}
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: vscaledobject.kb.io
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - keda.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - scaledobjects
+  sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ app_name }}-webhooks
+      namespace: {{ namespace }}
+      path: /validate-keda-sh-v1alpha1-scaledjob
+    caBundle: {{ cert }}
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: vscaledjob.kb.io
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - keda.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - scaledjobs
+  sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ app_name }}-webhooks
+      namespace: {{ namespace }}
+      path: /validate-keda-sh-v1alpha1-triggerauthentication
+    caBundle: {{ cert }}
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: vstriggerauthentication.kb.io
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - keda.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - triggerauthentications
+  sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ app_name }}-webhooks
+      namespace: {{ namespace }}
+      path: /validate-keda-sh-v1alpha1-clustertriggerauthentication
+    caBundle: {{ cert }}
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: vsclustertriggerauthentication.kb.io
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - keda.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - clustertriggerauthentications
+  sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ app_name }}-webhooks
+      namespace: {{ namespace }}
+      path: /validate-eventing-keda-sh-v1alpha1-cloudeventsource
+    caBundle: {{ cert }}
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: vcloudeventsource.kb.io
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - eventing.keda.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - cloudeventsources
+  sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ app_name }}-webhooks
+      namespace: {{ namespace }}
+      path: /validate-eventing-keda-sh-v1alpha1-clustercloudeventsource
+    caBundle: {{ cert }}
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: vclustercloudeventsource.kb.io
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - eventing.keda.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - clustercloudeventsources
+  sideEffects: None
+  timeoutSeconds: 10
