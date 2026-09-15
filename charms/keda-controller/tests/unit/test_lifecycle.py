@@ -7,7 +7,7 @@ from base64 import b64encode
 
 from ops.model import MaintenanceStatus
 
-from charm import OPERATOR_CONTAINER
+from charm import ADAPTER_METRICS_PORT, OPERATOR_CONTAINER, WEBHOOK_METRICS_PORT
 
 from .helpers import get_layer
 
@@ -42,6 +42,9 @@ def test_context_carries_app_namespace_and_ca_bundle(ctx, base_state):
     # gen_certs is mocked to return ca="a"; the bundle is the quoted base64 of it.
     expected = f"'{b64encode(b'a').decode()}'"
     assert context["cert"] == expected
+    # Service metrics targetPorts must match the containers' reassigned ports.
+    assert context["adapter_metrics_port"] == ADAPTER_METRICS_PORT
+    assert context["webhook_metrics_port"] == WEBHOOK_METRICS_PORT
 
 
 def test_certs_pushed_to_all_containers(ctx, base_state):

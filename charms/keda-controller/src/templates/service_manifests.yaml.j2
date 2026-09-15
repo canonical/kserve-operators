@@ -12,7 +12,7 @@ spec:
   - name: metrics
     port: 8080
     protocol: TCP
-    targetPort: 8080
+    targetPort: {{ webhook_metrics_port }}
   selector:
     app.kubernetes.io/name: {{ app_name }}
 ---
@@ -28,6 +28,6 @@ spec:
     targetPort: 6443
   - name: metrics
     port: 8080
-    targetPort: 8080
+    targetPort: {{ adapter_metrics_port }}
   selector:
     app.kubernetes.io/name: {{ app_name }}

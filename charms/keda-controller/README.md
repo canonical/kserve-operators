@@ -36,6 +36,8 @@ juju config keda-controller watch-namespace=my-namespace
 | Endpoint | Interface | Role | Description |
 |----------|-----------|------|-------------|
 | `keda` | `keda-sync` | provides | Readiness contract: publishes `ready=true` once KEDA is reconciled, so dependents can gate on it. |
+| `metrics-endpoint` | `prometheus_scrape` | provides | Exposes the operator, metrics-apiserver and admission-webhooks Prometheus `/metrics` endpoints for scraping (e.g. by COS). |
+| `logging` | `loki_push_api` | requires | Optional. Forwards all three containers' logs to Loki (e.g. COS). |
 
 ## How it works
 

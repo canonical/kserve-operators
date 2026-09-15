@@ -27,6 +27,8 @@ from charmed_kubeflow_chisme.kubernetes import (
 )
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.pebble import update_layer
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import ApiError, Client
 from lightkube.core.exceptions import LoadResourceError
 from lightkube.generic_resource import load_in_cluster_generic_resources
@@ -67,6 +69,8 @@ WEBHOOKS_CONTAINER = "keda-admission-webhooks"
 # endpoint needs a distinct port to avoid "address already in use".
 OPERATOR_HEALTH_PORT = 8081
 WEBHOOK_HEALTH_PORT = 8085
+# Plain-HTTP Prometheus /metrics endpoints exposed by each KEDA component.
+OPERATOR_METRICS_PORT = 8080
 ADAPTER_METRICS_PORT = 8082
 WEBHOOK_METRICS_PORT = 8086
 METRICS_APISERVER_PORT = 6443
@@ -122,6 +126,29 @@ class KedaCharm(CharmBase):
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
 
+        # Expose each KEDA component's plain-HTTP /metrics endpoint to Prometheus.
+        self.unit.set_ports(OPERATOR_METRICS_PORT, ADAPTER_METRICS_PORT, WEBHOOK_METRICS_PORT)
+        self.metrics_endpoint = MetricsEndpointProvider(
+            self,
+            jobs=[
+                {
+                    "job_name": "keda-operator",
+                    "static_configs": [{"targets": [f"*:{OPERATOR_METRICS_PORT}"]}],
+                },
+                {
+                    "job_name": "keda-metrics-apiserver",
+                    "static_configs": [{"targets": [f"*:{ADAPTER_METRICS_PORT}"]}],
+                },
+                {
+                    "job_name": "keda-admission-webhooks",
+                    "static_configs": [{"targets": [f"*:{WEBHOOK_METRICS_PORT}"]}],
+                },
+            ],
+        )
+
+        # Forward all three containers' logs to Loki when related to COS.
+        self._logging = LogForwarder(charm=self)
+
     @property
     def _context(self):
         """Render context for the base resource templates."""
@@ -130,6 +157,10 @@ class KedaCharm(CharmBase):
             "app_name": self.app.name,
             "namespace": self.model.name,
             "cert": f"'{ca_context.decode('utf-8')}'",
+            # Service metrics targetPorts must match the ports the containers bind
+            # (reassigned to avoid collisions in the shared pod netns).
+            "adapter_metrics_port": ADAPTER_METRICS_PORT,
+            "webhook_metrics_port": WEBHOOK_METRICS_PORT,
         }
 
     @property

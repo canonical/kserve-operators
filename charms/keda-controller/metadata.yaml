@@ -32,3 +32,9 @@ resources:
 provides:
   keda:
     interface: keda-sync
+  metrics-endpoint:
+    interface: prometheus_scrape
+requires:
+  logging:
+    interface: loki_push_api
+    optional: true
