@@ -9,6 +9,7 @@ throwaway workloads and scalers the tests apply.
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from lightkube.generic_resource import create_namespaced_resource
@@ -40,14 +41,23 @@ ScaledObject = create_namespaced_resource("keda.sh", "v1alpha1", "ScaledObject",
 ScaledJob = create_namespaced_resource("keda.sh", "v1alpha1", "ScaledJob", "scaledjobs")
 
 
-def _all_day_cron_trigger(desired_replicas: int) -> dict:
-    """A cron trigger whose window spans the whole day so it is always active."""
+def _active_cron_trigger(desired_replicas: int) -> dict:
+    """A cron trigger whose active window is anchored around the current time.
+
+    A fixed 00:00-23:59 window has a one-minute inactive gap at midnight UTC
+    (KEDA deactivates at the end event until the next start), which any test
+    crossing that minute could hit. Anchoring the window to "now" keeps that gap
+    at least an hour away from a minutes-long test.
+    """
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(hours=1)
+    end = now + timedelta(hours=6)
     return {
         "type": "cron",
         "metadata": {
             "timezone": "Etc/UTC",
-            "start": "0 0 * * *",
-            "end": "59 23 * * *",
+            "start": f"{start.minute} {start.hour} * * *",
+            "end": f"{end.minute} {end.hour} * * *",
             "desiredReplicas": str(desired_replicas),
         },
     }
@@ -77,7 +87,7 @@ def cron_scaledobject(name: str, target: str, namespace: str, max_replicas: int)
             "minReplicaCount": 1,
             "maxReplicaCount": max_replicas,
             "pollingInterval": 5,
-            "triggers": [_all_day_cron_trigger(max_replicas)],
+            "triggers": [_active_cron_trigger(max_replicas)],
         },
     )
 
@@ -97,7 +107,7 @@ def cron_scaledjob(name: str, namespace: str, max_replicas: int):
             },
             "maxReplicaCount": max_replicas,
             "pollingInterval": 5,
-            "triggers": [_all_day_cron_trigger(max_replicas)],
+            "triggers": [_active_cron_trigger(max_replicas)],
         },
     )
 
