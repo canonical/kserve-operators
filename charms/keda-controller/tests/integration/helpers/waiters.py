@@ -1,7 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Polling helpers for the keda charm integration tests."""
+"""Polling and assertion helpers for the keda charm integration tests."""
 
 import logging
 
@@ -11,6 +11,8 @@ from lightkube.core.exceptions import ApiError
 from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from lightkube.resources.apiregistration_v1 import APIService
 from lightkube.resources.apps_v1 import Deployment
+from lightkube.resources.autoscaling_v2 import HorizontalPodAutoscaler
+from lightkube.resources.batch_v1 import Job
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,32 @@ def wait_for_deployment_replicas(
     deployment = client.get(Deployment, name=name, namespace=namespace)
     ready = (deployment.status.readyReplicas or 0) if deployment.status else 0
     assert ready == replicas, f"Deployment {name} has {ready}/{replicas} ready replicas"
+
+
+@RETRY
+def wait_for_hpa_exists(client: lightkube.Client, name: str, namespace: str) -> None:
+    """Block until the named HorizontalPodAutoscaler exists (raises until found)."""
+    client.get(HorizontalPodAutoscaler, name=name, namespace=namespace)
+
+
+def hpa_exists(client: lightkube.Client, name: str, namespace: str) -> bool:
+    """Return whether the named HorizontalPodAutoscaler currently exists."""
+    try:
+        client.get(HorizontalPodAutoscaler, name=name, namespace=namespace)
+    except ApiError as exc:
+        if exc.status.code == 404:
+            return False
+        raise
+    return True
+
+
+@RETRY
+def wait_for_jobs(
+    client: lightkube.Client, namespace: str, labels: dict, min_count: int = 1
+) -> None:
+    """Block until at least ``min_count`` Jobs matching the label selector exist."""
+    jobs = list(client.list(Job, namespace=namespace, labels=labels))
+    assert len(jobs) >= min_count, f"expected >= {min_count} jobs, found {len(jobs)}"
 
 
 @RETRY

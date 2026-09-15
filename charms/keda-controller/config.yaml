@@ -6,9 +6,10 @@ options:
     type: string
     default: ""
     description: |
-      Namespace KEDA restricts its watch to. Empty (the default) means
+      Namespaces KEDA restricts its watch to. Empty (the default) means
       cluster-wide: KEDA reconciles ScaledObjects in every namespace. Set to a
-      single namespace name to scope KEDA to that namespace only.
+      single namespace name, or a comma-separated list of namespaces, to scope
+      KEDA to those namespaces only.
   log-level:
     type: string
     default: info
