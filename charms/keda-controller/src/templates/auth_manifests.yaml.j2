@@ -212,9 +212,10 @@ roleRef:
   kind: ClusterRole
   name: keda-external-metrics-reader
 subjects:
+# The Kubernetes HPA controller (not KEDA) queries external.metrics.k8s.io.
 - kind: ServiceAccount
-  name: {{ app_name }}
-  namespace: {{ namespace }}
+  name: horizontal-pod-autoscaler
+  namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
