@@ -1,3 +1,4 @@
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/webhooks/service.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,6 +17,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ app_name }}
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/metrics-server/service.yaml
 apiVersion: v1
 kind: Service
 metadata:

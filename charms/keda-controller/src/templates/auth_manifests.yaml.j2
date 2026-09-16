@@ -1,3 +1,4 @@
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/rbac/role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -29,6 +30,7 @@ rules:
   - update
   - watch
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/metrics-server/role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -41,6 +43,7 @@ rules:
   verbs:
   - '*'
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/rbac/role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -175,6 +178,7 @@ rules:
   - update
   - watch
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/rbac/role_binding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -189,6 +193,7 @@ subjects:
   name: {{ app_name }}
   namespace: {{ namespace }}
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/metrics-server/role_binding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -203,6 +208,7 @@ subjects:
   name: {{ app_name }}
   namespace: {{ namespace }}
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/metrics-server/role_binding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -217,6 +223,7 @@ subjects:
   name: horizontal-pod-autoscaler
   namespace: kube-system
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/rbac/role_binding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -230,6 +237,7 @@ subjects:
   name: {{ app_name }}
   namespace: {{ namespace }}
 ---
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/metrics-server/role_binding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
