@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc, lws-controller, llm-integrator]
+        charm: [kserve-controller, kserve-llmisvc, llm-integrator]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc, lws-controller, llm-integrator]
+        charm: [kserve-controller, kserve-llmisvc, llm-integrator]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -121,8 +121,6 @@ jobs:
             test-type: integration-ambient
           - charm: kserve-controller
             test-type: integration-s3
-          - charm: lws-controller
-            test-type: integration
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space
@@ -169,10 +167,6 @@ jobs:
       - name: Get inference servers
         run: kubectl get inferenceservices -A
         if: failure() && matrix.charm == 'kserve-controller'
-
-      - name: Get LeaderWorkerSets
-        run: kubectl get leaderworkersets -A
-        if: failure() && matrix.charm == 'lws-controller'
 
       - name: Get events
         run: kubectl get events -A

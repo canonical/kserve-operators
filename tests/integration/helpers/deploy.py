@@ -17,9 +17,10 @@ from .charms_dependencies import (
     ENVOY_AI_CONTROLLER,
     ENVOY_CONTROLLER,
     ENVOY_INGRESS,
+    LWS_CONTROLLER,
     SELF_SIGNED_CERTIFICATES,
 )
-from .constants import CONTROLLER_APP_NAME, LLMISVC_APP_NAME, LWS_APP_NAME
+from .constants import CONTROLLER_APP_NAME, LLMISVC_APP_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,8 @@ def deploy_serving_stack(juju: jubilant.Juju, charms_path: str) -> None:
     """Deploy and relate the Envoy gateway + KServe serving charms, waiting for active."""
     controller_charm = resolve_charm_path(charms_path=charms_path, charm_name=CONTROLLER_APP_NAME)
     llmisvc_charm = resolve_charm_path(charms_path=charms_path, charm_name=LLMISVC_APP_NAME)
-    lws_charm = resolve_charm_path(charms_path=charms_path, charm_name=LWS_APP_NAME)
     controller_resources = resolve_charm_resources(charm_name=CONTROLLER_APP_NAME)
     llmisvc_resources = resolve_charm_resources(charm_name=LLMISVC_APP_NAME)
-    lws_resources = resolve_charm_resources(charm_name=LWS_APP_NAME)
 
     logger.info("Deploying Envoy gateway charm stack")
     for dep in (ENVOY_CONTROLLER, ENVOY_AI_CONTROLLER, ENVOY_INGRESS, SELF_SIGNED_CERTIFICATES):
@@ -41,8 +40,8 @@ def deploy_serving_stack(juju: jubilant.Juju, charms_path: str) -> None:
     juju.integrate(ENVOY_AI_CONTROLLER.charm, SELF_SIGNED_CERTIFICATES.charm)
     juju.integrate(ENVOY_CONTROLLER.charm, ENVOY_AI_CONTROLLER.charm)
 
-    logger.info("Deploying lws-controller charm")
-    juju.deploy(charm=str(lws_charm), resources=lws_resources, trust=True)
+    logger.info("Deploying lws-controller charm from Charmhub")
+    juju.deploy(LWS_CONTROLLER.charm, channel=LWS_CONTROLLER.channel, trust=LWS_CONTROLLER.trust)
 
     logger.info("Deploying kserve-controller charm")
     juju.deploy(
@@ -69,7 +68,7 @@ def deploy_serving_stack(juju: jubilant.Juju, charms_path: str) -> None:
     juju.integrate(
         f"{CONTROLLER_APP_NAME}:kserve-controller", f"{LLMISVC_APP_NAME}:kserve-controller"
     )
-    juju.integrate(f"{LWS_APP_NAME}:lws-controller", f"{LLMISVC_APP_NAME}:lws-controller")
+    juju.integrate(f"{LWS_CONTROLLER.charm}:lws-controller", f"{LLMISVC_APP_NAME}:lws-controller")
 
     logger.info("Waiting for all charms to be active")
     juju.wait(jubilant.all_active, successes=1)

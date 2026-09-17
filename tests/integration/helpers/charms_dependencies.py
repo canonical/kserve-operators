@@ -30,3 +30,7 @@ ENVOY_CONTROLLER = CharmDependency("envoy-controller-k8s", "latest/edge", trust=
 ENVOY_AI_CONTROLLER = CharmDependency("envoy-ai-controller-k8s", "latest/edge", trust=True)
 ENVOY_INGRESS = CharmDependency("envoy-ingress-k8s", "latest/edge", trust=True)
 SELF_SIGNED_CERTIFICATES = CharmDependency("self-signed-certificates", "latest/stable")
+
+# lws-controller manages the LeaderWorkerSet CRD and controller that kserve-llmisvc
+# depends on for multi-node serving.
+LWS_CONTROLLER = CharmDependency("lws-controller", "latest/edge", trust=True)
