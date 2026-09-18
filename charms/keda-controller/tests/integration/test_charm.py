@@ -4,13 +4,15 @@
 
 """Integration tests for the keda charm.
 
-Covers the full surface of the charmed KEDA: it deploys and becomes active,
-installs the KEDA CRDs and registers the ``external.metrics.k8s.io`` APIService
-(the aggregation-layer TLS through the charmed metrics-apiserver), that
-ScaledObjects/ScaledJobs actually drive workloads, that the admission webhook
-rejects invalid resources, that the ``watch-namespace`` config scopes
-reconciliation, and that removing the application cleans up the cluster-scoped
-resources it created.
+Covers the full surface of the charmed KEDA:
+
+- deploys and becomes active;
+- installs the KEDA CRDs and registers the ``external.metrics.k8s.io`` APIService
+  (the aggregation-layer TLS through the charmed metrics-apiserver);
+- ScaledObjects/ScaledJobs drive workload replica counts (and the managed HPA);
+- the admission webhook rejects invalid resources;
+- the ``watch-namespace`` config scopes reconciliation;
+- removing the application cleans up the cluster-scoped resources it created.
 """
 
 import logging
@@ -47,6 +49,8 @@ from tests.integration.helpers.constants import (
     SMOKE_SCALEDOBJECT,
     UNWATCHED_NAMESPACE,
     UNWATCHED_SCALEDOBJECT,
+    UNWATCHED_STABILITY_CHECKS,
+    UNWATCHED_STABILITY_INTERVAL_SECONDS,
     UNWATCHED_WORKLOAD,
     WATCH_NS_MAX_REPLICAS,
     WATCHED_SCALEDOBJECT,
@@ -211,7 +215,7 @@ def test_metrics_api_scaler_up_down_zero(juju: jubilant.Juju, lightkube_client: 
             lightkube_client, METRICS_API_DEPLOYMENT, namespace, METRICS_API_MAX_REPLICAS
         )
 
-        # lower the metric -> scale down (20 / target 10 = 2 replicas).
+        # lower the metric -> scale down: 20 / METRICS_API_TARGET_VALUE (10) = 2 replicas.
         lightkube_client.apply(metrics_api_scaledobject(namespace, 20), namespace=namespace)
         wait_for_deployment_replicas(lightkube_client, METRICS_API_DEPLOYMENT, namespace, 2)
 
@@ -280,7 +284,7 @@ def test_watch_namespace_scopes_reconciliation(
 
         # The third, unwatched namespace stays ignored: no HPA and no scaling.
         unwatched_hpa = f"{HPA_NAME_PREFIX}{UNWATCHED_SCALEDOBJECT}"
-        for _ in range(4):
+        for _ in range(UNWATCHED_STABILITY_CHECKS):
             assert not hpa_exists(
                 lightkube_client, unwatched_hpa, UNWATCHED_NAMESPACE
             ), "KEDA created an HPA for a ScaledObject outside its watch namespaces"
@@ -289,7 +293,7 @@ def test_watch_namespace_scopes_reconciliation(
             )
             ready = (deployment.status.readyReplicas or 0) if deployment.status else 0
             assert ready <= 1, f"unwatched workload scaled to {ready} replicas"
-            time.sleep(5)
+            time.sleep(UNWATCHED_STABILITY_INTERVAL_SECONDS)
     finally:
         # first_ns is the model namespace and cannot be deleted; clean its resources.
         lightkube_client.delete(ScaledObject, name=WATCHED_SCALEDOBJECT, namespace=first_ns)

@@ -125,6 +125,8 @@ jobs:
             test-type: integration
           - charm: keda-controller
             test-type: integration
+          - charm: keda-controller
+            test-type: integration-observability
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space

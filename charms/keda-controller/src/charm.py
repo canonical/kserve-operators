@@ -38,6 +38,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.model import (
     ActiveStatus,
+    BlockedStatus,
     Container,
     MaintenanceStatus,
 )
@@ -78,6 +79,9 @@ METRICS_APISERVER_PORT = 6443
 METRICS_SERVICE_ADDR = "127.0.0.1:9666"
 
 KRH_SCOPE_BASE = "keda-base"
+
+# Accepted --zap-log-level values: these names, or any positive integer (KEDA/zap).
+VALID_LOG_LEVELS = ("debug", "info", "error")
 
 # Bounds for waiting on async resource deletion (CRD, APIService, webhooks, RBAC).
 KEDA_DELETION_TIMEOUT = 300
@@ -165,7 +169,14 @@ class KedaCharm(CharmBase):
 
     @property
     def _log_level(self) -> str:
-        return str(self.model.config.get("log-level", "info")).strip() or "info"
+        level = str(self.model.config.get("log-level", "info")).strip() or "info"
+        if level in VALID_LOG_LEVELS or (level.isdigit() and int(level) > 0):
+            return level
+        raise ErrorWithStatus(
+            f"Invalid log-level '{level}': expected one of "
+            f"{', '.join(VALID_LOG_LEVELS)} or a positive integer",
+            BlockedStatus,
+        )
 
     @property
     def _watch_namespace(self) -> str:

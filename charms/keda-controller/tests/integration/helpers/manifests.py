@@ -42,12 +42,10 @@ ScaledJob = create_namespaced_resource("keda.sh", "v1alpha1", "ScaledJob", "scal
 
 
 def _active_cron_trigger(desired_replicas: int) -> dict:
-    """A cron trigger whose active window is anchored around the current time.
+    """A cron trigger active from an hour ago to six hours ahead.
 
-    A fixed 00:00-23:59 window has a one-minute inactive gap at midnight UTC
-    (KEDA deactivates at the end event until the next start), which any test
-    crossing that minute could hit. Anchoring the window to "now" keeps that gap
-    at least an hour away from a minutes-long test.
+    The window is anchored to the current time so its brief daily inactive gap
+    never falls within a minutes-long test.
     """
     now = datetime.now(timezone.utc)
     start = now - timedelta(hours=1)
@@ -79,7 +77,7 @@ def pause_deployment(name: str, namespace: str, replicas: int = 1) -> Deployment
 
 
 def cron_scaledobject(name: str, target: str, namespace: str, max_replicas: int):
-    """A ScaledObject whose cron trigger is active all day (always desires max)."""
+    """A ScaledObject whose cron trigger keeps the target at max for the test."""
     return ScaledObject(
         metadata=ObjectMeta(name=name, namespace=namespace),
         spec={

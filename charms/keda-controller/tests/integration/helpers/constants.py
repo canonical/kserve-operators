@@ -3,12 +3,20 @@
 
 """Shared constants for the keda charm integration tests."""
 
-APP_NAME = "keda-controller"
+from pathlib import Path
+
+import yaml
+
+# Derive the app name and OCI image resources from the charm metadata so they
+# never drift from the packaging.
+METADATA = yaml.safe_load((Path(__file__).resolve().parents[3] / "metadata.yaml").read_text())
+
+APP_NAME = METADATA["name"]
 
 IMAGE_RESOURCES = {
-    "keda-operator-image": "ghcr.io/kedacore/keda:2.17.3",
-    "keda-metrics-apiserver-image": "ghcr.io/kedacore/keda-metrics-apiserver:2.17.3",
-    "keda-admission-webhooks-image": "ghcr.io/kedacore/keda-admission-webhooks:2.17.3",
+    name: data["upstream-source"]
+    for name, data in METADATA.get("resources", {}).items()
+    if data.get("type") == "oci-image"
 }
 
 # CRDs the charm installs.
@@ -52,6 +60,10 @@ WATCHED_SCALEDOBJECT = "keda-itest-watched"
 UNWATCHED_WORKLOAD = "keda-itest-unwatched-wl"
 UNWATCHED_SCALEDOBJECT = "keda-itest-unwatched-so"
 WATCH_NS_MAX_REPLICAS = 2
+# Poll the unwatched workload this many times, this far apart, to confirm KEDA
+# never scales it.
+UNWATCHED_STABILITY_CHECKS = 4
+UNWATCHED_STABILITY_INTERVAL_SECONDS = 5
 
 # metrics-api scaler test: an in-cluster agnhost server echoes a JSON metric that
 # a metrics-api ScaledObject reads to drive a workload up, down and to zero. The
@@ -64,3 +76,17 @@ METRICS_API_DEPLOYMENT = "keda-itest-metricsapi"
 METRICS_API_SCALEDOBJECT = "keda-itest-metricsapi"
 METRICS_API_MAX_REPLICAS = 3
 METRICS_API_TARGET_VALUE = "10"
+
+# Observability integration test: standalone Prometheus and Loki exercise the
+# metrics-endpoint and logging relations without a full COS stack.
+PROMETHEUS_CHARM = "prometheus-k8s"
+PROMETHEUS_APP = "prometheus"
+PROMETHEUS_CHANNEL = "1/stable"
+PROMETHEUS_PORT = 9090
+LOKI_CHARM = "loki-k8s"
+LOKI_APP = "loki"
+LOKI_CHANNEL = "1/stable"
+LOKI_PORT = 3100
+# The three plain-HTTP /metrics ports Prometheus should be scraping (operator,
+# metrics-apiserver, admission-webhooks).
+EXPECTED_METRICS_PORTS = (8080, 8082, 8086)

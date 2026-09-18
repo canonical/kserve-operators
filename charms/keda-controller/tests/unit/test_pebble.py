@@ -5,6 +5,8 @@
 
 from dataclasses import replace
 
+from ops.model import BlockedStatus
+
 from charm import (
     ADAPTER_METRICS_PORT,
     METRICS_APISERVER_CONTAINER,
@@ -84,6 +86,21 @@ def test_log_level_config_propagates(ctx, base_state):
     out = ctx.run(ctx.on.config_changed(), state_in)
     svc = get_layer(out, OPERATOR_CONTAINER).services[OPERATOR_CONTAINER]
     assert "--zap-log-level=debug" in svc.command
+
+
+def test_log_level_accepts_positive_integer(ctx, base_state):
+    """KEDA/zap also accepts a positive integer verbosity level."""
+    state_in = replace(base_state, config={"log-level": "2"})
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    svc = get_layer(out, OPERATOR_CONTAINER).services[OPERATOR_CONTAINER]
+    assert "--zap-log-level=2" in svc.command
+
+
+def test_invalid_log_level_blocks(ctx, base_state):
+    """An unrecognised log-level must block the unit instead of crashing the workload."""
+    state_in = replace(base_state, config={"log-level": "bogus"})
+    out = ctx.run(ctx.on.config_changed(), state_in)
+    assert isinstance(out.unit_status, BlockedStatus)
 
 
 def test_watch_namespace_config_propagates_to_all_containers(ctx, base_state):
