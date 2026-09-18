@@ -163,6 +163,30 @@ def _workload_pod_name(isvc_name: str, namespace: str = NAMESPACE_DEFAULT) -> st
     raise AssertionError(f"No running workload pod found for LLMInferenceService '{isvc_name}'")
 
 
+def workload_environment_value(
+    isvc_name: str,
+    environment_name: str,
+    namespace: str = NAMESPACE_DEFAULT,
+    container: str = "main",
+) -> str | None:
+    """Return a named environment value from a running vLLM workload container."""
+    from lightkube.resources.core_v1 import Pod
+
+    pod_name = _workload_pod_name(isvc_name, namespace)
+    pod = get_client().get(Pod, name=pod_name, namespace=namespace)
+    containers = pod.spec.containers or []
+    workload_container = next(
+        (candidate for candidate in containers if candidate.name == container), None
+    )
+    if workload_container is None:
+        raise AssertionError(f"Container '{container}' not found in workload pod '{pod_name}'")
+
+    for environment in workload_container.env or []:
+        if environment.name == environment_name:
+            return environment.value
+    return None
+
+
 def generate_inference_traffic(
     isvc_name: str,
     model_name: str,
