@@ -24,12 +24,12 @@ from .helpers.charms_dependencies import (
     ENVOY_AI_CONTROLLER,
     ENVOY_CONTROLLER,
     ENVOY_INGRESS,
+    LWS_CONTROLLER,
     SELF_SIGNED_CERTIFICATES,
 )
 from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
 from .helpers.constants import LLMISVC_APP_NAME as LLMISVC_APP
 from .helpers.constants import LLMISVC_GPU_MODEL_NAME
-from .helpers.constants import LWS_APP_NAME as LWS_APP
 from .helpers.deploy import deploy_serving_stack
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 
@@ -44,6 +44,7 @@ ENVOY_CONTROLLER_APP = ENVOY_CONTROLLER.charm
 ENVOY_AI_CONTROLLER_APP = ENVOY_AI_CONTROLLER.charm
 ENVOY_INGRESS_APP = ENVOY_INGRESS.charm
 CERTIFICATES_APP = SELF_SIGNED_CERTIFICATES.charm
+LWS_APP = LWS_CONTROLLER.charm
 GATEWAY_NAME = ENVOY_INGRESS_APP
 # The llm-integrator charm renders a single LLMInferenceService from config. It
 # supports hf:// (public or gated) and s3:// (credentials supplied via an

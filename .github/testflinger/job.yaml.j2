@@ -94,8 +94,6 @@ test_data:
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-controller && ls *.charm'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-llmisvc && charmcraft pack'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/kserve-llmisvc && ls *.charm'
-    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/lws-controller && charmcraft pack'
-    ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/lws-controller && ls *.charm'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/llm-integrator && charmcraft pack'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators/charms/llm-integrator && ls *.charm'
     echo "--------------------------------------------------------------------------------------------------------------------"
