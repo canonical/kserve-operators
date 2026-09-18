@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc, llm-integrator]
+        charm: [kserve-controller, kserve-llmisvc, llm-integrator, keda-controller]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm: [kserve-controller, kserve-llmisvc, llm-integrator]
+        charm: [kserve-controller, kserve-llmisvc, llm-integrator, keda-controller]
     steps:
       - uses: actions/checkout@v4
       - run: pipx install tox
@@ -121,6 +121,10 @@ jobs:
             test-type: integration-ambient
           - charm: kserve-controller
             test-type: integration-s3
+          - charm: keda-controller
+            test-type: integration
+          - charm: keda-controller
+            test-type: integration-observability
     runs-on: ubuntu-24.04
     steps:
       - name: Maximise GH runner space

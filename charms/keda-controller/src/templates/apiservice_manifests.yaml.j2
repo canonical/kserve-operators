@@ -1,0 +1,15 @@
+# Source: https://github.com/kedacore/keda/blob/v2.17.3/config/metrics-server/api_service.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.external.metrics.k8s.io
+spec:
+  group: external.metrics.k8s.io
+  groupPriorityMinimum: 100
+  service:
+    name: {{ app_name }}-metrics-apiserver
+    namespace: {{ namespace }}
+    port: 443
+  version: v1beta1
+  versionPriority: 100
+  caBundle: {{ cert }}

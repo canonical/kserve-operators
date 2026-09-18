@@ -11,6 +11,7 @@ test_data:
     VAR_AWS_DEFAULT_REGION: secret/region
     VAR_AWS_ACCESS_KEY_ID: secret/aws_access_key
     VAR_AWS_SECRET_ACCESS_KEY: secret/aws_secret_key
+    VAR_HF_TOKEN: secret/hf_token
   test_cmds: |
     echo "--------------------------------------------------------------------------------------------------------------------"
     echo "Running test commands on the device"
@@ -21,6 +22,7 @@ test_data:
     echo "AWS_DEFAULT_REGION=$VAR_AWS_DEFAULT_REGION" > sshenv
     echo "AWS_ACCESS_KEY_ID=$VAR_AWS_ACCESS_KEY_ID" >> sshenv
     echo "AWS_SECRET_ACCESS_KEY=$VAR_AWS_SECRET_ACCESS_KEY" >> sshenv
+    echo "HF_TOKEN=$VAR_HF_TOKEN" >> sshenv
     head -n 1 sshenv
     scp sshenv ubuntu@$DEVICE_IP:~/.ssh/environment
     echo "--------------------------------------------------------------------------------------------------------------------"

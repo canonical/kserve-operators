@@ -1,0 +1,40 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: keda-controller
+summary: |
+  KEDA (Kubernetes Event-driven Autoscaling) operator charm.
+description: |
+  Packages upstream KEDA: the operator, the external-metrics API server and the
+  admission webhooks, and installs the KEDA CRDs and RBAC. Provides a readiness
+  relation so dependent charms can wait for KEDA to be reconciled before creating
+  ScaledObjects.
+containers:
+  keda-operator:
+    resource: keda-operator-image
+  keda-metrics-apiserver:
+    resource: keda-metrics-apiserver-image
+  keda-admission-webhooks:
+    resource: keda-admission-webhooks-image
+resources:
+  keda-operator-image:
+    type: oci-image
+    description: OCI image for the KEDA operator.
+    upstream-source: ghcr.io/kedacore/keda:2.17.3
+  keda-metrics-apiserver-image:
+    type: oci-image
+    description: OCI image for the KEDA external-metrics API server.
+    upstream-source: ghcr.io/kedacore/keda-metrics-apiserver:2.17.3
+  keda-admission-webhooks-image:
+    type: oci-image
+    description: OCI image for the KEDA admission webhooks.
+    upstream-source: ghcr.io/kedacore/keda-admission-webhooks:2.17.3
+provides:
+  keda:
+    interface: keda-sync
+  metrics-endpoint:
+    interface: prometheus_scrape
+requires:
+  logging:
+    interface: loki_push_api
+    optional: true
