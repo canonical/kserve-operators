@@ -10,6 +10,8 @@ NAMESPACE_DEFAULT = "default"
 # kserve-llmisvc workload and example defaults.
 LLMISVC_APP_NAME = "kserve-llmisvc"
 CONTROLLER_APP_NAME = "kserve-controller"
+# lws-controller is deployed from Charmhub as a stack dependency (app == charm name).
+LWS_APP_NAME = "lws-controller"
 LLMISVC_NAME = "test-llm-scheduler-small"
 LLMISVC_MODEL_NAME = "EleutherAI/pythia-70m"
 LLMISVC_GPU_NAME = "test-llm-scheduler-small-gpu"
