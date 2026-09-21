@@ -39,6 +39,7 @@ from .helpers.keda_ops import (
     apply_prometheus_scaledobject,
     assert_crd_absent,
     assert_deployment_replicas,
+    assert_deployment_scaled_to,
     assert_external_metrics_apiservice_available,
     delete_scaledobject,
     sustained_workload_load,
@@ -191,7 +192,10 @@ def test_keda_scales_llmisvc_on_prometheus_metric(juju: jubilant.Juju):
 
     logger.info("Driving sustained load; KEDA should scale the workload up to 2 replicas")
     with sustained_workload_load(LLM_NAME, LLM_MODEL_NAME, NAMESPACE_DEFAULT):
-        assert_deployment_replicas(LLM_DEPLOYMENT, NAMESPACE_DEFAULT, 2)
+        # Assert on KEDA's desired replica count (the HPA reacting to the metric),
+        # not ready replicas: a second 3Gi vLLM pod may not schedule on a
+        # resource-constrained CI runner, which is not what this test verifies.
+        assert_deployment_scaled_to(LLM_DEPLOYMENT, NAMESPACE_DEFAULT, 2)
 
     logger.info("Cleaning up the ScaledObject and LLMInferenceService")
     delete_scaledobject(LLM_NAME)

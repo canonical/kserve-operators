@@ -152,6 +152,23 @@ def assert_deployment_replicas(name: str, namespace: str, replicas: int) -> None
             assert ready == replicas, f"Deployment {name} has {ready}/{replicas} ready replicas"
 
 
+def assert_deployment_scaled_to(name: str, namespace: str, replicas: int) -> None:
+    """Block until KEDA drives the Deployment's desired replica count to ``replicas``.
+
+    Asserts on ``.spec.replicas`` (the value KEDA's generated HPA sets) rather than
+    ready replicas, so the check reflects KEDA's scaling decision and does not hinge
+    on a second heavy vLLM pod scheduling and becoming Ready on a constrained runner.
+    """
+    client = get_client()
+    for attempt in RETRY_FOR_TEN_MINUTES:
+        with attempt:
+            deployment = client.get(Deployment, name=name, namespace=namespace)
+            desired = (deployment.spec.replicas or 1) if deployment.spec else 1
+            assert (
+                desired >= replicas
+            ), f"Deployment {name} desired replicas {desired}, want >= {replicas}"
+
+
 def assert_external_metrics_apiservice_available() -> None:
     """Block until KEDA's external-metrics APIService reports Available=True."""
     client = get_client()
