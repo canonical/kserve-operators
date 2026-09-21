@@ -199,17 +199,31 @@ def test_keda_scales_llmisvc_on_prometheus_metric(juju: jubilant.Juju):
 
 
 def test_remove_leaves_no_charm_resources(juju: jubilant.Juju):
-    logger.info("Removing keda, prometheus and the serving stack")
-    for app in (KEDA_APP, PROMETHEUS_APP, LLMISVC_APP, CONTROLLER_APP, LWS_APP):
+    # Tear down in dependency order. kserve-llmisvc's remove hook deletes the
+    # serving CRDs and waits for them to terminate; a residual CR only unblocks
+    # once kserve-controller clears its finalizer, so kserve-llmisvc must be
+    # fully removed while the controller is still up. Under CI's
+    # automatically-retry-hooks=false a single stuck remove hook never recovers.
+    logger.info("Removing keda and prometheus first")
+    for app in (KEDA_APP, PROMETHEUS_APP):
         if app in juju.status().apps:
             juju.remove_application(app)
-    for envoy_app in ENVOY_APPS:
-        juju.remove_application(envoy_app)
-
     juju.wait(
-        lambda status: all(
-            app not in status.apps for app in (KEDA_APP, CONTROLLER_APP, LLMISVC_APP, LWS_APP)
-        ),
+        lambda status: KEDA_APP not in status.apps and PROMETHEUS_APP not in status.apps,
+        successes=1,
+    )
+
+    logger.info("Removing kserve-llmisvc while kserve-controller is still present")
+    if LLMISVC_APP in juju.status().apps:
+        juju.remove_application(LLMISVC_APP)
+    juju.wait(lambda status: LLMISVC_APP not in status.apps, successes=1)
+
+    logger.info("Removing kserve-controller, lws-controller and the envoy stack")
+    for app in (CONTROLLER_APP, LWS_APP, *ENVOY_APPS):
+        if app in juju.status().apps:
+            juju.remove_application(app)
+    juju.wait(
+        lambda status: CONTROLLER_APP not in status.apps and LWS_APP not in status.apps,
         successes=1,
     )
 
