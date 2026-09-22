@@ -232,5 +232,5 @@ def test_remove_leaves_no_charm_resources(juju: jubilant.Juju):
     )
 
     logger.info("Verifying charm-owned resources and KEDA CRDs are gone")
-    assert_no_charm_resources_left()
+    assert_no_charm_resources_left(juju.model)
     assert_crd_absent(KEDA_SCALEDOBJECTS_CRD)

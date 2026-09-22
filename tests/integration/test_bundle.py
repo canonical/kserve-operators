@@ -392,6 +392,6 @@ def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
     )
 
     logger.info("Verifying charm-owned resources are fully removed from cluster")
-    assert_no_charm_resources_left()
+    assert_no_charm_resources_left(juju.model)
 
     logger.info("Bundle cleanup test passed: no charm-owned resources left")

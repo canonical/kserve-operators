@@ -233,44 +233,25 @@ jobs:
           # HF token for the gated hf:// model in the llm-integrator test.
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e bundle-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/
+          tox -e bundle-integration -- --charms-path=${{ github.workspace }}/charms/
 
-      - name: Get all
-        run: kubectl get all -A
+      - name: Collect diagnostics
         if: failure()
+        run: |
+          mkdir -p debug
+          juju status --relations > debug/juju-status.txt 2>&1 || true
+          kubectl get all -A > debug/kubectl-get-all.txt 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > debug/kubectl-events.txt 2>&1 || true
+          kubectl describe deployments -A > debug/describe-deployments.txt 2>&1 || true
+          kubectl describe replicasets -A > debug/describe-replicasets.txt 2>&1 || true
 
-      - name: Get events
-        run: kubectl get events -A
+      - name: Upload diagnostics
         if: failure()
-
-      - name: Describe deployments
-        run: kubectl describe deployments -A
-        if: failure()
-
-      - name: Describe replicasets
-        run: kubectl describe replicasets -A
-        if: failure()
-
-      - name: Get juju status
-        run: juju status --relations
-        if: always()
-
-      - name: Get kserve-controller workload logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-controller -c kserve-controller
-        if: failure()
-
-      - name: Get kserve-controller charm logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-controller -c charm
-        if: failure()
-
-      - name: Get kserve-llmisvc workload logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c llmisvc-controller
-        if: failure()
-
-      - name: Get kserve-llmisvc charm logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c charm
-        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{ github.job }}
+          path: debug/
+          if-no-files-found: ignore
 
       - name: Collect charm debug artifacts
         uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
@@ -314,40 +295,25 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: eu-central-1
         run: |
-          juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e bundle-keda-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/
+          tox -e bundle-keda-integration -- --charms-path=${{ github.workspace }}/charms/
 
-      - name: Get all
-        run: kubectl get all -A
+      - name: Collect diagnostics
         if: failure()
+        run: |
+          mkdir -p debug
+          juju status --relations > debug/juju-status.txt 2>&1 || true
+          kubectl get all -A > debug/kubectl-get-all.txt 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > debug/kubectl-events.txt 2>&1 || true
+          kubectl describe deployments -A > debug/describe-deployments.txt 2>&1 || true
+          kubectl describe replicasets -A > debug/describe-replicasets.txt 2>&1 || true
 
-      - name: Get events
-        run: kubectl get events -A
+      - name: Upload diagnostics
         if: failure()
-
-      - name: Describe deployments
-        run: kubectl describe deployments -A
-        if: failure()
-
-      - name: Describe replicasets
-        run: kubectl describe replicasets -A
-        if: failure()
-
-      - name: Get juju status
-        run: juju status --relations
-        if: always()
-
-      - name: Get keda-controller logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=keda-controller --all-containers
-        if: failure()
-
-      - name: Get kserve-llmisvc workload logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c llmisvc-controller
-        if: failure()
-
-      - name: Get kserve-llmisvc charm logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c charm
-        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{ github.job }}
+          path: debug/
+          if-no-files-found: ignore
 
       - name: Collect charm debug artifacts
         uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
@@ -391,36 +357,25 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: eu-central-1
         run: |
-          juju add-model kubeflow --config automatically-retry-hooks=false
-          tox -e cos-integration -- --model kubeflow --charms-path=${{ github.workspace }}/charms/
+          tox -e cos-integration -- --charms-path=${{ github.workspace }}/charms/
 
-      - name: Get all
-        run: kubectl get all -A
+      - name: Collect diagnostics
         if: failure()
+        run: |
+          mkdir -p debug
+          juju status --relations > debug/juju-status.txt 2>&1 || true
+          kubectl get all -A > debug/kubectl-get-all.txt 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > debug/kubectl-events.txt 2>&1 || true
+          kubectl describe deployments -A > debug/describe-deployments.txt 2>&1 || true
+          kubectl describe replicasets -A > debug/describe-replicasets.txt 2>&1 || true
 
-      - name: Get events
-        run: kubectl get events -A
+      - name: Upload diagnostics
         if: failure()
-
-      - name: Describe deployments
-        run: kubectl describe deployments -A
-        if: failure()
-
-      - name: Describe replicasets
-        run: kubectl describe replicasets -A
-        if: failure()
-
-      - name: Get juju status
-        run: juju status --relations
-        if: always()
-
-      - name: Get kserve-llmisvc workload logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c llmisvc-controller
-        if: failure()
-
-      - name: Get kserve-llmisvc charm logs
-        run: kubectl logs --tail 1000 -n kubeflow -l app.kubernetes.io/name=kserve-llmisvc -c charm
-        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{ github.job }}
+          path: debug/
+          if-no-files-found: ignore
 
       - name: Collect charm debug artifacts
         uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
