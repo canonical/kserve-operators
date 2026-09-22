@@ -233,7 +233,7 @@ jobs:
           # HF token for the gated hf:// model in the llm-integrator test.
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          tox -e bundle-integration -- --charms-path=${{ github.workspace }}/charms/
+          tox -e bundle-integration -- --keep-models --charms-path=${{ github.workspace }}/charms/
 
       - name: Collect diagnostics
         if: failure()
@@ -295,7 +295,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: eu-central-1
         run: |
-          tox -e bundle-keda-integration -- --charms-path=${{ github.workspace }}/charms/
+          tox -e bundle-keda-integration -- --keep-models --charms-path=${{ github.workspace }}/charms/
 
       - name: Collect diagnostics
         if: failure()
@@ -357,7 +357,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: eu-central-1
         run: |
-          tox -e cos-integration -- --charms-path=${{ github.workspace }}/charms/
+          tox -e cos-integration -- --keep-models --charms-path=${{ github.workspace }}/charms/
 
       - name: Collect diagnostics
         if: failure()
