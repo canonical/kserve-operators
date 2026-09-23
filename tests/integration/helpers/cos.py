@@ -22,7 +22,7 @@ import requests
 import yaml
 
 from .constants import NAMESPACE_DEFAULT
-from .k8s import get_client
+from .k8s import get_running_workload_pod
 
 logger = logging.getLogger(__name__)
 
@@ -145,24 +145,6 @@ def dashboard_present(dashboards: Optional[list], title: str) -> bool:
     return bool(dashboards) and any(board.get("title") == title for board in dashboards)
 
 
-def _workload_pod_name(isvc_name: str, namespace: str = NAMESPACE_DEFAULT) -> str:
-    """Return the name of a running vLLM workload pod for the given isvc."""
-    from lightkube.resources.core_v1 import Pod
-
-    pods = get_client().list(
-        Pod,
-        namespace=namespace,
-        labels={
-            "app.kubernetes.io/name": isvc_name,
-            "kserve.io/component": "workload",
-        },
-    )
-    for pod in pods:
-        if (pod.status and pod.status.phase) == "Running":
-            return cast(str, pod.metadata.name)
-    raise AssertionError(f"No running workload pod found for LLMInferenceService '{isvc_name}'")
-
-
 def generate_inference_traffic(
     isvc_name: str,
     model_name: str,
@@ -175,7 +157,7 @@ def generate_inference_traffic(
     Runs the requests *inside* the vLLM container (``kubectl exec`` -> localhost:8000),
     which avoids a port-forward readiness race and needs no gateway route.
     """
-    pod = _workload_pod_name(isvc_name, namespace)
+    pod = get_running_workload_pod(isvc_name, namespace)
     logger.info("Generating %d inference requests inside pod %s", requests_count, pod)
 
     # Script reads MODEL/COUNT from env to avoid brace-escaping in an f-string.
