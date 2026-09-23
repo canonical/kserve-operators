@@ -83,6 +83,8 @@ def juju(request: pytest.FixtureRequest):
         yield juju_instance
     else:
         with jubilant.temp_model(keep=keep_models) as juju_instance:
+            # Match CI parity: fail fast on hook errors instead of silently retrying.
+            juju_instance.cli("model-config", "automatically-retry-hooks=false")
             juju_instance.wait_timeout = WAIT_TIMEOUT
             yield juju_instance
 

@@ -303,17 +303,19 @@ def _list_resource_names(resource, labels: dict, namespaced: bool) -> list[str]:
     ]
 
 
-def assert_no_charm_resources_left() -> None:
+def assert_no_charm_resources_left(model: str) -> None:
     logger.info("Checking that no charm-owned resources remain in the cluster...")
     selector_by_creator = {
         "app.juju.is/created-by": in_(["kserve-controller", "kserve-llmisvc", "lws-controller"])
     }
+    # Juju sets app.kubernetes.io/instance to "<app>-<model>", so derive the
+    # values from the model name rather than hardcoding a specific model.
     selector_by_instance = {
         "app.kubernetes.io/instance": in_(
             [
-                "kserve-controller-kubeflow",
-                "kserve-llmisvc-kubeflow",
-                "lws-controller-kubeflow",
+                f"kserve-controller-{model}",
+                f"kserve-llmisvc-{model}",
+                f"lws-controller-{model}",
             ]
         )
     }

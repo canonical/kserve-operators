@@ -13,6 +13,7 @@ with the typed client instead of shelling out to ``kubectl``.
 
 import functools
 import logging
+from typing import cast
 
 import lightkube
 import lightkube.codecs
@@ -21,6 +22,9 @@ from lightkube.generic_resource import (
     create_namespaced_resource,
 )
 from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
+from lightkube.resources.core_v1 import Pod
+
+from .constants import NAMESPACE_DEFAULT
 
 logger = logging.getLogger(__name__)
 
@@ -63,3 +67,19 @@ def apply_yaml(manifest: str) -> None:
     client = get_client()
     for obj in lightkube.codecs.load_all_yaml(manifest):
         client.apply(obj)
+
+
+def get_running_workload_pod(isvc_name: str, namespace: str = NAMESPACE_DEFAULT) -> str:
+    """Return the name of a Running vLLM workload pod for the given LLMInferenceService."""
+    pods = get_client().list(
+        Pod,
+        namespace=namespace,
+        labels={
+            "app.kubernetes.io/name": isvc_name,
+            "kserve.io/component": "workload",
+        },
+    )
+    for pod in pods:
+        if pod.status and pod.status.phase == "Running":
+            return cast(str, pod.metadata.name)
+    raise AssertionError(f"No running workload pod found for LLMInferenceService '{isvc_name}'")
