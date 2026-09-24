@@ -68,7 +68,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 IMAGE_CONTEXT = {
     "storage_initializer_image": KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"],
-    "vllm_image": "ghcr.io/welpaolo/vllm-cpu:0.19.0",
+    "vllm_image": KSERVE_LLMISVC_IMAGES["vllm"],
     "model_s3_uri": MODEL_S3_URI,
     "aws_access_key_id": AWS_ACCESS_KEY_ID,
     "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
