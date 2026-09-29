@@ -20,9 +20,10 @@ from typing import Optional, cast
 import jubilant
 import requests
 import yaml
+from lightkube.resources.core_v1 import Pod
 
 from .constants import NAMESPACE_DEFAULT
-from .k8s import get_running_workload_pod
+from .k8s import get_client, get_running_workload_pod
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,33 @@ def metric_has_samples(result: Optional[dict]) -> bool:
 def dashboard_present(dashboards: Optional[list], title: str) -> bool:
     """Return True if a dashboard with the given title is registered in Grafana."""
     return bool(dashboards) and any(board.get("title") == title for board in dashboards)
+
+
+def workload_environment_value(
+    isvc_name: str,
+    environment_name: str,
+    namespace: str = NAMESPACE_DEFAULT,
+    container: str = "main",
+) -> Optional[str]:
+    """Return a named environment value from a running vLLM workload container.
+
+    Used to assert the charm injected the Loki endpoint (``LOKI_URL``) into the
+    workload pod. Returns ``None`` when the container does not set the variable,
+    or sets it via ``valueFrom`` rather than a literal value.
+    """
+    pod_name = get_running_workload_pod(isvc_name, namespace)
+    pod = get_client().get(Pod, name=pod_name, namespace=namespace)
+    workload_container = next(
+        (candidate for candidate in (pod.spec.containers or []) if candidate.name == container),
+        None,
+    )
+    if workload_container is None:
+        raise AssertionError(f"Container '{container}' not found in workload pod '{pod_name}'")
+
+    for environment in workload_container.env or []:
+        if environment.name == environment_name:
+            return environment.value
+    return None
 
 
 def generate_inference_traffic(
