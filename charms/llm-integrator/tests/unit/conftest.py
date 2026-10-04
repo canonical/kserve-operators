@@ -19,6 +19,8 @@ from ops.testing import Context, Relation, Secret, State
 
 from charm import LLMISVC_SYNC_RELATION, S3_CREDENTIALS_RELATION, LLMIntegratorCharm
 
+from .helpers import make_node
+
 
 class _Fake404Response:
     """Minimal httpx-like response that lightkube parses into a 404 status."""
@@ -47,10 +49,12 @@ def mock_krh_lightkube_client():
     """Force the chisme KubernetesResourceHandler to use a fake lightkube client.
 
     By default ``get`` raises a 404 so the LLMInferenceService is treated as
-    not-yet-ready (and, during removal, already gone).
+    not-yet-ready (and, during removal, already gone), and the cluster has a
+    single CPU-only node large enough for the default workers.
     """
     fake_client = MagicMock(name="fake_lightkube_client")
     fake_client.get.side_effect = _Fake404ApiError()
+    fake_client.list.return_value = [make_node()]
     with patch.object(
         KubernetesResourceHandler,
         "lightkube_client",
@@ -93,6 +97,12 @@ def valid_config():
         "model-name": "pythia-70m",
         "runtime-image": "quay.io/example/vllm-cpu:latest",
     }
+
+
+@pytest.fixture
+def gpu_cluster(mock_krh_lightkube_client):
+    """Make the fake cluster expose a node with 8 GPUs."""
+    mock_krh_lightkube_client.list.return_value = [make_node(gpus=8)]
 
 
 @pytest.fixture

@@ -29,6 +29,7 @@ from lightkube.resources.rbac_authorization_v1 import (
     RoleBinding,
 )
 
+from .charms_dependencies import ENVOY_INGRESS
 from .constants import (
     LLMISVC_AGGREGATED_METRICS_PORT,
     LLMISVC_APP_NAME,
@@ -45,6 +46,7 @@ from .k8s import (
     LLMInferenceService,
     generic_resource_for_crd,
     get_client,
+    get_running_workload_pod,
 )
 from .kubectl import port_forward
 from .retry import RETRY_FOR_TEN_MINUTES, RETRY_FOR_THREE_MINUTES
@@ -137,6 +139,15 @@ def assert_inferencepool_and_workload_resources(
 
     pods = client.list(Pod, namespace=namespace)
     assert any(name in pod.metadata.name for pod in pods)
+
+
+def assert_workload_requests_gpus(name: str, namespace: str, gpus: int = 1) -> None:
+    """Assert the running vLLM container requests and is limited to ``gpus`` GPUs."""
+    pod_name = get_running_workload_pod(name, namespace)
+    pod = get_client().get(Pod, name=pod_name, namespace=namespace)
+    main = next(container for container in pod.spec.containers if container.name == "main")
+    assert main.resources.requests.get("nvidia.com/gpu") == str(gpus)
+    assert main.resources.limits.get("nvidia.com/gpu") == str(gpus)
 
 
 def _assert_service_metrics_ports(namespace: str, app_name: str) -> None:
@@ -293,6 +304,24 @@ def assert_prediction(
                     f"http://127.0.0.1:8080{completions_path}", model=model, name=name
                 )
                 return
+
+
+def assert_llmisvc_serving(
+    gateway_namespace: str,
+    name: str = LLMISVC_NAME,
+    model: str = LLMISVC_MODEL_NAME,
+    namespace: str = NAMESPACE_DEFAULT,
+) -> None:
+    """Assert the LLMInferenceService is routed, has its workload and answers a completion."""
+    assert_route_programmed(name=name, namespace=namespace)
+    assert_inferencepool_and_workload_resources(name=name, namespace=namespace)
+    assert_prediction(
+        gateway_name=ENVOY_INGRESS.charm,
+        gateway_namespace=gateway_namespace,
+        name=name,
+        model=model,
+        namespace=namespace,
+    )
 
 
 def _list_resource_names(resource, labels: dict, namespaced: bool) -> list[str]:

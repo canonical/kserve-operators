@@ -1,4 +1,100 @@
 {%- set needs_storage_initializer = is_s3 or use_hf_token %}
+{#- Pod template shared by the decode (spec.template) and prefill (spec.prefill.template) workers. #}
+{%- macro worker_template(args) %}
+{%- if needs_storage_initializer or shm_size %}
+volumes:
+{%- if needs_storage_initializer %}
+  - name: kserve-pvc-source
+    emptyDir: {}
+{%- endif %}
+{%- if shm_size %}
+{#- Overrides the presets' 1Gi dshm volume mounted at /dev/shm. #}
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: {{ shm_size }}
+{%- endif %}
+{%- endif %}
+{%- if needs_storage_initializer %}
+initContainers:
+  - name: storage-initializer
+    image: {{ storage_initializer_image }}
+    args:
+      - {{ model_uri }}
+      - /mnt/models
+    env:
+{%- if is_s3 %}
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: {{ s3_secret_name }}
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: {{ s3_secret_name }}
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_DEFAULT_REGION
+        value: "{{ s3_region }}"
+      - name: S3_ENDPOINT
+        value: "{{ s3_endpoint }}"
+      - name: S3_USE_HTTPS
+        value: "{{ s3_use_https }}"
+      - name: S3_VERIFY_SSL
+        value: "1"
+{%- elif use_hf_token %}
+      - name: HF_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: {{ hf_secret_name }}
+            key: HF_TOKEN
+      - name: HF_HUB_ENABLE_HF_TRANSFER
+        value: "0"
+      - name: HF_HUB_DOWNLOAD_TIMEOUT
+        value: "60"
+{%- endif %}
+    volumeMounts:
+      - name: kserve-pvc-source
+        mountPath: /mnt/models
+{%- endif %}
+containers:
+  - name: main
+    image: {{ runtime_image }}
+{%- if args %}
+    args:
+{%- for arg in args %}
+      - {{ arg | tojson }}
+{%- endfor %}
+{%- endif %}
+    securityContext:
+      runAsNonRoot: false
+    env:
+      - name: VLLM_LOGGING_LEVEL
+        value: INFO
+{%- if not is_gpu %}
+      - name: VLLM_CPU_KVCACHE_SPACE
+        value: "1"
+{%- endif %}
+{%- if needs_storage_initializer %}
+    volumeMounts:
+      - name: kserve-pvc-source
+        mountPath: /mnt/models
+        readOnly: true
+{%- endif %}
+    resources:
+      requests:
+        cpu: {{ resources["cpu-request"] | tojson }}
+        memory: {{ resources["memory-request"] | tojson }}
+{%- if gpu_count %}
+        nvidia.com/gpu: "{{ gpu_count }}"
+{%- endif %}
+      limits:
+        cpu: {{ resources["cpu-limit"] | tojson }}
+        memory: {{ resources["memory-limit"] | tojson }}
+{%- if gpu_count %}
+        nvidia.com/gpu: "{{ gpu_count }}"
+{%- endif %}
+{%- endmacro %}
 {% if is_s3 %}
 apiVersion: v1
 kind: Secret
@@ -34,160 +130,14 @@ spec:
   storageInitializer:
     enabled: false
 {% endif %}
-  replicas: 1
+{#- replicas are left unset so KServe keeps the current count (e.g. set by KEDA). #}
   router:
     scheduler: {}
     route: {}
   template:
-{% if needs_storage_initializer %}
-    volumes:
-      - name: kserve-pvc-source
-        emptyDir: {}
-    initContainers:
-      - name: storage-initializer
-        image: {{ storage_initializer_image }}
-        args:
-          - {{ model_uri }}
-          - /mnt/models
-        env:
-{% if is_s3 %}
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: {{ s3_secret_name }}
-                key: AWS_ACCESS_KEY_ID
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ s3_secret_name }}
-                key: AWS_SECRET_ACCESS_KEY
-          - name: AWS_DEFAULT_REGION
-            value: "{{ s3_region }}"
-          - name: S3_ENDPOINT
-            value: "{{ s3_endpoint }}"
-          - name: S3_USE_HTTPS
-            value: "{{ s3_use_https }}"
-          - name: S3_VERIFY_SSL
-            value: "1"
-{% elif use_hf_token %}
-          - name: HF_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: {{ hf_secret_name }}
-                key: HF_TOKEN
-          - name: HF_HUB_ENABLE_HF_TRANSFER
-            value: "0"
-          - name: HF_HUB_DOWNLOAD_TIMEOUT
-            value: "60"
-{% endif %}
-        volumeMounts:
-          - name: kserve-pvc-source
-            mountPath: /mnt/models
-{% endif %}
-    containers:
-      - name: main
-        image: {{ runtime_image }}
-        args:
-          - "--enforce-eager"
-{% if enable_prefill_decode %}
-          # Disaggregated mode injects an llm-d-routing-sidecar on 8000, so the
-          # model server must listen on 8001. Single mode has no sidecar and
-          # serves directly on KServe's default 8000.
-          - "--port"
-          - "8001"
-{% endif %}
-        securityContext:
-          runAsNonRoot: false
-        env:
-          - name: VLLM_LOGGING_LEVEL
-            value: INFO
-          - name: VLLM_CPU_KVCACHE_SPACE
-            value: "1"
-{% if needs_storage_initializer %}
-        volumeMounts:
-          - name: kserve-pvc-source
-            mountPath: /mnt/models
-            readOnly: true
-{% endif %}
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "4Gi"
-          limits:
-            cpu: "2"
-            memory: "8Gi"
+    {{- worker_template(decode_args) | indent(4) }}
 {% if enable_prefill_decode %}
   prefill:
-    replicas: 1
     template:
-{% if needs_storage_initializer %}
-      volumes:
-        - name: kserve-pvc-source
-          emptyDir: {}
-      initContainers:
-        - name: storage-initializer
-          image: {{ storage_initializer_image }}
-          args:
-            - {{ model_uri }}
-            - /mnt/models
-          env:
-{% if is_s3 %}
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ s3_secret_name }}
-                  key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ s3_secret_name }}
-                  key: AWS_SECRET_ACCESS_KEY
-            - name: AWS_DEFAULT_REGION
-              value: "{{ s3_region }}"
-            - name: S3_ENDPOINT
-              value: "{{ s3_endpoint }}"
-            - name: S3_USE_HTTPS
-              value: "{{ s3_use_https }}"
-            - name: S3_VERIFY_SSL
-              value: "1"
-{% elif use_hf_token %}
-            - name: HF_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ hf_secret_name }}
-                  key: HF_TOKEN
-            - name: HF_HUB_ENABLE_HF_TRANSFER
-              value: "0"
-            - name: HF_HUB_DOWNLOAD_TIMEOUT
-              value: "60"
-{% endif %}
-          volumeMounts:
-            - name: kserve-pvc-source
-              mountPath: /mnt/models
-{% endif %}
-      containers:
-        - name: main
-          image: {{ runtime_image }}
-          args:
-            - "--enable-chunked-prefill"
-          securityContext:
-            runAsNonRoot: false
-          env:
-            - name: VLLM_LOGGING_LEVEL
-              value: INFO
-            - name: VLLM_CPU_KVCACHE_SPACE
-              value: "1"
-{% if needs_storage_initializer %}
-          volumeMounts:
-            - name: kserve-pvc-source
-              mountPath: /mnt/models
-              readOnly: true
-{% endif %}
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "4Gi"
-            limits:
-              cpu: "2"
-              memory: "8Gi"
+      {{- worker_template(prefill_args) | indent(6) }}
 {% endif %}

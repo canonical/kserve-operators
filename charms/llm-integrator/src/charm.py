@@ -11,7 +11,12 @@ gated on the ``kserve-llmisvc`` charm reporting ready via the
 ``kserve-llmisvc-sync`` relation.
 """
 
+import json
 import logging
+import shlex
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List
 from urllib.parse import urlparse
 
 import tenacity
@@ -22,7 +27,8 @@ from charmed_kubeflow_chisme.kubernetes import (
 )
 from lightkube import ApiError
 from lightkube.generic_resource import create_namespaced_resource
-from lightkube.resources.core_v1 import Secret
+from lightkube.resources.core_v1 import Node, Secret
+from lightkube.utils.quantity import parse_quantity
 from object_storage import S3Requirer
 from ops import main
 from ops.charm import CharmBase, SecretChangedEvent
@@ -35,6 +41,8 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
+
+from capacity import WorkerRequest, find_capacity_issue
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +73,58 @@ HF_TOKEN_SECRET_KEY = "token"
 # and pods asynchronously, so delete() returns before the CR is gone.
 DELETION_TIMEOUT = 300
 DELETION_POLL_INTERVAL = 5
+
+DEFAULT_IMAGES = json.loads((Path(__file__).parent / "default-custom-images.json").read_text())
+
+CPU = "cpu"
+NVIDIA_GPU = "nvidia-gpu"
+
+# Worker resource options; empty values fall back to the accelerator defaults.
+RESOURCE_OPTIONS = ("cpu-request", "cpu-limit", "memory-request", "memory-limit")
+
+
+@dataclass(frozen=True)
+class AcceleratorDefaults:
+    """Defaults for an accelerator, used when the matching config option is empty."""
+
+    image: str
+    resources: Dict[str, str]
+
+
+ACCELERATOR_DEFAULTS = {
+    CPU: AcceleratorDefaults(
+        image=DEFAULT_IMAGES["vllm"],
+        resources={
+            "cpu-request": "500m",
+            "cpu-limit": "2",
+            "memory-request": "4Gi",
+            "memory-limit": "8Gi",
+        },
+    ),
+    NVIDIA_GPU: AcceleratorDefaults(
+        image=DEFAULT_IMAGES["vllm_gpu"],
+        resources={
+            "cpu-request": "2",
+            "cpu-limit": "4",
+            "memory-request": "8Gi",
+            "memory-limit": "16Gi",
+        },
+    ),
+}
+
+# /dev/shm size per GPU for tensor-parallel workers; the presets' 1Gi suffices for one GPU.
+SHM_GI_PER_GPU = 2
+
+# vLLM flags that vllm-extra-args may not set, with the reason surfaced to the user.
+RESERVED_VLLM_FLAGS = {
+    "--port": "it is managed by the charm",
+    "--served-model-name": "use the model-name option",
+    "--tensor-parallel-size": "use the gpu-count option",
+    "-tp": "use the gpu-count option",
+    "--max-model-len": "use the max-model-len option",
+    "--gpu-memory-utilization": "use the gpu-memory-utilization option",
+    "--kv-transfer-config": "KV-cache transfer is not supported yet",
+}
 
 # Registering the generic resource at import time adds it to lightkube's
 # registry so the KubernetesResourceHandler codecs can (de)serialize it and so
@@ -130,6 +190,8 @@ class LLMIntegratorCharm(CharmBase):
         For s3:// URIs the context also carries the storage-initializer image
         and the S3 connection parameters used to render a manual
         storage-initializer init container.
+
+        Only build it once the configuration has been validated.
         """
         model_uri = self._model_uri
         model_name = self.model.config.get("model-name", "").strip() or self._derived_model_name()
@@ -138,10 +200,10 @@ class LLMIntegratorCharm(CharmBase):
             "namespace": self.model.name,
             "model_uri": model_uri,
             "model_name": model_name,
-            "runtime_image": self.model.config.get("runtime-image", "").strip(),
-            "enable_prefill_decode": bool(self.model.config.get("enable-prefill-decode", True)),
+            "enable_prefill_decode": self._enable_prefill_decode,
             "is_s3": self._uri_scheme() == "s3",
             "use_hf_token": self._use_hf_token(),
+            **self._worker_context(),
         }
         if context["is_s3"]:
             context.update(self._s3_context())
@@ -153,6 +215,79 @@ class LLMIntegratorCharm(CharmBase):
     def _model_uri(self) -> str:
         """The configured model URI, stripped of surrounding whitespace."""
         return self.model.config.get("model-uri", "").strip()
+
+    @property
+    def _enable_prefill_decode(self) -> bool:
+        return self.model.config["enable-prefill-decode"]
+
+    @property
+    def _accelerator(self) -> str:
+        return self.model.config["accelerator"].strip()
+
+    @property
+    def _is_gpu(self) -> bool:
+        return self._accelerator == NVIDIA_GPU
+
+    @property
+    def _gpu_count(self) -> int:
+        """GPUs requested per worker; 0 for CPU workloads."""
+        return self.model.config["gpu-count"] if self._is_gpu else 0
+
+    @property
+    def _worker_resources(self) -> Dict[str, str]:
+        """Per-worker resource quantities keyed by config option name."""
+        defaults = ACCELERATOR_DEFAULTS[self._accelerator].resources
+        return {
+            option: self.model.config[option].strip() or defaults[option]
+            for option in RESOURCE_OPTIONS
+        }
+
+    def _vllm_extra_args(self) -> List[str]:
+        """Parse vllm-extra-args, rejecting flags the charm reserves."""
+        try:
+            args = shlex.split(self.model.config["vllm-extra-args"])
+        except ValueError as err:
+            raise ErrorWithStatus(f"Invalid vllm-extra-args: {err}", BlockedStatus)
+        for arg in args:
+            # vLLM accepts --flag=value and underscores in flag names.
+            flag = arg.split("=", 1)[0].replace("_", "-")
+            if flag in RESERVED_VLLM_FLAGS:
+                raise ErrorWithStatus(
+                    f"vllm-extra-args must not set {flag}: {RESERVED_VLLM_FLAGS[flag]}",
+                    BlockedStatus,
+                )
+        return args
+
+    def _shared_vllm_args(self) -> List[str]:
+        """vLLM arguments applied to both the decode and the prefill worker."""
+        args = []
+        if self._gpu_count > 1:
+            args += ["--tensor-parallel-size", str(self._gpu_count)]
+        if max_model_len := self.model.config["max-model-len"]:
+            args += ["--max-model-len", str(max_model_len)]
+        gpu_memory_utilization = self.model.config["gpu-memory-utilization"]
+        if self._is_gpu and gpu_memory_utilization:
+            args += ["--gpu-memory-utilization", str(gpu_memory_utilization)]
+        return args + self._vllm_extra_args()
+
+    def _worker_context(self) -> dict:
+        """Render context for the vLLM worker pods."""
+        gpu_count = self._gpu_count
+        shared_args = self._shared_vllm_args()
+        decode_args = [] if self._is_gpu else ["--enforce-eager"]
+        if self._enable_prefill_decode:
+            # The routing sidecar injected in disaggregated mode owns port 8000.
+            decode_args += ["--port", "8001"]
+        return {
+            "runtime_image": self.model.config["runtime-image"].strip()
+            or ACCELERATOR_DEFAULTS[self._accelerator].image,
+            "is_gpu": self._is_gpu,
+            "gpu_count": gpu_count,
+            "resources": self._worker_resources,
+            "shm_size": f"{SHM_GI_PER_GPU * gpu_count}Gi" if gpu_count > 1 else "",
+            "decode_args": decode_args + shared_args,
+            "prefill_args": ["--enable-chunked-prefill", *shared_args],
+        }
 
     @property
     def _s3_secret_name(self) -> str:
@@ -278,7 +413,6 @@ class LLMIntegratorCharm(CharmBase):
             self._resource_handler = KubernetesResourceHandler(
                 field_manager=self._lightkube_field_manager,
                 template_files=TEMPLATE_FILES,
-                context=self._context,
                 labels=create_charm_default_labels(
                     self.app.name, self.model.name, scope=KRH_SCOPE
                 ),
@@ -322,8 +456,6 @@ class LLMIntegratorCharm(CharmBase):
                 "model-uri must start with 'hf://' or 's3://'",
                 BlockedStatus,
             )
-        if not self.model.config.get("runtime-image", "").strip():
-            raise ErrorWithStatus("Missing required config: runtime-image", BlockedStatus)
         # An hf-token-secret on an hf:// model makes the charm render a manual
         # storage-initializer, so the image is required. Key this off config
         # alone (no secret read) so a missing image is reported directly instead
@@ -337,6 +469,53 @@ class LLMIntegratorCharm(CharmBase):
             raise ErrorWithStatus(
                 "Missing required config: storage-initializer-image", BlockedStatus
             )
+
+    def _validate_workload_config(self) -> None:
+        """Validate the accelerator, worker resources and vLLM options."""
+        if self._accelerator not in ACCELERATOR_DEFAULTS:
+            raise ErrorWithStatus(
+                f"accelerator must be one of: {', '.join(ACCELERATOR_DEFAULTS)}", BlockedStatus
+            )
+        if self._is_gpu and self._gpu_count < 1:
+            raise ErrorWithStatus("gpu-count must be >= 1", BlockedStatus)
+        if self.model.config["max-model-len"] < 0:
+            raise ErrorWithStatus("max-model-len must be >= 0", BlockedStatus)
+        if not 0 <= self.model.config["gpu-memory-utilization"] <= 1:
+            raise ErrorWithStatus("gpu-memory-utilization must be in (0, 1]", BlockedStatus)
+        self._validate_worker_resources()
+        self._vllm_extra_args()
+
+    def _validate_worker_resources(self) -> None:
+        """Validate resource quantities are positive and requests do not exceed limits."""
+        resources = self._worker_resources
+        quantities = {}
+        for option, value in resources.items():
+            try:
+                quantities[option] = parse_quantity(value)
+            except ValueError:
+                raise ErrorWithStatus(f"Invalid {option}: {value}", BlockedStatus)
+            if quantities[option] <= 0:
+                raise ErrorWithStatus(f"{option} must be greater than 0", BlockedStatus)
+        for resource in ("cpu", "memory"):
+            request, limit = f"{resource}-request", f"{resource}-limit"
+            if quantities[request] > quantities[limit]:
+                raise ErrorWithStatus(
+                    f"{request} ({resources[request]}) exceeds {limit} ({resources[limit]})",
+                    BlockedStatus,
+                )
+
+    def _validate_cluster_capacity(self) -> None:
+        """Block when no node could ever schedule the workers, e.g. no GPUs in the cluster."""
+        resources = self._worker_resources
+        request = WorkerRequest(
+            cpu=resources["cpu-request"],
+            memory=resources["memory-request"],
+            gpus=self._gpu_count,
+            workers=2 if self._enable_prefill_decode else 1,
+        )
+        nodes = self.resource_handler.lightkube_client.list(Node)
+        if issue := find_capacity_issue(nodes, request):
+            raise ErrorWithStatus(issue, BlockedStatus)
 
     def _validate_hf_token(self) -> None:
         """Validate the hf-token-secret configuration when set.
@@ -458,10 +637,13 @@ class LLMIntegratorCharm(CharmBase):
         try:
             self._validate_llmisvc_relation()
             self._validate_config()
+            self._validate_workload_config()
             self._validate_hf_token()
             self._validate_s3()
+            self._validate_cluster_capacity()
 
             self.unit.status = MaintenanceStatus("Applying LLMInferenceService")
+            self.resource_handler.context = self._context
             self.resource_handler.apply()
 
             # Prune the HF token Secret when the token is no longer in use (e.g.
