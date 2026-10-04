@@ -480,8 +480,11 @@ class LLMIntegratorCharm(CharmBase):
             raise ErrorWithStatus("gpu-count must be >= 1", BlockedStatus)
         if self.model.config["max-model-len"] < 0:
             raise ErrorWithStatus("max-model-len must be >= 0", BlockedStatus)
-        if not 0 <= self.model.config["gpu-memory-utilization"] <= 1:
-            raise ErrorWithStatus("gpu-memory-utilization must be in (0, 1]", BlockedStatus)
+        if self._is_gpu and not 0 <= self.model.config["gpu-memory-utilization"] <= 1:
+            raise ErrorWithStatus(
+                "gpu-memory-utilization must be in (0, 1], or 0 for vLLM's default",
+                BlockedStatus,
+            )
         self._validate_worker_resources()
         self._vllm_extra_args()
 

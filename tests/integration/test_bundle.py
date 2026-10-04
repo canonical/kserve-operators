@@ -89,8 +89,11 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 
 # Fail fast (rather than skip) if the S3 credentials for the test model are missing.
+# GPU runs only deploy a public hf:// model, so they need no credentials.
 @pytest.fixture(scope="session", autouse=True)
-def require_aws_credentials():
+def require_aws_credentials(request: pytest.FixtureRequest):
+    if request.config.getoption("--run-gpu-tests"):
+        return
     if not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY):
         pytest.fail(
             "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to fetch the test "
@@ -101,7 +104,9 @@ def require_aws_credentials():
 
 # Fail fast (rather than skip) if the HF token for the gated model is missing.
 @pytest.fixture(scope="session", autouse=True)
-def require_hf_token():
+def require_hf_token(request: pytest.FixtureRequest):
+    if request.config.getoption("--run-gpu-tests"):
+        return
     if not HF_TOKEN:
         pytest.fail(
             "HF_TOKEN must be set to fetch the gated model via hf://; export it "

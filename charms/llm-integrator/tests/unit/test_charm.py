@@ -97,7 +97,10 @@ def test_invalid_config_blocks(ctx, llmisvc_relation_ready, config, expected_msg
         ({"accelerator": "tpu"}, "accelerator must be one of: cpu, nvidia-gpu"),
         ({"accelerator": "nvidia-gpu", "gpu-count": 0}, "gpu-count must be >= 1"),
         ({"max-model-len": -1}, "max-model-len must be >= 0"),
-        ({"gpu-memory-utilization": 1.5}, "gpu-memory-utilization must be in (0, 1]"),
+        (
+            {"accelerator": "nvidia-gpu", "gpu-memory-utilization": 1.5},
+            "gpu-memory-utilization must be in (0, 1], or 0 for vLLM's default",
+        ),
         ({"memory-request": "4GB"}, "Invalid memory-request: 4GB"),
         ({"cpu-limit": "0"}, "cpu-limit must be greater than 0"),
         ({"memory-request": "32Gi"}, "memory-request (32Gi) exceeds memory-limit (8Gi)"),
@@ -115,6 +118,15 @@ def test_invalid_workload_config_blocks(
     out = ctx.run(ctx.on.config_changed(), _state(llmisvc_relation_ready, config))
     assert_status(out, BlockedStatus, expected_msg)
     mock_krh_apply.assert_not_called()
+
+
+@pytest.mark.parametrize("config", [{"gpu-count": 0}, {"gpu-memory-utilization": 1.5}])
+def test_gpu_only_options_not_validated_on_cpu(
+    ctx, llmisvc_relation_ready, mock_krh_apply, config
+):
+    """GPU-only options are ignored on CPU, so even invalid values do not block."""
+    ctx.run(ctx.on.config_changed(), _state(llmisvc_relation_ready, config))
+    mock_krh_apply.assert_called_once()
 
 
 def test_gpu_workload_without_gpus_in_cluster_blocks(ctx, llmisvc_relation_ready, mock_krh_apply):
