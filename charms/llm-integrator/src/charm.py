@@ -27,7 +27,7 @@ from charmed_kubeflow_chisme.kubernetes import (
 )
 from lightkube import ApiError
 from lightkube.generic_resource import create_namespaced_resource
-from lightkube.resources.core_v1 import Node, Secret
+from lightkube.resources.core_v1 import Node, Pod, Secret
 from lightkube.utils.quantity import parse_quantity
 from object_storage import S3Requirer
 from ops import main
@@ -43,6 +43,7 @@ from ops.model import (
 )
 
 from capacity import WorkerRequest, find_capacity_issue
+from workload_status import diagnose_workload
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +74,9 @@ HF_TOKEN_SECRET_KEY = "token"
 # and pods asynchronously, so delete() returns before the CR is gone.
 DELETION_TIMEOUT = 300
 DELETION_POLL_INTERVAL = 5
+
+# Ready condition reason KServe reports both while the workload starts and when it is broken.
+WORKLOAD_UNAVAILABLE_REASON = "MinimumReplicasUnavailable"
 
 DEFAULT_IMAGES = json.loads((Path(__file__).parent / "default-custom-images.json").read_text())
 
@@ -219,7 +223,10 @@ class LLMIntegratorCharm(CharmBase):
 
     @property
     def _storage_initializer_image(self) -> str:
-        return self.model.config.get("storage-initializer-image", "").strip()
+        return (
+            self.model.config["storage-initializer-image"].strip()
+            or DEFAULT_IMAGES["storage_initializer"]
+        )
 
     @property
     def _enable_prefill_decode(self) -> bool:
@@ -455,10 +462,6 @@ class LLMIntegratorCharm(CharmBase):
                 "model-uri must start with 'hf://' or 's3://'",
                 BlockedStatus,
             )
-        if not self._storage_initializer_image:
-            raise ErrorWithStatus(
-                "Missing required config: storage-initializer-image", BlockedStatus
-            )
 
     def _validate_workload_config(self) -> None:
         """Validate the accelerator, worker resources and vLLM options."""
@@ -589,7 +592,9 @@ class LLMIntegratorCharm(CharmBase):
         - ``False``: a dependency hard-failed (bad image, model not found,
           unschedulable, invalid spec) -> BlockedStatus. Will not recover
           without user intervention; the condition message is surfaced so the
-          operator knows what to fix.
+          operator knows what to fix. The exception is an unavailable workload,
+          which KServe also reports while the model downloads and loads; the
+          workload pods decide between Waiting and Blocked.
         """
         name = self.app.name
         client = self.resource_handler.lightkube_client
@@ -611,6 +616,8 @@ class LLMIntegratorCharm(CharmBase):
         ready_status = ready.get("status")
         if ready_status == "True":
             return ActiveStatus()
+        if ready_status == "False" and ready.get("reason") == WORKLOAD_UNAVAILABLE_REASON:
+            return self._workload_status(name)
 
         detail = ready.get("message") or ready.get("reason") or "reason unknown"
         if ready_status == "False":
@@ -619,6 +626,21 @@ class LLMIntegratorCharm(CharmBase):
             )
         # Unknown / transient: still progressing, recoverable without action.
         return WaitingStatus(f"Waiting for LLMInferenceService {name} to become Ready: {detail}")
+
+    def _workload_status(self, name: str) -> StatusBase:
+        """Tell a starting workload (Waiting) from a failing one (Blocked) via its pods."""
+        pods = self.resource_handler.lightkube_client.list(
+            Pod,
+            namespace=self.model.name,
+            labels={"app.kubernetes.io/name": name, "kserve.io/component": "workload"},
+        )
+        state = diagnose_workload(pods)
+        if state.failed:
+            return BlockedStatus(
+                f"LLMInferenceService {name} failed: {state.message}. "
+                "Manual intervention is required."
+            )
+        return WaitingStatus(f"LLMInferenceService {name} is starting: {state.message}")
 
     def _on_event(self, event) -> None:
         """Main reconcile loop for the llm-integrator charm."""

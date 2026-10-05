@@ -174,7 +174,6 @@ def test_deploy_llm_via_charm(juju: jubilant.Juju, charms_path: str):
         {
             "model-uri": HF_MODEL_URI,
             "model-name": HF_MODEL_NAME,
-            "storage-initializer-image": STORAGE_INITIALIZER_IMAGE,
             "hf-token-secret": secret_uri,
             "memory-request": "10Ti",
             "memory-limit": "10Ti",
@@ -238,7 +237,6 @@ def test_deploy_llm_via_charm_s3(juju: jubilant.Juju, charms_path: str):
         {
             "model-uri": MODEL_S3_URI,
             "model-name": LLM_INTEGRATOR_MODEL_NAME,
-            "storage-initializer-image": STORAGE_INITIALIZER_IMAGE,
             "enable-prefill-decode": True,
         },
     )

@@ -91,10 +91,11 @@ options:
       --gpu-memory-utilization) and --kv-transfer-config are rejected.
   storage-initializer-image:
     type: string
-    default: "docker.io/charmedkubeflow/storage-initializer:0.17.0-07d37fb"
+    default: ""
     description: >
-      OCI image used for the storage-initializer init container that downloads
-      the model into the workload, for both hf:// and s3:// model URIs.
+      Optional OCI image override for the storage-initializer init container
+      that downloads the model into the workload, for both hf:// and s3:// model
+      URIs. When empty, the charm uses the storage-initializer image it ships.
   hf-token-secret:
     type: secret
     description: >

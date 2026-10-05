@@ -9,12 +9,13 @@ from types import SimpleNamespace
 import pytest
 import yaml
 from jinja2 import Template
+from lightkube.resources.core_v1 import Node
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Secret, State
 
 from charm import DEFAULT_IMAGES
 
-from .helpers import assert_status
+from .helpers import assert_status, container_status, make_node, make_pod
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "src/templates/llm_inference_service.yaml.j2"
 MODEL_VOLUME = {"name": "kserve-pvc-source", "emptyDir": {}}
@@ -83,7 +84,6 @@ def test_relation_not_ready_waits(ctx, valid_config, llmisvc_relation_not_ready)
     [
         ({}, "model-uri"),
         ({"model-uri": "gs://bucket/model"}, "must start with"),
-        ({"model-uri": "hf://x", "storage-initializer-image": ""}, "storage-initializer-image"),
     ],
 )
 def test_invalid_config_blocks(ctx, llmisvc_relation_ready, config, expected_msg):
@@ -304,24 +304,12 @@ def test_secret_changed_for_unrelated_secret_ignored(
     mock_krh_apply.assert_not_called()
 
 
-def test_hf_token_missing_storage_initializer_image_blocks(
-    ctx, llmisvc_relation_ready, hf_token_secret
-):
-    """A gated hf:// model requires the storage-initializer image."""
-    config = {
-        "model-uri": "hf://google/gemma-3-270m-it",
-        "runtime-image": "img:latest",
-        "storage-initializer-image": "",
-        "hf-token-secret": hf_token_secret.id,
-    }
-    state_in = State(
-        leader=True,
-        config=config,
-        relations=[llmisvc_relation_ready],
-        secrets=[hf_token_secret],
-    )
-    out = ctx.run(ctx.on.config_changed(), state_in)
-    assert_status(out, BlockedStatus, "storage-initializer-image")
+def test_storage_initializer_image_defaults_to_shipped_image(ctx, ready_state):
+    """An empty storage-initializer-image falls back to the image the charm ships."""
+    with ctx(ctx.on.config_changed(), ready_state) as manager:
+        manager.run()
+        image = manager.charm._context["storage_initializer_image"]
+    assert image == DEFAULT_IMAGES["storage_initializer"]
 
 
 def test_hf_token_on_non_hf_uri_blocks(
@@ -407,6 +395,50 @@ def test_cr_ready_false_blocks(ctx, ready_state, mock_krh_lightkube_client):
 
     assert_status(out, BlockedStatus, "Back-off pulling image")
     assert "Manual intervention" in out.unit_status.message
+
+
+@pytest.mark.parametrize(
+    "pod, expected_status, expected_msg",
+    [
+        (
+            make_pod(init_containers=[container_status("storage-initializer", running=True)]),
+            WaitingStatus,
+            "is starting: downloading the model",
+        ),
+        (
+            make_pod(
+                init_containers=[
+                    container_status(
+                        "storage-initializer",
+                        waiting_reason="CrashLoopBackOff",
+                        restarts=2,
+                        last_exit_code=137,
+                        last_reason="OOMKilled",
+                    )
+                ]
+            ),
+            BlockedStatus,
+            "storage-initializer keeps failing (OOMKilled, exit code 137)",
+        ),
+    ],
+)
+def test_unavailable_workload_status_comes_from_pods(
+    ctx, ready_state, mock_krh_lightkube_client, pod, expected_status, expected_msg
+):
+    """An unavailable workload is Waiting while it starts and Blocked when a pod fails."""
+    mock_krh_lightkube_client.get.side_effect = None
+    mock_krh_lightkube_client.get.return_value = _ready_condition(
+        "False",
+        reason="MinimumReplicasUnavailable",
+        message="Deployment does not have minimum availability.",
+    )
+    mock_krh_lightkube_client.list.side_effect = lambda resource, **_: (
+        [make_node()] if resource is Node else [pod]
+    )
+
+    out = ctx.run(ctx.on.config_changed(), ready_state)
+
+    assert_status(out, expected_status, expected_msg)
 
 
 def test_context_maps_config_to_manifest(ctx, ready_state):

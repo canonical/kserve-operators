@@ -5,9 +5,20 @@
 
 from typing import Iterable, Optional, Type
 
-from lightkube.models.core_v1 import NodeSpec, NodeStatus, Taint
+from lightkube.models.core_v1 import (
+    ContainerState,
+    ContainerStateRunning,
+    ContainerStateTerminated,
+    ContainerStateWaiting,
+    ContainerStatus,
+    NodeSpec,
+    NodeStatus,
+    PodCondition,
+    PodStatus,
+    Taint,
+)
 from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import Node
+from lightkube.resources.core_v1 import Node, Pod
 from ops.model import StatusBase
 from ops.testing import State
 
@@ -30,6 +41,58 @@ def make_node(
             unschedulable=unschedulable,
         ),
         status=NodeStatus(allocatable=allocatable),
+    )
+
+
+def container_status(
+    name: str,
+    running: bool = False,
+    waiting_reason: Optional[str] = None,
+    restarts: int = 0,
+    last_exit_code: Optional[int] = None,
+    last_reason: Optional[str] = None,
+) -> ContainerStatus:
+    """Build a ContainerStatus in the given state."""
+    state = ContainerState(
+        running=ContainerStateRunning() if running else None,
+        waiting=ContainerStateWaiting(reason=waiting_reason) if waiting_reason else None,
+    )
+    last_state = None
+    if last_exit_code is not None:
+        last_state = ContainerState(
+            terminated=ContainerStateTerminated(exitCode=last_exit_code, reason=last_reason)
+        )
+    return ContainerStatus(
+        name=name,
+        image="image",
+        imageID="image-id",
+        ready=False,
+        restartCount=restarts,
+        state=state,
+        lastState=last_state,
+    )
+
+
+def make_pod(
+    name: str = "llm-integrator-kserve-abc",
+    ready: bool = False,
+    init_containers: Iterable[ContainerStatus] = (),
+    containers: Iterable[ContainerStatus] = (),
+    unschedulable_message: Optional[str] = None,
+) -> Pod:
+    """Build a workload Pod with the given container statuses and conditions."""
+    conditions = [PodCondition(type="Ready", status="True" if ready else "False")]
+    if unschedulable_message:
+        conditions.append(
+            PodCondition(type="PodScheduled", status="False", message=unschedulable_message)
+        )
+    return Pod(
+        metadata=ObjectMeta(name=name),
+        status=PodStatus(
+            conditions=conditions,
+            initContainerStatuses=list(init_containers),
+            containerStatuses=list(containers),
+        ),
     )
 
 
