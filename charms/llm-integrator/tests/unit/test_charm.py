@@ -17,6 +17,7 @@ from charm import DEFAULT_IMAGES
 from .helpers import assert_status
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "src/templates/llm_inference_service.yaml.j2"
+MODEL_VOLUME = {"name": "kserve-pvc-source", "emptyDir": {}}
 
 
 def _state(relation, config=None) -> State:
@@ -82,6 +83,7 @@ def test_relation_not_ready_waits(ctx, valid_config, llmisvc_relation_not_ready)
     [
         ({}, "model-uri"),
         ({"model-uri": "gs://bucket/model"}, "must start with"),
+        ({"model-uri": "hf://x", "storage-initializer-image": ""}, "storage-initializer-image"),
     ],
 )
 def test_invalid_config_blocks(ctx, llmisvc_relation_ready, config, expected_msg):
@@ -475,7 +477,7 @@ def test_template_cpu_worker_defaults(ctx, llmisvc_relation_ready):
             "requests": {"cpu": "500m", "memory": "4Gi"},
             "limits": {"cpu": "2", "memory": "8Gi"},
         }
-        assert "volumes" not in worker
+        assert worker["volumes"] == [MODEL_VOLUME]
 
 
 def test_template_gpu_worker_defaults(ctx, llmisvc_relation_ready, gpu_cluster):
@@ -490,7 +492,7 @@ def test_template_gpu_worker_defaults(ctx, llmisvc_relation_ready, gpu_cluster):
             "requests": {"cpu": "2", "memory": "8Gi", "nvidia.com/gpu": "1"},
             "limits": {"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": "1"},
         }
-        assert "volumes" not in worker
+        assert worker["volumes"] == [MODEL_VOLUME]
     assert _main(decode)["args"] == ["--port", "8001"]
     assert _main(prefill)["args"] == ["--enable-chunked-prefill"]
 
@@ -505,7 +507,8 @@ def test_template_multi_gpu_sets_tensor_parallelism_and_shm(
     assert main["args"] == ["--tensor-parallel-size", "4"]
     assert main["resources"]["limits"]["nvidia.com/gpu"] == "4"
     assert worker["volumes"] == [
-        {"name": "dshm", "emptyDir": {"medium": "Memory", "sizeLimit": "8Gi"}}
+        MODEL_VOLUME,
+        {"name": "dshm", "emptyDir": {"medium": "Memory", "sizeLimit": "8Gi"}},
     ]
 
 
@@ -540,7 +543,7 @@ def test_template_ignores_gpu_options_on_cpu(ctx, llmisvc_relation_ready):
     main = _main(worker)
     assert main["args"] == ["--enforce-eager"]
     assert "nvidia.com/gpu" not in main["resources"]["limits"]
-    assert "volumes" not in worker
+    assert worker["volumes"] == [MODEL_VOLUME]
 
 
 def test_template_image_and_resource_overrides(ctx, llmisvc_relation_ready):
@@ -598,7 +601,7 @@ def test_template_includes_storage_initializer_for_s3(ctx, s3_state):
     assert spec["storageInitializer"] == {"enabled": False}
     for worker in _workers(spec):
         assert [c["name"] for c in worker["initContainers"]] == ["storage-initializer"]
-        assert worker["volumes"] == [{"name": "kserve-pvc-source", "emptyDir": {}}]
+        assert worker["volumes"] == [MODEL_VOLUME]
     assert "AWS_ACCESS_KEY_ID" in rendered
 
 
@@ -614,12 +617,19 @@ def test_template_s3_keeps_credentials_in_secret_only(ctx, s3_state):
     assert rendered.count("AKIA_RAW_KEY") == 1
 
 
-def test_template_omits_storage_initializer_for_hf(ctx, llmisvc_relation_ready):
-    """A public hf:// render relies on the built-in storage initializer (no manual one)."""
+def test_template_includes_storage_initializer_for_public_hf(ctx, llmisvc_relation_ready):
+    """A public hf:// render uses the charm's own initializer, without a token."""
     rendered = _render(ctx, _state(llmisvc_relation_ready))
-    assert "storageInitializer:" not in rendered
-    assert "storage-initializer" not in rendered
-    assert "kserve-pvc-source" not in rendered
+    spec = _llmisvc_spec(rendered)
+    assert spec["storageInitializer"] == {"enabled": False}
+    initializer = spec["template"]["initContainers"][0]
+    assert initializer["name"] == "storage-initializer"
+    assert initializer["args"] == ["hf://EleutherAI/pythia-70m", "/mnt/models"]
+    assert [env["name"] for env in initializer["env"]] == [
+        "HF_HUB_ENABLE_HF_TRANSFER",
+        "HF_HUB_DOWNLOAD_TIMEOUT",
+    ]
+    assert "resources" not in initializer
     assert "kind: Secret" not in rendered
 
 

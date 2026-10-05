@@ -187,9 +187,9 @@ class LLMIntegratorCharm(CharmBase):
         s3://my-bucket/models/pythia-70m -> pythia-70m). This is the identifier
         the model is served as through the OpenAI-compatible API.
 
-        For s3:// URIs the context also carries the storage-initializer image
-        and the S3 connection parameters used to render a manual
-        storage-initializer init container.
+        The model is always downloaded by a storage-initializer init container
+        rendered by the charm; s3:// URIs add the S3 connection parameters and
+        gated hf:// models the Hugging Face token Secret.
 
         Only build it once the configuration has been validated.
         """
@@ -200,6 +200,7 @@ class LLMIntegratorCharm(CharmBase):
             "namespace": self.model.name,
             "model_uri": model_uri,
             "model_name": model_name,
+            "storage_initializer_image": self._storage_initializer_image,
             "enable_prefill_decode": self._enable_prefill_decode,
             "is_s3": self._uri_scheme() == "s3",
             "use_hf_token": self._use_hf_token(),
@@ -215,6 +216,10 @@ class LLMIntegratorCharm(CharmBase):
     def _model_uri(self) -> str:
         """The configured model URI, stripped of surrounding whitespace."""
         return self.model.config.get("model-uri", "").strip()
+
+    @property
+    def _storage_initializer_image(self) -> str:
+        return self.model.config.get("storage-initializer-image", "").strip()
 
     @property
     def _enable_prefill_decode(self) -> bool:
@@ -349,9 +354,6 @@ class LLMIntegratorCharm(CharmBase):
         raw_endpoint = parsed.netloc or parsed.path
         endpoint = raw_endpoint.split("/", 1)[0]
         return {
-            "storage_initializer_image": self.model.config.get(
-                "storage-initializer-image", ""
-            ).strip(),
             "s3_secret_name": self._s3_secret_name,
             "s3_endpoint": endpoint,
             "s3_use_https": "1" if parsed.scheme == "https" else "0",
@@ -397,11 +399,8 @@ class LLMIntegratorCharm(CharmBase):
         return self._uri_scheme() == "hf" and bool(self._hf_token())
 
     def _hf_context(self) -> dict:
-        """Build the storage-initializer render context for a gated hf:// model."""
+        """Build the Hugging Face token render context for a gated hf:// model."""
         return {
-            "storage_initializer_image": self.model.config.get(
-                "storage-initializer-image", ""
-            ).strip(),
             "hf_secret_name": self._hf_secret_name,
             "hf_token": self._hf_token(),
         }
@@ -456,16 +455,7 @@ class LLMIntegratorCharm(CharmBase):
                 "model-uri must start with 'hf://' or 's3://'",
                 BlockedStatus,
             )
-        # An hf-token-secret on an hf:// model makes the charm render a manual
-        # storage-initializer, so the image is required. Key this off config
-        # alone (no secret read) so a missing image is reported directly instead
-        # of being hidden until the secret is granted.
-        hf_token_configured = self._uri_scheme() == "hf" and bool(self._hf_token_secret_id)
-        needs_storage_initializer = self._uri_scheme() == "s3" or hf_token_configured
-        if (
-            needs_storage_initializer
-            and not self.model.config.get("storage-initializer-image", "").strip()
-        ):
+        if not self._storage_initializer_image:
             raise ErrorWithStatus(
                 "Missing required config: storage-initializer-image", BlockedStatus
             )

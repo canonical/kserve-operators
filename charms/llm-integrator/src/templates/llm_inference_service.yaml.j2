@@ -1,12 +1,8 @@
-{%- set needs_storage_initializer = is_s3 or use_hf_token %}
 {#- Pod template shared by the decode (spec.template) and prefill (spec.prefill.template) workers. #}
 {%- macro worker_template(args) %}
-{%- if needs_storage_initializer or shm_size %}
 volumes:
-{%- if needs_storage_initializer %}
   - name: kserve-pvc-source
     emptyDir: {}
-{%- endif %}
 {%- if shm_size %}
 {#- Overrides the presets' 1Gi dshm volume mounted at /dev/shm. #}
   - name: dshm
@@ -14,8 +10,7 @@ volumes:
       medium: Memory
       sizeLimit: {{ shm_size }}
 {%- endif %}
-{%- endif %}
-{%- if needs_storage_initializer %}
+{#- KServe's own initializer is capped at 1Gi of memory, too little for multi-GB models. #}
 initContainers:
   - name: storage-initializer
     image: {{ storage_initializer_image }}
@@ -42,12 +37,14 @@ initContainers:
         value: "{{ s3_use_https }}"
       - name: S3_VERIFY_SSL
         value: "1"
-{%- elif use_hf_token %}
+{%- else %}
+{%- if use_hf_token %}
       - name: HF_TOKEN
         valueFrom:
           secretKeyRef:
             name: {{ hf_secret_name }}
             key: HF_TOKEN
+{%- endif %}
       - name: HF_HUB_ENABLE_HF_TRANSFER
         value: "0"
       - name: HF_HUB_DOWNLOAD_TIMEOUT
@@ -56,7 +53,6 @@ initContainers:
     volumeMounts:
       - name: kserve-pvc-source
         mountPath: /mnt/models
-{%- endif %}
 containers:
   - name: main
     image: {{ runtime_image }}
@@ -75,12 +71,10 @@ containers:
       - name: VLLM_CPU_KVCACHE_SPACE
         value: "1"
 {%- endif %}
-{%- if needs_storage_initializer %}
     volumeMounts:
       - name: kserve-pvc-source
         mountPath: /mnt/models
         readOnly: true
-{%- endif %}
     resources:
       requests:
         cpu: {{ resources["cpu-request"] | tojson }}
@@ -126,10 +120,8 @@ spec:
   model:
     uri: {{ model_uri }}
     name: {{ model_name }}
-{% if needs_storage_initializer %}
   storageInitializer:
     enabled: false
-{% endif %}
 {#- replicas are left unset so KServe keeps the current count (e.g. set by KEDA). #}
   router:
     scheduler: {}
