@@ -12,7 +12,6 @@ charm's metrics, alert rules, Grafana dashboards and logs reached COS.
 Heavy (stands up cos-lite) — run via its own ``cos-integration`` tox env.
 """
 
-import json
 import logging
 import os
 from pathlib import Path
@@ -36,6 +35,7 @@ from .helpers.cos import (
     workload_environment_value,
 )
 from .helpers.deploy import deploy_serving_stack
+from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_IMAGE
 from .helpers.llmisvc_ops import apply_llmisvc_example
 from .helpers.retry import RETRY_FOR_TEN_MINUTES, RETRY_FOR_THREE_MINUTES
 
@@ -55,20 +55,14 @@ TEST_DATA_DIR = Path(__file__).parent / "test_data"
 CPU_EXAMPLE = TEST_DATA_DIR / "llmisvc_test_llm_scheduler_small.yaml.j2"
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-KSERVE_CONTROLLER_IMAGES = json.loads(
-    (REPO_ROOT / "charms/kserve-controller/src/default-custom-images.json").read_text()
-)
-KSERVE_LLMISVC_IMAGES = json.loads(
-    (REPO_ROOT / "charms/kserve-llmisvc/src/default-custom-images.json").read_text()
-)
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
 MODEL_S3_URI = os.environ.get("TEST_MODEL_S3_URI", "s3://charmed-kubeflow-llm-storage/pythia-70m")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 IMAGE_CONTEXT = {
-    "storage_initializer_image": KSERVE_CONTROLLER_IMAGES["configmap__storageInitializer"],
-    "vllm_image": KSERVE_LLMISVC_IMAGES["vllm"],
+    "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
+    "vllm_image": VLLM_IMAGE,
     "model_s3_uri": MODEL_S3_URI,
     "aws_access_key_id": AWS_ACCESS_KEY_ID,
     "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
@@ -109,10 +103,7 @@ def _integrate(juju: jubilant.Juju, provider: str, requirer: str) -> None:
 
 
 @pytest.mark.abort_on_fail
-def test_deploy_stack(juju: jubilant.Juju, request: pytest.FixtureRequest):
-    charms_path = request.config.getoption("--charms-path")
-    if not charms_path:
-        raise ValueError("--charms-path is required for the observability integration test")
+def test_deploy_stack(juju: jubilant.Juju, charms_path: str):
     if not CPU_EXAMPLE.exists():
         raise RuntimeError(f"LLMInferenceService manifest not found: {CPU_EXAMPLE!s}")
 

@@ -12,7 +12,6 @@ operator/metrics-apiserver. Finally it removes everything and asserts the KEDA
 CRDs and charm-owned resources are cleaned up.
 """
 
-import json
 import logging
 import os
 from pathlib import Path
@@ -35,6 +34,7 @@ from .helpers.constants import (
     NAMESPACE_DEFAULT,
 )
 from .helpers.deploy import deploy_serving_stack
+from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_IMAGE
 from .helpers.keda_ops import (
     apply_prometheus_scaledobject,
     assert_crd_absent,
@@ -65,14 +65,6 @@ LLM_DEPLOYMENT = f"{LLM_NAME}-kserve"
 
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 LLM_MANIFEST = TEST_DATA_DIR / "llmisvc_keda_scale.yaml.j2"
-
-REPO_ROOT = Path(__file__).parent.parent.parent
-VLLM_IMAGE = json.loads(
-    (REPO_ROOT / "charms/kserve-llmisvc/src/default-custom-images.json").read_text()
-)["vllm"]
-STORAGE_INITIALIZER_IMAGE = json.loads(
-    (REPO_ROOT / "charms/kserve-controller/src/default-custom-images.json").read_text()
-)["configmap__storageInitializer"]
 
 # The test model is pulled from a Canonical S3 bucket (avoids the flaky HF CDN),
 # matching the main bundle test. Credentials come from the environment.
@@ -113,10 +105,7 @@ ENVOY_APPS = (
 
 
 @pytest.mark.abort_on_fail
-def test_setup_stack_and_keda(juju: jubilant.Juju, request: pytest.FixtureRequest):
-    charms_path = request.config.getoption("--charms-path")
-    if not charms_path:
-        raise ValueError("--charms-path is required for the keda bundle integration test")
+def test_setup_stack_and_keda(juju: jubilant.Juju, charms_path: str):
     if not LLM_MANIFEST.exists():
         raise RuntimeError(f"LLMInferenceService manifest not found: {LLM_MANIFEST!s}")
 
