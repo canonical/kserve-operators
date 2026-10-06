@@ -108,8 +108,15 @@ def test_invalid_config_blocks(ctx, llmisvc_relation_ready, config, expected_msg
         ({"memory-request": "32Gi"}, "memory-request (32Gi) exceeds memory-limit (8Gi)"),
         ({"vllm-extra-args": "--dtype 'bfloat16"}, "Invalid vllm-extra-args"),
         ({"vllm-extra-args": "--port 9000"}, "must not set --port"),
-        ({"vllm-extra-args": "--max_model_len=128"}, "use the max-model-len option"),
-        ({"vllm-extra-args": "-tp 2"}, "use the gpu-count option"),
+        (
+            {"vllm-extra-args": "--max_model_len=128"},
+            "use the charm's max-model-len config option",
+        ),
+        ({"vllm-extra-args": "-tp 2"}, "use the charm's gpu-count config option"),
+        ({"vllm-extra-args": "-pp 2"}, "use the charm's gpu-count config option"),
+        ({"vllm-extra-args": "--data_parallel_size=2"}, "must not set --data-parallel-size"),
+        ({"vllm-extra-args": "--host 127.0.0.1"}, "must not set --host"),
+        ({"vllm-extra-args": "--model other"}, "use the charm's model-uri config option"),
         ({"vllm-extra-args": "--kv-transfer-config {}"}, "KV-cache transfer is not supported"),
     ],
 )
@@ -688,6 +695,32 @@ def test_template_hf_token_kept_in_secret_only(ctx, hf_token_state):
     assert "kind: Secret" in rendered
     assert "name: llm-integrator-hf-token" in rendered
     assert rendered.count("hf_secrettoken") == 1
+
+
+# Quotes, a YAML comment, a document separator and a backslash.
+INJECTION = 'evil" #: x\n---\nkind: Namespace\\'
+
+
+def test_template_escapes_config_values(ctx, llmisvc_relation_ready):
+    """Config values cannot break the YAML or inject extra documents."""
+    config = {"model-name": INJECTION, "runtime-image": INJECTION}
+    rendered = _render(ctx, _state(llmisvc_relation_ready, config))
+    docs = [doc for doc in yaml.safe_load_all(rendered) if doc]
+    assert [doc["kind"] for doc in docs] == ["LLMInferenceService"]
+    spec = docs[0]["spec"]
+    assert spec["model"]["name"] == INJECTION
+    assert _main(spec["template"])["image"] == INJECTION
+
+
+def test_template_escapes_s3_credentials(ctx, s3_state, mock_s3_connection_info):
+    """Relation-supplied credentials are rendered verbatim, whatever characters they hold."""
+    mock_s3_connection_info.return_value = {
+        **mock_s3_connection_info.return_value,
+        "secret-key": INJECTION,
+    }
+    docs = [doc for doc in yaml.safe_load_all(_render(ctx, s3_state)) if doc]
+    assert [doc["kind"] for doc in docs] == ["Secret", "LLMInferenceService"]
+    assert docs[0]["stringData"]["AWS_SECRET_ACCESS_KEY"] == INJECTION
 
 
 def test_remove_deletes_resource(ctx, ready_state, mock_krh_lightkube_client):

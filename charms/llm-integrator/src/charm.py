@@ -95,6 +95,9 @@ class AcceleratorDefaults:
     resources: Dict[str, str]
 
 
+# Sized for small models and override-able per model. cpu: the values the CPU bundle tests have
+# always run with; nvidia-gpu: the single-GPU manifest validated with Qwen3-4B on the GPU CI
+# machine, with the 4-CPU limit taken from KServe's single-node GPU sample.
 ACCELERATOR_DEFAULTS = {
     CPU: AcceleratorDefaults(
         image=DEFAULT_IMAGES["vllm"],
@@ -117,17 +120,24 @@ ACCELERATOR_DEFAULTS = {
 }
 
 # /dev/shm size per GPU for tensor-parallel workers; the presets' 1Gi suffices for one GPU.
+# 2Gi follows vLLM's Kubernetes guide: https://docs.vllm.ai/en/latest/deployment/k8s.html
 SHM_GI_PER_GPU = 2
 
 # vLLM flags that vllm-extra-args may not set, with the reason surfaced to the user.
 RESERVED_VLLM_FLAGS = {
-    "--port": "it is managed by the charm",
-    "--served-model-name": "use the model-name option",
-    "--tensor-parallel-size": "use the gpu-count option",
-    "-tp": "use the gpu-count option",
-    "--max-model-len": "use the max-model-len option",
-    "--gpu-memory-utilization": "use the gpu-memory-utilization option",
-    "--kv-transfer-config": "KV-cache transfer is not supported yet",
+    "--host": "the host is set by the charm and cannot be changed",
+    "--port": "the port is set by the charm and cannot be changed",
+    "--model": "use the charm's model-uri config option instead",
+    "--served-model-name": "use the charm's model-name config option instead",
+    "--tensor-parallel-size": "use the charm's gpu-count config option instead",
+    "-tp": "use the charm's gpu-count config option instead",
+    "--pipeline-parallel-size": "use the charm's gpu-count config option instead",
+    "-pp": "use the charm's gpu-count config option instead",
+    "--data-parallel-size": "use the charm's gpu-count config option instead",
+    "-dp": "use the charm's gpu-count config option instead",
+    "--max-model-len": "use the charm's max-model-len config option instead",
+    "--gpu-memory-utilization": "use the charm's gpu-memory-utilization config option instead",
+    "--kv-transfer-config": "KV-cache transfer is not supported by the charm yet",
 }
 
 # Registering the generic resource at import time adds it to lightkube's
@@ -482,7 +492,7 @@ class LLMIntegratorCharm(CharmBase):
         self._vllm_extra_args()
 
     def _validate_worker_resources(self) -> None:
-        """Validate resource quantities are positive and requests do not exceed limits."""
+        """Validate that resource quantities are positive and requests do not exceed limits."""
         resources = self._worker_resources
         quantities = {}
         for option, value in resources.items():

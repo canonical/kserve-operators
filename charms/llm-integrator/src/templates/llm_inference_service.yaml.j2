@@ -13,9 +13,9 @@ volumes:
 {#- KServe's own initializer is capped at 1Gi of memory, too little for multi-GB models. #}
 initContainers:
   - name: storage-initializer
-    image: {{ storage_initializer_image }}
+    image: {{ storage_initializer_image | tojson }}
     args:
-      - {{ model_uri }}
+      - {{ model_uri | tojson }}
       - /mnt/models
     env:
 {%- if is_s3 %}
@@ -30,9 +30,9 @@ initContainers:
             name: {{ s3_secret_name }}
             key: AWS_SECRET_ACCESS_KEY
       - name: AWS_DEFAULT_REGION
-        value: "{{ s3_region }}"
+        value: {{ s3_region | tojson }}
       - name: S3_ENDPOINT
-        value: "{{ s3_endpoint }}"
+        value: {{ s3_endpoint | tojson }}
       - name: S3_USE_HTTPS
         value: "{{ s3_use_https }}"
       - name: S3_VERIFY_SSL
@@ -55,7 +55,7 @@ initContainers:
         mountPath: /mnt/models
 containers:
   - name: main
-    image: {{ runtime_image }}
+    image: {{ runtime_image | tojson }}
 {%- if args %}
     args:
 {%- for arg in args %}
@@ -97,8 +97,8 @@ metadata:
   namespace: {{ namespace }}
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: "{{ s3_access_key }}"
-  AWS_SECRET_ACCESS_KEY: "{{ s3_secret_access_key }}"
+  AWS_ACCESS_KEY_ID: {{ s3_access_key | tojson }}
+  AWS_SECRET_ACCESS_KEY: {{ s3_secret_access_key | tojson }}
 ---
 {% elif use_hf_token %}
 apiVersion: v1
@@ -108,7 +108,7 @@ metadata:
   namespace: {{ namespace }}
 type: Opaque
 stringData:
-  HF_TOKEN: "{{ hf_token }}"
+  HF_TOKEN: {{ hf_token | tojson }}
 ---
 {% endif %}
 apiVersion: serving.kserve.io/v1alpha2
@@ -118,8 +118,8 @@ metadata:
   namespace: {{ namespace }}
 spec:
   model:
-    uri: {{ model_uri }}
-    name: {{ model_name }}
+    uri: {{ model_uri | tojson }}
+    name: {{ model_name | tojson }}
   storageInitializer:
     enabled: false
 {#- replicas are left unset so KServe keeps the current count (e.g. set by KEDA). #}

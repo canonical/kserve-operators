@@ -33,21 +33,20 @@ def wait_llm_integrator_blocked(juju: jubilant.Juju, message: str) -> None:
     """Wait until llm-integrator is Blocked with ``message`` in its status."""
     juju.wait(
         lambda status: status.apps[LLM_INTEGRATOR_APP_NAME].is_blocked
-        and message in status.apps[LLM_INTEGRATOR_APP_NAME].app_status.message,
-        successes=1,
+        and message in status.apps[LLM_INTEGRATOR_APP_NAME].app_status.message
     )
 
 
 def wait_llm_integrator_active(juju: jubilant.Juju) -> None:
     """Wait until llm-integrator is Active, i.e. its LLMInferenceService is Ready."""
-    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP_NAME].is_active, successes=1)
+    juju.wait(lambda status: status.apps[LLM_INTEGRATOR_APP_NAME].is_active)
 
 
 def remove_llm_integrator(juju: jubilant.Juju, secret_name: Optional[str] = None) -> None:
     """Remove llm-integrator and verify its LLMInferenceService (and Secret) are gone."""
     logger.info("Removing %s and verifying its resources are cleaned up", LLM_INTEGRATOR_APP_NAME)
     juju.remove_application(LLM_INTEGRATOR_APP_NAME)
-    juju.wait(lambda status: LLM_INTEGRATOR_APP_NAME not in status.apps, successes=1)
+    juju.wait(lambda status: LLM_INTEGRATOR_APP_NAME not in status.apps)
     assert_llminferenceservice_absent(name=LLM_INTEGRATOR_APP_NAME, namespace=juju.model)
     if secret_name:
         assert_secret_absent(name=secret_name, namespace=juju.model)

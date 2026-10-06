@@ -40,8 +40,10 @@ options:
     type: int
     default: 1
     description: >
-      Number of GPUs per worker pod (nvidia.com/gpu). Values above 1 also set
-      vLLM's --tensor-parallel-size. Ignored when accelerator is "cpu".
+      Number of GPUs per worker pod (nvidia.com/gpu); must be at least 1 when
+      accelerator is "nvidia-gpu". The model is split across all of them with
+      vLLM tensor parallelism (--tensor-parallel-size). Ignored when
+      accelerator is "cpu".
   cpu-request:
     type: string
     default: ""
@@ -87,7 +89,8 @@ options:
       Extra arguments appended to `vllm serve`, e.g.
       "--dtype bfloat16 --enable-prefix-caching". Parsed with shell-like
       quoting but never run through a shell. Flags managed by the charm
-      (--port, --served-model-name, --tensor-parallel-size, --max-model-len,
+      (--host, --port, --model, --served-model-name, --tensor-parallel-size,
+      --pipeline-parallel-size, --data-parallel-size, --max-model-len,
       --gpu-memory-utilization) and --kv-transfer-config are rejected.
   storage-initializer-image:
     type: string

@@ -46,6 +46,17 @@ from .helpers import container_status, make_pod
             "loading the model",
             id="reports-the-pod-not-ready-yet",
         ),
+        pytest.param(
+            [
+                make_pod(
+                    containers=[
+                        container_status("main", running=True, restarts=1, last_exit_code=1)
+                    ]
+                )
+            ],
+            "loading the model",
+            id="recovered-after-a-crash",
+        ),
     ],
 )
 def test_starting_workload_is_not_failed(pods, expected):
@@ -69,9 +80,16 @@ def test_starting_workload_is_not_failed(pods, expected):
             id="oom-killed",
         ),
         pytest.param(
-            container_status("main", running=True, restarts=1, last_exit_code=1),
+            container_status(
+                "main", waiting_reason="CrashLoopBackOff", restarts=2, last_exit_code=1
+            ),
             "main keeps failing (Error, exit code 1)",
-            id="restarted-after-error",
+            id="crash-loop-after-error",
+        ),
+        pytest.param(
+            container_status("main", waiting_reason="CrashLoopBackOff", restarts=2),
+            "main: CrashLoopBackOff",
+            id="crash-loop-without-last-state",
         ),
         pytest.param(
             container_status("main", waiting_reason="ImagePullBackOff"),

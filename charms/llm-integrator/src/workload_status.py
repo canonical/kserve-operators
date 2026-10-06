@@ -19,6 +19,7 @@ MAIN_CONTAINER = "main"
 
 # Container waiting reasons that will not resolve without user action.
 _FAILED_WAITING_REASONS = {
+    "CrashLoopBackOff",
     "CreateContainerConfigError",
     "CreateContainerError",
     "ErrImagePull",
@@ -37,13 +38,13 @@ class WorkloadState:
 
 def _container_failure(status: ContainerStatus) -> Optional[str]:
     waiting = status.state.waiting if status.state else None
-    if waiting and waiting.reason in _FAILED_WAITING_REASONS:
-        return f"{status.name}: {waiting.reason}"
+    if not waiting or waiting.reason not in _FAILED_WAITING_REASONS:
+        return None
     last_exit = status.lastState.terminated if status.lastState else None
-    if status.restartCount and last_exit and last_exit.exitCode:
+    if waiting.reason == "CrashLoopBackOff" and last_exit:
         reason = last_exit.reason or "Error"
         return f"{status.name} keeps failing ({reason}, exit code {last_exit.exitCode})"
-    return None
+    return f"{status.name}: {waiting.reason}"
 
 
 def _is_running(container: ContainerStatus) -> bool:
