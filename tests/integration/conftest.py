@@ -39,6 +39,11 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
+        "cpu_only: CPU-only test (already covered by CPU CI or assumes no GPUs); "
+        "skipped when --run-gpu-tests is passed",
+    )
+    config.addinivalue_line(
+        "markers",
         "cos: observability test that stands up cos-lite; run via the cos-integration tox env",
     )
     # Configure logging to display INFO level logs on CLI
@@ -50,13 +55,16 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     if config.getoption("--run-gpu-tests"):
-        return
-    skip_gpu = pytest.mark.skip(
-        reason="GPU tests are skipped by default; pass --run-gpu-tests to enable"
-    )
+        marker = "cpu_only"
+        skip = pytest.mark.skip(reason="CPU-only test; skipped with --run-gpu-tests")
+    else:
+        marker = "gpu"
+        skip = pytest.mark.skip(
+            reason="GPU tests are skipped by default; pass --run-gpu-tests to enable"
+        )
     for item in items:
-        if "gpu" in item.keywords:
-            item.add_marker(skip_gpu)
+        if marker in item.keywords:
+            item.add_marker(skip)
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -87,6 +95,15 @@ def juju(request: pytest.FixtureRequest):
             juju_instance.cli("model-config", "automatically-retry-hooks=false")
             juju_instance.wait_timeout = WAIT_TIMEOUT
             yield juju_instance
+
+
+@pytest.fixture(scope="session")
+def charms_path(request: pytest.FixtureRequest) -> str:
+    """Directory holding the locally built charms, from --charms-path."""
+    path = request.config.getoption("--charms-path")
+    if not path:
+        raise ValueError("--charms-path is required for integration tests")
+    return path
 
 
 def pytest_addoption(parser):

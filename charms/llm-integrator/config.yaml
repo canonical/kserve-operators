@@ -24,16 +24,81 @@ options:
     type: string
     default: ""
     description: >
-      OCI image used as the model serving runtime (vLLM) container, e.g.
-      quay.io/pierdipi/vllm-cpu:latest.
+      Optional OCI image override for the vLLM serving runtime container. When
+      empty, the charm uses the vLLM image it ships for the selected
+      accelerator. A custom image must match the accelerator (e.g. a CUDA build
+      for nvidia-gpu); a mismatch is not detected and only fails at pod start.
+  accelerator:
+    type: string
+    default: "cpu"
+    description: >
+      Hardware the model runs on: "cpu" or "nvidia-gpu". Selects the default
+      runtime image, resource defaults and vLLM settings. With "nvidia-gpu" the
+      cluster must advertise nvidia.com/gpu (e.g. via the NVIDIA GPU operator)
+      and GPU nodes must not be tainted.
+  gpu-count:
+    type: int
+    default: 1
+    description: >
+      Number of GPUs per worker pod (nvidia.com/gpu); must be at least 1 when
+      accelerator is "nvidia-gpu". The model is split across all of them with
+      vLLM tensor parallelism (--tensor-parallel-size). Ignored when
+      accelerator is "cpu".
+  cpu-request:
+    type: string
+    default: ""
+    description: >
+      CPU request per worker, as a Kubernetes quantity (e.g. "4" or "500m").
+      When empty, the default for the selected accelerator is used.
+  cpu-limit:
+    type: string
+    default: ""
+    description: >
+      CPU limit per worker, as a Kubernetes quantity. When empty, the default
+      for the selected accelerator is used.
+  memory-request:
+    type: string
+    default: ""
+    description: >
+      Memory request per worker, as a Kubernetes quantity (e.g. "16Gi"). When
+      empty, the default for the selected accelerator is used.
+  memory-limit:
+    type: string
+    default: ""
+    description: >
+      Memory limit per worker, as a Kubernetes quantity. When empty, the default
+      for the selected accelerator is used.
+  max-model-len:
+    type: int
+    default: 0
+    description: >
+      Maximum model context length passed to vLLM as --max-model-len. 0 keeps
+      the model's own value. Useful to fit large-context models on smaller GPUs.
+  gpu-memory-utilization:
+    type: float
+    default: 0.0
+    description: >
+      Fraction of GPU memory vLLM may use, in (0, 1], passed as
+      --gpu-memory-utilization. 0 keeps vLLM's default (0.9). Required when
+      several models share one GPU (time-slicing or MPS). Ignored when
+      accelerator is "cpu".
+  vllm-extra-args:
+    type: string
+    default: ""
+    description: >
+      Extra arguments appended to `vllm serve`, e.g.
+      "--dtype bfloat16 --enable-prefix-caching". Parsed with shell-like
+      quoting but never run through a shell. Flags managed by the charm
+      (--host, --port, --model, --served-model-name, --tensor-parallel-size,
+      --pipeline-parallel-size, --data-parallel-size, --max-model-len,
+      --gpu-memory-utilization) and --kv-transfer-config are rejected.
   storage-initializer-image:
     type: string
-    default: "docker.io/charmedkubeflow/storage-initializer:0.17.0-07d37fb"
+    default: ""
     description: >
-      OCI image used for the storage-initializer init container that downloads
-      the model into the workload. Used when model-uri is an s3:// URI, or when
-      model-uri is an hf:// URI and hf-token-secret is set (gated/private
-      Hugging Face models).
+      Optional OCI image override for the storage-initializer init container
+      that downloads the model into the workload, for both hf:// and s3:// model
+      URIs. When empty, the charm uses the storage-initializer image it ships.
   hf-token-secret:
     type: secret
     description: >
@@ -46,8 +111,10 @@ options:
       for public models.
   enable-prefill-decode:
     type: boolean
-    default: true
+    default: false
     description: >
       Deploy the model in prefill/decode (disaggregated) mode, adding a
-      dedicated prefill worker alongside the decode worker. When false, the
+      dedicated prefill worker alongside the decode worker. The decode worker
+      recomputes the prompt (no KV-cache transfer). With "nvidia-gpu" the
+      cluster must fit two workers of gpu-count GPUs each. When false, the
       model is deployed as a single colocated worker.

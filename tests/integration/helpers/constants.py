@@ -12,9 +12,9 @@ LLMISVC_APP_NAME = "kserve-llmisvc"
 CONTROLLER_APP_NAME = "kserve-controller"
 # lws-controller is deployed from Charmhub as a stack dependency (app == charm name).
 LWS_APP_NAME = "lws-controller"
+LLM_INTEGRATOR_APP_NAME = "llm-integrator"
 LLMISVC_NAME = "test-llm-scheduler-small"
 LLMISVC_MODEL_NAME = "EleutherAI/pythia-70m"
-LLMISVC_GPU_NAME = "test-llm-scheduler-small-gpu"
 LLMISVC_GPU_MODEL_NAME = "Qwen/Qwen3-4B"
 
 # Metrics ports exposed by the llmisvc service and the local ports we forward
