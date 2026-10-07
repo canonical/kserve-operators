@@ -11,7 +11,6 @@ from typing import Iterator
 
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
-from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from lightkube.resources.apiregistration_v1 import APIService
 from lightkube.resources.apps_v1 import Deployment
@@ -29,46 +28,35 @@ ScaledObject = create_namespaced_resource(
 )
 
 
-def delete_scaledobject(name: str, namespace: str = NAMESPACE_DEFAULT) -> None:
-    """Delete the named ScaledObject, ignoring a missing one."""
-    try:
-        get_client().delete(ScaledObject, name=name, namespace=namespace)
-    except ApiError as err:
-        if err.status.code != 404:
-            raise
+def wait_for_scaled_object(name: str, namespace: str):
+    """Block until the named ScaledObject exists and return it."""
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            return get_client().get(ScaledObject, name=name, namespace=namespace)
 
 
-def apply_prometheus_scaledobject(
-    name: str,
-    target_deployment: str,
-    server_address: str,
-    query: str,
-    threshold: str = "1",
-    namespace: str = NAMESPACE_DEFAULT,
-    max_replicas: int = 2,
-) -> None:
-    """Create a ScaledObject whose Prometheus trigger scales on a live query."""
-    scaledobject = ScaledObject(
-        metadata=ObjectMeta(name=name, namespace=namespace),
-        spec={
-            "scaleTargetRef": {"name": target_deployment},
-            "minReplicaCount": 1,
-            "maxReplicaCount": max_replicas,
-            "pollingInterval": 15,
-            "cooldownPeriod": 60,
-            "triggers": [
-                {
-                    "type": "prometheus",
-                    "metadata": {
-                        "serverAddress": server_address,
-                        "query": query,
-                        "threshold": str(threshold),
-                    },
-                }
-            ],
-        },
-    )
-    get_client().apply(scaledobject, namespace=namespace)
+def assert_scaled_object_ready(name: str, namespace: str) -> None:
+    """Block until KEDA reports the ScaledObject Ready, i.e. its metric query works."""
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            scaled_object = get_client().get(ScaledObject, name=name, namespace=namespace)
+            conditions = (scaled_object.status or {}).get("conditions", [])
+            assert any(
+                c.get("type") == "Ready" and c.get("status") == "True" for c in conditions
+            ), f"ScaledObject {name} not Ready: {conditions}"
+
+
+def assert_scaled_object_absent(name: str, namespace: str) -> None:
+    """Block until the named ScaledObject no longer exists."""
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            try:
+                get_client().get(ScaledObject, name=name, namespace=namespace)
+            except ApiError as err:
+                if err.status.code == 404:
+                    return
+                raise
+            raise AssertionError(f"ScaledObject {name} still exists")
 
 
 # Concurrent completions loop run inside the vLLM container to keep
@@ -142,31 +130,21 @@ def sustained_workload_load(
             process.kill()
 
 
-def assert_deployment_replicas(name: str, namespace: str, replicas: int) -> None:
-    """Block until a Deployment reports the expected number of ready replicas."""
-    client = get_client()
-    for attempt in RETRY_FOR_TEN_MINUTES:
-        with attempt:
-            deployment = client.get(Deployment, name=name, namespace=namespace)
-            ready = (deployment.status.readyReplicas or 0) if deployment.status else 0
-            assert ready == replicas, f"Deployment {name} has {ready}/{replicas} ready replicas"
-
-
 def assert_deployment_scaled_to(name: str, namespace: str, replicas: int) -> None:
-    """Block until KEDA drives the Deployment's desired replica count to ``replicas``.
+    """Block until the Deployment's desired replica count is ``replicas``.
 
     Asserts on ``.spec.replicas`` (the value KEDA's generated HPA sets) rather than
     ready replicas, so the check reflects KEDA's scaling decision and does not hinge
-    on a second heavy vLLM pod scheduling and becoming Ready on a constrained runner.
+    on another heavy vLLM pod scheduling and becoming Ready on a constrained runner.
     """
     client = get_client()
     for attempt in RETRY_FOR_TEN_MINUTES:
         with attempt:
             deployment = client.get(Deployment, name=name, namespace=namespace)
-            desired = (deployment.spec.replicas or 1) if deployment.spec else 1
+            desired = deployment.spec.replicas
             assert (
-                desired >= replicas
-            ), f"Deployment {name} desired replicas {desired}, want >= {replicas}"
+                desired == replicas
+            ), f"Deployment {name} desired replicas {desired}, want {replicas}"
 
 
 def assert_external_metrics_apiservice_available() -> None:

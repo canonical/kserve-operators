@@ -8,15 +8,13 @@ The charm has no workload container: it is a "rendering engine" that turns a
 small set of Juju configuration options into a single ``LLMInferenceService``
 custom resource, applies it to the cluster and keeps it reconciled. It is
 gated on the ``kserve-llmisvc`` charm reporting ready via the
-``kserve-llmisvc-sync`` relation.
+``kserve-llmisvc-sync`` relation. Optionally it autoscales the workers with
+KEDA ScaledObjects driven by vLLM metrics from a related Prometheus.
 """
 
-import json
 import logging
-import shlex
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List
+from functools import cached_property
+from typing import List
 from urllib.parse import urlparse
 
 import tenacity
@@ -25,10 +23,10 @@ from charmed_kubeflow_chisme.kubernetes import (
     KubernetesResourceHandler,
     create_charm_default_labels,
 )
+from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiRequirer
 from lightkube import ApiError
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Node, Pod, Secret
-from lightkube.utils.quantity import parse_quantity
 from object_storage import S3Requirer
 from ops import main
 from ops.charm import CharmBase, SecretChangedEvent
@@ -41,14 +39,19 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
+from pydantic import ValidationError
 
+from autoscaling import scaled_objects_context, worker_deployments
 from capacity import WorkerRequest, find_capacity_issue
+from config import CharmConfig, validation_error_message
 from workload_status import diagnose_workload
 
 log = logging.getLogger(__name__)
 
 TEMPLATE_FILES = ["src/templates/llm_inference_service.yaml.j2"]
+SCALED_OBJECTS_TEMPLATE_FILES = ["src/templates/scaled_objects.yaml.j2"]
 KRH_SCOPE = "llm-integrator"
+SCALED_OBJECTS_KRH_SCOPE = "llm-integrator-autoscaling"
 
 # Readiness relation provided by the kserve-llmisvc charm. The relation name
 # matches the provider charm name, following the repo convention where
@@ -59,9 +62,11 @@ LLMISVC_SYNC_RELATION = "kserve-llmisvc"
 # URI. It is optional: hf:// models do not need it.
 S3_CREDENTIALS_RELATION = "s3-credentials"
 
-# Supported model URI schemes.
-HF_URI_PREFIX = "hf://"
-S3_URI_PREFIX = "s3://"
+# Readiness relation provided by the keda-controller charm; required for autoscaling.
+KEDA_RELATION = "keda"
+
+# Relation to the Prometheus that scrapes the vLLM metrics; required for autoscaling.
+PROMETHEUS_API_RELATION = "prometheus-api"
 
 # Default S3 region used when the s3-credentials relation does not provide one.
 DEFAULT_S3_REGION = "us-east-1"
@@ -78,76 +83,21 @@ DELETION_POLL_INTERVAL = 5
 # Ready condition reason KServe reports both while the workload starts and when it is broken.
 WORKLOAD_UNAVAILABLE_REASON = "MinimumReplicasUnavailable"
 
-DEFAULT_IMAGES = json.loads((Path(__file__).parent / "default-custom-images.json").read_text())
-
-CPU = "cpu"
-NVIDIA_GPU = "nvidia-gpu"
-
-# Worker resource options; empty values fall back to the accelerator defaults.
-RESOURCE_OPTIONS = ("cpu-request", "cpu-limit", "memory-request", "memory-limit")
-
-
-@dataclass(frozen=True)
-class AcceleratorDefaults:
-    """Defaults for an accelerator, used when the matching config option is empty."""
-
-    image: str
-    resources: Dict[str, str]
-
-
-# Sized for small models and override-able per model. cpu: the values the CPU bundle tests have
-# always run with; nvidia-gpu: the single-GPU manifest validated with Qwen3-4B on the GPU CI
-# machine, with the 4-CPU limit taken from KServe's single-node GPU sample.
-ACCELERATOR_DEFAULTS = {
-    CPU: AcceleratorDefaults(
-        image=DEFAULT_IMAGES["vllm"],
-        resources={
-            "cpu-request": "500m",
-            "cpu-limit": "2",
-            "memory-request": "4Gi",
-            "memory-limit": "8Gi",
-        },
-    ),
-    NVIDIA_GPU: AcceleratorDefaults(
-        image=DEFAULT_IMAGES["vllm_gpu"],
-        resources={
-            "cpu-request": "2",
-            "cpu-limit": "4",
-            "memory-request": "8Gi",
-            "memory-limit": "16Gi",
-        },
-    ),
-}
-
 # /dev/shm size per GPU for tensor-parallel workers; the presets' 1Gi suffices for one GPU.
 # 2Gi follows vLLM's Kubernetes guide: https://docs.vllm.ai/en/latest/deployment/k8s.html
 SHM_GI_PER_GPU = 2
 
-# vLLM flags that vllm-extra-args may not set, with the reason surfaced to the user.
-RESERVED_VLLM_FLAGS = {
-    "--host": "the host is set by the charm and cannot be changed",
-    "--port": "the port is set by the charm and cannot be changed",
-    "--model": "use the charm's model-uri config option instead",
-    "--served-model-name": "use the charm's model-name config option instead",
-    "--tensor-parallel-size": "use the charm's gpu-count config option instead",
-    "-tp": "use the charm's gpu-count config option instead",
-    "--pipeline-parallel-size": "use the charm's gpu-count config option instead",
-    "-pp": "use the charm's gpu-count config option instead",
-    "--data-parallel-size": "use the charm's gpu-count config option instead",
-    "-dp": "use the charm's gpu-count config option instead",
-    "--max-model-len": "use the charm's max-model-len config option instead",
-    "--gpu-memory-utilization": "use the charm's gpu-memory-utilization config option instead",
-    "--kv-transfer-config": "KV-cache transfer is not supported by the charm yet",
-}
-
-# Registering the generic resource at import time adds it to lightkube's
-# registry so the KubernetesResourceHandler codecs can (de)serialize it and so
-# we can get()/delete() it directly.
+# Registering the generic resources at import time adds them to lightkube's
+# registry so the KubernetesResourceHandler codecs can (de)serialize them and so
+# we can get()/delete() them directly.
 LLMInferenceService = create_namespaced_resource(
     group="serving.kserve.io",
     version="v1alpha2",
     kind="LLMInferenceService",
     plural="llminferenceservices",
+)
+ScaledObject = create_namespaced_resource(
+    group="keda.sh", version="v1alpha1", kind="ScaledObject", plural="scaledobjects"
 )
 
 
@@ -171,6 +121,7 @@ class LLMIntegratorCharm(CharmBase):
         super().__init__(*args)
 
         self._resource_handler = None
+        self._scaled_objects_handler = None
         self._lightkube_field_manager = self.app.name
 
         self.s3_requirer = S3Requirer(self, relation_name=S3_CREDENTIALS_RELATION)
@@ -185,21 +136,26 @@ class LLMIntegratorCharm(CharmBase):
             self.on[LLMISVC_SYNC_RELATION].relation_broken,
             self.on[S3_CREDENTIALS_RELATION].relation_changed,
             self.on[S3_CREDENTIALS_RELATION].relation_broken,
+            self.on[KEDA_RELATION].relation_changed,
+            self.on[KEDA_RELATION].relation_broken,
+            self.on[PROMETHEUS_API_RELATION].relation_changed,
+            self.on[PROMETHEUS_API_RELATION].relation_broken,
             self.on.secret_changed,
         ]:
             self.framework.observe(event, self._on_event)
         self.framework.observe(self.on.remove, self._on_remove)
 
+    @cached_property
+    def _config(self) -> CharmConfig:
+        """The validated charm config; invalid config blocks the charm."""
+        try:
+            return self.load_config(CharmConfig)
+        except ValidationError as err:
+            raise ErrorWithStatus(validation_error_message(err), BlockedStatus)
+
     @property
     def _context(self):
         """Render context for the LLMInferenceService template.
-
-        ``model-name`` is optional: when unset it defaults to the model
-        reference derived from the URI. For hf:// URIs this is the part after
-        the scheme (e.g. hf://EleutherAI/pythia-70m -> EleutherAI/pythia-70m);
-        for s3:// URIs it is the last path segment of the bucket key (e.g.
-        s3://my-bucket/models/pythia-70m -> pythia-70m). This is the identifier
-        the model is served as through the OpenAI-compatible API.
 
         The model is always downloaded by a storage-initializer init container
         rendered by the charm; s3:// URIs add the S3 connection parameters and
@@ -207,17 +163,16 @@ class LLMIntegratorCharm(CharmBase):
 
         Only build it once the configuration has been validated.
         """
-        model_uri = self._model_uri
-        model_name = self.model.config.get("model-name", "").strip() or self._derived_model_name()
+        config = self._config
         context = {
             "app_name": self.app.name,
             "namespace": self.model.name,
-            "model_uri": model_uri,
-            "model_name": model_name,
-            "storage_initializer_image": self._storage_initializer_image,
-            "enable_prefill_decode": self._enable_prefill_decode,
-            "is_s3": self._uri_scheme() == "s3",
-            "use_hf_token": self._use_hf_token(),
+            "model_uri": config.model_uri,
+            "model_name": config.served_model_name,
+            "storage_initializer_image": config.effective_storage_initializer_image,
+            "enable_prefill_decode": config.enable_prefill_decode,
+            "is_s3": config.uri_scheme == "s3",
+            "use_hf_token": self._use_hf_token,
             **self._worker_context(),
         }
         if context["is_s3"]:
@@ -226,86 +181,32 @@ class LLMIntegratorCharm(CharmBase):
             context.update(self._hf_context())
         return context
 
-    @property
-    def _model_uri(self) -> str:
-        """The configured model URI, stripped of surrounding whitespace."""
-        return self.model.config.get("model-uri", "").strip()
-
-    @property
-    def _storage_initializer_image(self) -> str:
-        return (
-            self.model.config["storage-initializer-image"].strip()
-            or DEFAULT_IMAGES["storage_initializer"]
-        )
-
-    @property
-    def _enable_prefill_decode(self) -> bool:
-        return self.model.config["enable-prefill-decode"]
-
-    @property
-    def _accelerator(self) -> str:
-        return self.model.config["accelerator"].strip()
-
-    @property
-    def _is_gpu(self) -> bool:
-        return self._accelerator == NVIDIA_GPU
-
-    @property
-    def _gpu_count(self) -> int:
-        """GPUs requested per worker; 0 for CPU workloads."""
-        return self.model.config["gpu-count"] if self._is_gpu else 0
-
-    @property
-    def _worker_resources(self) -> Dict[str, str]:
-        """Per-worker resource quantities keyed by config option name."""
-        defaults = ACCELERATOR_DEFAULTS[self._accelerator].resources
-        return {
-            option: self.model.config[option].strip() or defaults[option]
-            for option in RESOURCE_OPTIONS
-        }
-
-    def _vllm_extra_args(self) -> List[str]:
-        """Parse vllm-extra-args, rejecting flags the charm reserves."""
-        try:
-            args = shlex.split(self.model.config["vllm-extra-args"])
-        except ValueError as err:
-            raise ErrorWithStatus(f"Invalid vllm-extra-args: {err}", BlockedStatus)
-        for arg in args:
-            # vLLM accepts --flag=value and underscores in flag names.
-            flag = arg.split("=", 1)[0].replace("_", "-")
-            if flag in RESERVED_VLLM_FLAGS:
-                raise ErrorWithStatus(
-                    f"vllm-extra-args must not set {flag}: {RESERVED_VLLM_FLAGS[flag]}",
-                    BlockedStatus,
-                )
-        return args
-
     def _shared_vllm_args(self) -> List[str]:
         """vLLM arguments applied to both the decode and the prefill worker."""
+        config = self._config
         args = []
-        if self._gpu_count > 1:
-            args += ["--tensor-parallel-size", str(self._gpu_count)]
-        if max_model_len := self.model.config["max-model-len"]:
-            args += ["--max-model-len", str(max_model_len)]
-        gpu_memory_utilization = self.model.config["gpu-memory-utilization"]
-        if self._is_gpu and gpu_memory_utilization:
-            args += ["--gpu-memory-utilization", str(gpu_memory_utilization)]
-        return args + self._vllm_extra_args()
+        if config.worker_gpus > 1:
+            args += ["--tensor-parallel-size", str(config.worker_gpus)]
+        if config.max_model_len:
+            args += ["--max-model-len", str(config.max_model_len)]
+        if config.is_gpu and config.gpu_memory_utilization:
+            args += ["--gpu-memory-utilization", str(config.gpu_memory_utilization)]
+        return args + config.vllm_extra_args
 
     def _worker_context(self) -> dict:
         """Render context for the vLLM worker pods."""
-        gpu_count = self._gpu_count
+        config = self._config
+        gpu_count = config.worker_gpus
         shared_args = self._shared_vllm_args()
-        decode_args = [] if self._is_gpu else ["--enforce-eager"]
-        if self._enable_prefill_decode:
+        decode_args = [] if config.is_gpu else ["--enforce-eager"]
+        if config.enable_prefill_decode:
             # The routing sidecar injected in disaggregated mode owns port 8000.
             decode_args += ["--port", "8001"]
         return {
-            "runtime_image": self.model.config["runtime-image"].strip()
-            or ACCELERATOR_DEFAULTS[self._accelerator].image,
-            "is_gpu": self._is_gpu,
+            "runtime_image": config.effective_runtime_image,
+            "is_gpu": config.is_gpu,
             "gpu_count": gpu_count,
-            "resources": self._worker_resources,
+            "resources": config.worker_resources,
             "shm_size": f"{SHM_GI_PER_GPU * gpu_count}Gi" if gpu_count > 1 else "",
             "decode_args": decode_args + shared_args,
             "prefill_args": ["--enable-chunked-prefill", *shared_args],
@@ -332,24 +233,6 @@ class LLMIntegratorCharm(CharmBase):
     def _hf_token_secret_id(self) -> str:
         """URI of the Juju user secret configured via hf-token-secret."""
         return self.model.config.get("hf-token-secret", "").strip()
-
-    def _uri_scheme(self) -> str:
-        """Return the model URI scheme: ``hf``, ``s3`` or ``""`` when unknown."""
-        if self._model_uri.startswith(HF_URI_PREFIX):
-            return "hf"
-        if self._model_uri.startswith(S3_URI_PREFIX):
-            return "s3"
-        return ""
-
-    def _derived_model_name(self) -> str:
-        """Derive the served model name from the URI when model-name is unset."""
-        uri = self._model_uri
-        if uri.startswith(HF_URI_PREFIX):
-            return uri.removeprefix(HF_URI_PREFIX)
-        if uri.startswith(S3_URI_PREFIX):
-            # s3://bucket/path/to/model -> "model" (last non-empty segment).
-            return uri.removeprefix(S3_URI_PREFIX).rstrip("/").rsplit("/", 1)[-1]
-        return ""
 
     def _s3_connection_info(self) -> dict:
         """Return the s3-credentials connection info, or {} when unavailable."""
@@ -379,8 +262,9 @@ class LLMIntegratorCharm(CharmBase):
             "s3_secret_access_key": info.get("secret-key", ""),
         }
 
+    @cached_property
     def _hf_token(self) -> str:
-        """Return the Hugging Face token, or "" when unset/unavailable.
+        """The Hugging Face token, or "" when unset/unavailable; read once per hook.
 
         Reads the Juju user secret referenced by hf-token-secret. Tolerant by
         design: an unset, ungranted or malformed secret yields "" so the render
@@ -411,15 +295,16 @@ class LLMIntegratorCharm(CharmBase):
         """
         return self.model.get_secret(id=secret_id).get_content(refresh=True)
 
+    @property
     def _use_hf_token(self) -> bool:
         """True when an hf:// model should be served with a Hugging Face token."""
-        return self._uri_scheme() == "hf" and bool(self._hf_token())
+        return self._config.uri_scheme == "hf" and bool(self._hf_token)
 
     def _hf_context(self) -> dict:
         """Build the Hugging Face token render context for a gated hf:// model."""
         return {
             "hf_secret_name": self._hf_secret_name,
-            "hf_token": self._hf_token(),
+            "hf_token": self._hf_token,
         }
 
     @property
@@ -436,88 +321,59 @@ class LLMIntegratorCharm(CharmBase):
             )
         return self._resource_handler
 
-    def _llmisvc_is_ready(self) -> bool:
-        """Return True when the kserve-llmisvc relation reports ready=true."""
-        relation = self.model.get_relation(LLMISVC_SYNC_RELATION)
+    @property
+    def scaled_objects_handler(self):
+        """K8s handler for the KEDA ScaledObjects."""
+        if not self._scaled_objects_handler:
+            self._scaled_objects_handler = KubernetesResourceHandler(
+                field_manager=self._lightkube_field_manager,
+                template_files=SCALED_OBJECTS_TEMPLATE_FILES,
+                labels=create_charm_default_labels(
+                    self.app.name, self.model.name, scope=SCALED_OBJECTS_KRH_SCOPE
+                ),
+                logger=log,
+            )
+        return self._scaled_objects_handler
+
+    def _validate_ready_relation(
+        self, relation_name: str, provider: str, blocked_message: str
+    ) -> None:
+        """Block without the relation (user action); wait until the provider reports ready."""
+        relation = self.model.get_relation(relation_name)
         if relation is None or relation.app is None:
-            return False
-        app_data = relation.data.get(relation.app, {})
-        return app_data.get("ready", "false").lower() == "true"
+            raise ErrorWithStatus(blocked_message, BlockedStatus)
+        if relation.data[relation.app].get("ready", "false").lower() != "true":
+            raise ErrorWithStatus(f"Waiting for {provider} to report ready=true", WaitingStatus)
 
-    def _validate_llmisvc_relation(self) -> None:
-        """Validate relation presence and readiness from kserve-llmisvc.
-
-        Missing relation is a user-actionable misconfiguration (Blocked).
-        Present relation without ready=true is a convergence state (Waiting).
-        """
-        relation = self.model.get_relation(LLMISVC_SYNC_RELATION)
-        if relation is None or relation.app is None:
+    def _prometheus_url(self) -> str:
+        """In-cluster URL of the related Prometheus that KEDA queries."""
+        if self.model.get_relation(PROMETHEUS_API_RELATION) is None:
             raise ErrorWithStatus(
-                "Please relate to kserve-llmisvc:kserve-llmisvc",
+                f"Please relate to Prometheus over {PROMETHEUS_API_RELATION} "
+                "to enable autoscaling",
                 BlockedStatus,
             )
-        if not self._llmisvc_is_ready():
+        try:
+            data = PrometheusApiRequirer(self.model.relations, PROMETHEUS_API_RELATION).get_data()
+        except ValidationError:
+            data = None
+        if data is None:
             raise ErrorWithStatus(
-                "Waiting for kserve-llmisvc to report ready=true",
-                WaitingStatus,
+                f"Waiting for {PROMETHEUS_API_RELATION} relation data", WaitingStatus
             )
+        # KEDA appends /api/v1/query to the address itself.
+        return str(data.direct_url).rstrip("/")
 
-    def _validate_config(self) -> None:
-        """Validate the charm configuration is complete and supported."""
-        model_uri = self._model_uri
-        if not model_uri:
-            raise ErrorWithStatus("Missing required config: model-uri", BlockedStatus)
-        if self._uri_scheme() == "":
-            raise ErrorWithStatus(
-                "model-uri must start with 'hf://' or 's3://'",
-                BlockedStatus,
-            )
-
-    def _validate_workload_config(self) -> None:
-        """Validate the accelerator, worker resources and vLLM options."""
-        if self._accelerator not in ACCELERATOR_DEFAULTS:
-            raise ErrorWithStatus(
-                f"accelerator must be one of: {', '.join(ACCELERATOR_DEFAULTS)}", BlockedStatus
-            )
-        if self._is_gpu and self._gpu_count < 1:
-            raise ErrorWithStatus("gpu-count must be >= 1", BlockedStatus)
-        if self.model.config["max-model-len"] < 0:
-            raise ErrorWithStatus("max-model-len must be >= 0", BlockedStatus)
-        if self._is_gpu and not 0 <= self.model.config["gpu-memory-utilization"] <= 1:
-            raise ErrorWithStatus(
-                "gpu-memory-utilization must be in (0, 1], or 0 for vLLM's default",
-                BlockedStatus,
-            )
-        self._validate_worker_resources()
-        self._vllm_extra_args()
-
-    def _validate_worker_resources(self) -> None:
-        """Validate that resource quantities are positive and requests do not exceed limits."""
-        resources = self._worker_resources
-        quantities = {}
-        for option, value in resources.items():
-            try:
-                quantities[option] = parse_quantity(value)
-            except ValueError:
-                raise ErrorWithStatus(f"Invalid {option}: {value}", BlockedStatus)
-            if quantities[option] <= 0:
-                raise ErrorWithStatus(f"{option} must be greater than 0", BlockedStatus)
-        for resource in ("cpu", "memory"):
-            request, limit = f"{resource}-request", f"{resource}-limit"
-            if quantities[request] > quantities[limit]:
-                raise ErrorWithStatus(
-                    f"{request} ({resources[request]}) exceeds {limit} ({resources[limit]})",
-                    BlockedStatus,
-                )
-
-    def _validate_cluster_capacity(self) -> None:
+    def _validate_cluster_capacity(self, config: CharmConfig) -> None:
         """Block when no node could ever schedule the workers, e.g. no GPUs in the cluster."""
-        resources = self._worker_resources
+        resources = config.worker_resources
+        replicas = config.min_replicas if config.enable_autoscaling else 1
+        roles = 2 if config.enable_prefill_decode else 1
         request = WorkerRequest(
             cpu=resources["cpu-request"],
             memory=resources["memory-request"],
-            gpus=self._gpu_count,
-            workers=2 if self._enable_prefill_decode else 1,
+            gpus=config.worker_gpus,
+            workers=replicas * roles,
         )
         nodes = self.resource_handler.lightkube_client.list(Node)
         if issue := find_capacity_issue(nodes, request):
@@ -534,7 +390,7 @@ class LLMIntegratorCharm(CharmBase):
         secret_id = self._hf_token_secret_id
         if not secret_id:
             return
-        if self._uri_scheme() != "hf":
+        if self._config.uri_scheme != "hf":
             raise ErrorWithStatus(
                 "hf-token-secret is only supported with an hf:// model-uri",
                 BlockedStatus,
@@ -570,7 +426,7 @@ class LLMIntegratorCharm(CharmBase):
         Present relation without usable credentials is a convergence state
         (Waiting). Non-s3 URIs need no S3 relation and short-circuit.
         """
-        if self._uri_scheme() != "s3":
+        if self._config.uri_scheme != "s3":
             return
         relation = self.model.get_relation(S3_CREDENTIALS_RELATION)
         if relation is None:
@@ -652,6 +508,52 @@ class LLMIntegratorCharm(CharmBase):
             )
         return WaitingStatus(f"LLMInferenceService {name} is starting: {state.message}")
 
+    def _reconcile_autoscaling(self, config: CharmConfig) -> StatusBase:
+        """Create, update or remove the ScaledObjects and return the autoscaling status.
+
+        A missing or unready KEDA or Prometheus never stops serving: the workers keep their
+        current replica count and only the returned status reports what is missing.
+        """
+        wanted: List[str] = []
+        status: StatusBase = ActiveStatus()
+        if config.enable_autoscaling:
+            try:
+                self._validate_ready_relation(
+                    KEDA_RELATION,
+                    "keda-controller",
+                    f"Please relate to keda-controller:{KEDA_RELATION} to enable autoscaling",
+                )
+                server_address = self._prometheus_url()
+            except ErrorWithStatus as err:
+                status = err.status
+            else:
+                context = scaled_objects_context(
+                    self.app.name, self.model.name, config, server_address
+                )
+                self.scaled_objects_handler.context = context
+                self.scaled_objects_handler.apply()
+                wanted = [scaled_object["name"] for scaled_object in context["scaled_objects"]]
+                status = self._scaled_objects_status(config, wanted)
+
+        # Deleting by name works whether or not KEDA (and so the ScaledObject CRD) is installed.
+        client = self.resource_handler.lightkube_client
+        for name in worker_deployments(self.app.name, prefill_decode=True):
+            if name not in wanted:
+                self._delete_resource(client, ScaledObject, name)
+        return status
+
+    def _scaled_objects_status(self, config: CharmConfig, names: List[str]) -> StatusBase:
+        """Report a ScaledObject KEDA marks not ready, e.g. because its metric query fails."""
+        client = self.scaled_objects_handler.lightkube_client
+        for name in names:
+            obj = client.get(ScaledObject, name=name, namespace=self.model.name)
+            conditions = (getattr(obj, "status", None) or {}).get("conditions", [])
+            ready = next((c for c in conditions if c.get("type") == "Ready"), {})
+            if ready.get("status") == "False":
+                detail = ready.get("message") or ready.get("reason") or "reason unknown"
+                return WaitingStatus(f"Autoscaling of {name} is not working: {detail}")
+        return ActiveStatus(f"Autoscaling {config.min_replicas}-{config.max_replicas} replicas")
+
     def _on_event(self, event) -> None:
         """Main reconcile loop for the llm-integrator charm."""
         # Ignore secret-changed notifications for secrets we do not consume.
@@ -660,12 +562,15 @@ class LLMIntegratorCharm(CharmBase):
         ):
             return
         try:
-            self._validate_llmisvc_relation()
-            self._validate_config()
-            self._validate_workload_config()
+            self._validate_ready_relation(
+                LLMISVC_SYNC_RELATION,
+                "kserve-llmisvc",
+                f"Please relate to kserve-llmisvc:{LLMISVC_SYNC_RELATION}",
+            )
+            config = self._config
             self._validate_hf_token()
             self._validate_s3()
-            self._validate_cluster_capacity()
+            self._validate_cluster_capacity(config)
 
             self.unit.status = MaintenanceStatus("Applying LLMInferenceService")
             self.resource_handler.context = self._context
@@ -673,12 +578,19 @@ class LLMIntegratorCharm(CharmBase):
 
             # Prune the HF token Secret when the token is no longer in use (e.g.
             # the config was cleared) since apply() does not remove it.
-            if not self._use_hf_token():
+            if not self._use_hf_token:
                 self._delete_resource(
                     self.resource_handler.lightkube_client, Secret, self._hf_secret_name
                 )
 
-            self.unit.status = self._llm_isvc_status()
+            workload_status = self._llm_isvc_status()
+            autoscaling_status = self._reconcile_autoscaling(config)
+            # Autoscaling problems only show once the workload itself is serving.
+            self.unit.status = (
+                autoscaling_status
+                if isinstance(workload_status, ActiveStatus)
+                else workload_status
+            )
         except ErrorWithStatus as err:
             self.unit.status = err.status
             log.error("Failed to handle %s with error: %s", event, err)
@@ -724,15 +636,18 @@ class LLMIntegratorCharm(CharmBase):
     def _on_remove(self, _) -> None:
         """Delete everything the charm created and wait for full teardown.
 
-        The charm owns the ``LLMInferenceService`` CR and, for s3:// models, the
-        credentials ``Secret``. Both are requested for deletion up front (so the
-        Secret is removed even if the CR teardown is slow), then we wait for the
-        CR to actually disappear (KServe finalizers tear the workload down
-        asynchronously). The Secret has no finalizers and is removed immediately.
+        The charm owns the ``LLMInferenceService`` CR, the KEDA ``ScaledObjects``
+        and, for s3:// or gated hf:// models, a credentials ``Secret``. The
+        ScaledObjects go first so KEDA stops scaling the workers being torn down.
+        Everything is requested for deletion up front (so the Secret is removed
+        even if the CR teardown is slow), then we wait for the CR to actually
+        disappear (KServe finalizers tear the workload down asynchronously).
         """
         self.unit.status = MaintenanceStatus("Removing k8s resources")
         client = self.resource_handler.lightkube_client
 
+        for name in worker_deployments(self.app.name, prefill_decode=True):
+            self._delete_resource(client, ScaledObject, name)
         self._delete_resource(client, LLMInferenceService, self.app.name)
         # Always attempt the Secret deletes (tolerating 404) so nothing is left
         # behind even if the model-uri was switched away from s3:///hf:// first.

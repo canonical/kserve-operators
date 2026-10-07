@@ -13,7 +13,7 @@ from lightkube.resources.core_v1 import Node
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Secret, State
 
-from charm import DEFAULT_IMAGES
+from config import DEFAULT_IMAGES
 
 from .helpers import assert_status, container_status, make_node, make_pod
 
@@ -724,11 +724,18 @@ def test_template_escapes_s3_credentials(ctx, s3_state, mock_s3_connection_info)
 
 
 def test_remove_deletes_resource(ctx, ready_state, mock_krh_lightkube_client):
-    """The remove event deletes the LLMInferenceService and its Secret."""
+    """The remove event deletes the ScaledObjects first, then the CR and the Secrets."""
     out = ctx.run(ctx.on.remove(), ready_state)
 
-    deleted_kinds = {
-        call.args[0].__name__ for call in mock_krh_lightkube_client.delete.call_args_list
-    }
-    assert deleted_kinds == {"LLMInferenceService", "Secret"}
+    deleted = [
+        (call.args[0].__name__, call.kwargs["name"])
+        for call in mock_krh_lightkube_client.delete.call_args_list
+    ]
+    assert deleted == [
+        ("ScaledObject", "llm-integrator-kserve"),
+        ("ScaledObject", "llm-integrator-kserve-prefill"),
+        ("LLMInferenceService", "llm-integrator"),
+        ("Secret", "llm-integrator-s3-creds"),
+        ("Secret", "llm-integrator-hf-token"),
+    ]
     assert_status(out, MaintenanceStatus, "K8s resources removed")
