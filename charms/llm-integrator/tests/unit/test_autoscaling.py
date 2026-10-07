@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 import yaml
 from jinja2 import Template
@@ -96,6 +97,25 @@ def test_disabled_autoscaling_removes_scaled_objects(
 
     mock_krh_apply.assert_called_once()
     assert _deleted_scaled_objects(mock_krh_lightkube_client) == [DECODE, PREFILL]
+    assert out.unit_status == ActiveStatus()
+
+
+def test_cleanup_without_keda_installed(
+    ctx, valid_config, llmisvc_relation_ready, serving, mock_krh_lightkube_client
+):
+    """Without the KEDA CRD the API server answers a plain-text 404 that is not an ApiError."""
+    request = httpx.Request("DELETE", "https://k8s/apis/keda.sh/v1alpha1/scaledobjects/x")
+    not_served = httpx.HTTPStatusError(
+        "404 Not Found", request=request, response=httpx.Response(404, text="404 page not found")
+    )
+
+    def delete(resource, **_):
+        if resource is ScaledObject:
+            raise not_served
+
+    mock_krh_lightkube_client.delete.side_effect = delete
+
+    out = ctx.run(ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready]))
     assert out.unit_status == ActiveStatus()
 
 

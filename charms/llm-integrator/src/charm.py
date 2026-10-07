@@ -17,6 +17,7 @@ from functools import cached_property
 from typing import List
 from urllib.parse import urlparse
 
+import httpx
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
 from charmed_kubeflow_chisme.kubernetes import (
@@ -619,9 +620,8 @@ class LLMIntegratorCharm(CharmBase):
     def _delete_resource(self, client, resource_type, name) -> None:
         """Delete a namespaced resource by name, tolerating it already being gone.
 
-        A missing object (404) or a missing CRD ("no matches for kind") is
-        treated as success so cleanup is idempotent and robust to the
-        kserve-llmisvc charm having been removed first.
+        A missing object (404) or a missing CRD is treated as success so cleanup
+        is idempotent and robust to kserve-llmisvc or KEDA not being installed.
         """
         kind = getattr(resource_type, "__name__", str(resource_type))
         try:
@@ -631,6 +631,12 @@ class LLMIntegratorCharm(CharmBase):
                 log.info("%s %s already gone; nothing to delete.", kind, name)
                 return
             log.warning("Failed to delete %s %s with error: %s", kind, name, e)
+            raise
+        except httpx.HTTPStatusError as e:
+            # An API group that is not served answers with a plain-text 404 lightkube can't parse.
+            if e.response.status_code == 404:
+                log.info("%s API not served; no %s to delete.", kind, name)
+                return
             raise
 
     def _on_remove(self, _) -> None:
