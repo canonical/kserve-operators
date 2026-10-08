@@ -527,6 +527,10 @@ class LLMIntegratorCharm(CharmBase):
                 server_address = self._prometheus_url()
             except ErrorWithStatus as err:
                 status = err.status
+                if isinstance(status, WaitingStatus):
+                    # Keep the current ScaledObjects while a dependency is only temporarily
+                    # unavailable; deleting them would reset scaled-up workers.
+                    wanted = worker_deployments(self.app.name, config.enable_prefill_decode)
             else:
                 context = scaled_objects_context(
                     self.app.name, self.model.name, config, server_address

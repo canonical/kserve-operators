@@ -120,24 +120,37 @@ def test_cleanup_without_keda_installed(
 
 
 @pytest.mark.parametrize(
-    "relations, expected_status, expected_msg",
+    "relations, expected_status, expected_msg, deleted",
     [
-        ([], BlockedStatus, "Please relate to keda-controller:keda to enable autoscaling"),
+        (
+            [],
+            BlockedStatus,
+            "Please relate to keda-controller:keda to enable autoscaling",
+            [DECODE, PREFILL],
+        ),
         (
             [_keda_relation(ready=False)],
             WaitingStatus,
             "Waiting for keda-controller to report ready=true",
+            [PREFILL],
         ),
-        ([_keda_relation()], BlockedStatus, "Please relate to Prometheus over prometheus-api"),
+        (
+            [_keda_relation()],
+            BlockedStatus,
+            "Please relate to Prometheus over prometheus-api",
+            [DECODE, PREFILL],
+        ),
         (
             [_keda_relation(), _prometheus_relation(url="")],
             WaitingStatus,
             "Waiting for prometheus-api relation data",
+            [PREFILL],
         ),
         (
             [_keda_relation(), _prometheus_relation(url="not-a-url")],
             WaitingStatus,
             "Waiting for prometheus-api relation data",
+            [PREFILL],
         ),
     ],
 )
@@ -151,13 +164,15 @@ def test_missing_autoscaling_dependencies_do_not_stop_serving(
     relations,
     expected_status,
     expected_msg,
+    deleted,
 ):
-    """The workload is applied and serves; only the status reports what autoscaling lacks."""
+    """The workload keeps serving; a missing relation removes the ScaledObjects, while a
+    dependency that is only waiting keeps the current worker's ScaledObject."""
     state = _state(valid_config, [llmisvc_relation_ready, *relations], AUTOSCALING)
     out = ctx.run(ctx.on.config_changed(), state)
 
     mock_krh_apply.assert_called_once()
-    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [DECODE, PREFILL]
+    assert _deleted_scaled_objects(mock_krh_lightkube_client) == deleted
     assert_status(out, expected_status, expected_msg)
 
 
