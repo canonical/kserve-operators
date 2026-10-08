@@ -40,11 +40,15 @@ from .helpers import container_status, make_pod
         ),
         pytest.param(
             [
-                make_pod(name="ready", ready=True),
-                make_pod(containers=[container_status("main", running=True)]),
+                make_pod(name="decode", role="decode", ready=True),
+                make_pod(
+                    name="prefill",
+                    role="prefill",
+                    containers=[container_status("main", running=True)],
+                ),
             ],
             "loading the model",
-            id="reports-the-pod-not-ready-yet",
+            id="prefill-worker-not-ready-yet",
         ),
         pytest.param(
             [
@@ -62,7 +66,36 @@ from .helpers import container_status, make_pod
 def test_starting_workload_is_not_failed(pods, expected):
     state = diagnose_workload(pods)
     assert not state.failed
+    assert not state.serving
     assert expected in state.message
+
+
+@pytest.mark.parametrize(
+    "pods, expected",
+    [
+        pytest.param(
+            [
+                make_pod(name="ready", ready=True),
+                make_pod(init_containers=[container_status("storage-initializer", running=True)]),
+            ],
+            "1/2 workers ready, downloading the model",
+            id="scaling-up",
+        ),
+        pytest.param(
+            [
+                make_pod(name="decode", role="decode", ready=True),
+                make_pod(name="prefill", role="prefill", ready=True),
+            ],
+            "2/2 workers ready",
+            id="every-role-ready",
+        ),
+    ],
+)
+def test_workload_with_a_ready_worker_per_role_serves(pods, expected):
+    state = diagnose_workload(pods)
+    assert state.serving
+    assert not state.failed
+    assert state.message == expected
 
 
 @pytest.mark.parametrize(

@@ -115,6 +115,15 @@ def _is_secret_permission_denied(exc: BaseException) -> bool:
     return isinstance(exc, ModelError) and "permission denied" in str(exc).lower()
 
 
+def _combine_statuses(workload: StatusBase, autoscaling: StatusBase) -> StatusBase:
+    """Workload problems come first; autoscaling problems only show once the workload serves."""
+    if not isinstance(workload, ActiveStatus):
+        return workload
+    if not isinstance(autoscaling, ActiveStatus):
+        return autoscaling
+    return ActiveStatus("; ".join(m for m in (autoscaling.message, workload.message) if m))
+
+
 class LLMIntegratorCharm(CharmBase):
     """Render and manage a single LLMInferenceService from Juju config."""
 
@@ -495,7 +504,10 @@ class LLMIntegratorCharm(CharmBase):
         return WaitingStatus(f"Waiting for LLMInferenceService {name} to become Ready: {detail}")
 
     def _workload_status(self, name: str) -> StatusBase:
-        """Tell a starting workload (Waiting) from a failing one (Blocked) via its pods."""
+        """Tell a starting workload (Waiting) from a failing one (Blocked) via its pods.
+
+        Workers that already serve while others start (e.g. a scale-up) are Active.
+        """
         pods = self.resource_handler.lightkube_client.list(
             Pod,
             namespace=self.model.name,
@@ -507,6 +519,8 @@ class LLMIntegratorCharm(CharmBase):
                 f"LLMInferenceService {name} failed: {state.message}. "
                 "Manual intervention is required."
             )
+        if state.serving:
+            return ActiveStatus(state.message)
         return WaitingStatus(f"LLMInferenceService {name} is starting: {state.message}")
 
     def _reconcile_autoscaling(self, config: CharmConfig) -> StatusBase:
@@ -590,12 +604,7 @@ class LLMIntegratorCharm(CharmBase):
 
             workload_status = self._llm_isvc_status()
             autoscaling_status = self._reconcile_autoscaling(config)
-            # Autoscaling problems only show once the workload itself is serving.
-            self.unit.status = (
-                autoscaling_status
-                if isinstance(workload_status, ActiveStatus)
-                else workload_status
-            )
+            self.unit.status = _combine_statuses(workload_status, autoscaling_status)
         except ErrorWithStatus as err:
             self.unit.status = err.status
             log.error("Failed to handle %s with error: %s", event, err)

@@ -11,12 +11,13 @@ import httpx
 import pytest
 import yaml
 from jinja2 import Template
+from lightkube.resources.core_v1 import Node
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Relation, State
 
 from charm import KEDA_RELATION, PROMETHEUS_API_RELATION, ScaledObject
 
-from .helpers import assert_status
+from .helpers import assert_status, container_status, make_node, make_pod
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "src/templates/scaled_objects.yaml.j2"
 PROMETHEUS_URL = "http://prometheus-0.prometheus-endpoints.cos.svc.cluster.local:9090"
@@ -312,6 +313,33 @@ def test_custom_query_fills_in_placeholders(
         "threshold": "10",
         "ignoreNullValues": "false",
     }
+
+
+def test_scale_up_keeps_serving_workload_active(
+    ctx, valid_config, llmisvc_relation_ready, autoscaling_relations, mock_krh_lightkube_client
+):
+    """While a new replica starts KServe reports the workload unavailable, but it still serves."""
+
+    def get(resource, name, namespace):
+        if resource is ScaledObject:
+            return SimpleNamespace(status={"conditions": [{"type": "Ready", "status": "True"}]})
+        unavailable = {"type": "Ready", "status": "False", "reason": "MinimumReplicasUnavailable"}
+        return SimpleNamespace(status={"conditions": [unavailable]})
+
+    pods = [
+        make_pod(name="serving", ready=True),
+        make_pod(init_containers=[container_status("storage-initializer", running=True)]),
+    ]
+    mock_krh_lightkube_client.get.side_effect = get
+    mock_krh_lightkube_client.list.side_effect = lambda resource, **_: (
+        [make_node()] if resource is Node else pods
+    )
+
+    state = _state(valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING)
+    out = ctx.run(ctx.on.config_changed(), state)
+    assert out.unit_status == ActiveStatus(
+        "Autoscaling 1-3 replicas; 1/2 workers ready, downloading the model"
+    )
 
 
 def test_failing_scaled_object_waits(
