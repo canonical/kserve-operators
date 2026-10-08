@@ -24,7 +24,7 @@ resources:
   keda-metrics-apiserver-image:
     type: oci-image
     description: OCI image for the KEDA external-metrics API server.
-    upstream-source: ghcr.io/kedacore/keda-metrics-apiserver:2.17.3
+    upstream-source: mvlassis/keda-metrics-apiserver:2.17.3
   keda-admission-webhooks-image:
     type: oci-image
     description: OCI image for the KEDA admission webhooks.
