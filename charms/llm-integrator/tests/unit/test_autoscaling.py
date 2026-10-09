@@ -11,6 +11,7 @@ import httpx
 import pytest
 import yaml
 from jinja2 import Template
+from lightkube import ApiError
 from lightkube.resources.core_v1 import Node
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Relation, State
@@ -19,11 +20,13 @@ from charm import KEDA_RELATION, PROMETHEUS_API_RELATION, ScaledObject
 
 from .helpers import assert_status, container_status, make_node, make_pod
 
-TEMPLATE = Path(__file__).resolve().parents[2] / "src/templates/scaled_objects.yaml.j2"
+SCALED_OBJECTS_TEMPLATE = (
+    Path(__file__).resolve().parents[2] / "src/templates/scaled_objects.yaml.j2"
+)
 PROMETHEUS_URL = "http://prometheus-0.prometheus-endpoints.cos.svc.cluster.local:9090"
-DECODE = "llm-integrator-kserve"
-PREFILL = "llm-integrator-kserve-prefill"
-AUTOSCALING = {"enable-autoscaling": True}
+DECODE_DEPLOYMENT = "llm-integrator-kserve"
+PREFILL_DEPLOYMENT = "llm-integrator-kserve-prefill"
+AUTOSCALING_ENABLED_CONFIG = {"enable-autoscaling": True}
 
 
 def _keda_relation(ready: bool = True) -> Relation:
@@ -80,7 +83,7 @@ def _render(ctx, state: State) -> tuple:
     with ctx(ctx.on.config_changed(), state) as manager:
         out = manager.run()
         context = manager.charm.scaled_objects_handler.context
-    rendered = Template(TEMPLATE.read_text()).render(context)
+    rendered = Template(SCALED_OBJECTS_TEMPLATE.read_text()).render(context)
     return out, [doc for doc in yaml.safe_load_all(rendered) if doc]
 
 
@@ -97,7 +100,10 @@ def test_disabled_autoscaling_removes_scaled_objects(
     out = ctx.run(ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready]))
 
     mock_krh_apply.assert_called_once()
-    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [DECODE, PREFILL]
+    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [
+        DECODE_DEPLOYMENT,
+        PREFILL_DEPLOYMENT,
+    ]
     assert out.unit_status == ActiveStatus()
 
 
@@ -127,31 +133,31 @@ def test_cleanup_without_keda_installed(
             [],
             BlockedStatus,
             "Please relate to keda-controller:keda to enable autoscaling",
-            [DECODE, PREFILL],
+            [DECODE_DEPLOYMENT, PREFILL_DEPLOYMENT],
         ),
         (
             [_keda_relation(ready=False)],
             WaitingStatus,
             "Waiting for keda-controller to report ready=true",
-            [PREFILL],
+            [PREFILL_DEPLOYMENT],
         ),
         (
             [_keda_relation()],
             BlockedStatus,
             "Please relate to Prometheus over prometheus-api",
-            [DECODE, PREFILL],
+            [DECODE_DEPLOYMENT, PREFILL_DEPLOYMENT],
         ),
         (
             [_keda_relation(), _prometheus_relation(url="")],
             WaitingStatus,
             "Waiting for prometheus-api relation data",
-            [PREFILL],
+            [PREFILL_DEPLOYMENT],
         ),
         (
             [_keda_relation(), _prometheus_relation(url="not-a-url")],
             WaitingStatus,
             "Waiting for prometheus-api relation data",
-            [PREFILL],
+            [PREFILL_DEPLOYMENT],
         ),
     ],
 )
@@ -169,7 +175,7 @@ def test_missing_autoscaling_dependencies_do_not_stop_serving(
 ):
     """The workload keeps serving; a missing relation removes the ScaledObjects, while a
     dependency that is only waiting keeps the current worker's ScaledObject."""
-    state = _state(valid_config, [llmisvc_relation_ready, *relations], AUTOSCALING)
+    state = _state(valid_config, [llmisvc_relation_ready, *relations], AUTOSCALING_ENABLED_CONFIG)
     out = ctx.run(ctx.on.config_changed(), state)
 
     mock_krh_apply.assert_called_once()
@@ -180,7 +186,8 @@ def test_missing_autoscaling_dependencies_do_not_stop_serving(
 def test_workload_status_takes_precedence(ctx, valid_config, llmisvc_relation_ready):
     """While the workload is not serving its status wins over autoscaling problems."""
     out = ctx.run(
-        ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready], AUTOSCALING)
+        ctx.on.config_changed(),
+        _state(valid_config, [llmisvc_relation_ready], AUTOSCALING_ENABLED_CONFIG),
     )
     assert_status(out, WaitingStatus, "to be created")
 
@@ -190,11 +197,16 @@ def test_keda_relation_broken_removes_scaled_objects(
 ):
     keda = _keda_relation()
     state = _state(
-        valid_config, [llmisvc_relation_ready, keda, _prometheus_relation()], AUTOSCALING
+        valid_config,
+        [llmisvc_relation_ready, keda, _prometheus_relation()],
+        AUTOSCALING_ENABLED_CONFIG,
     )
     out = ctx.run(ctx.on.relation_broken(keda), state)
 
-    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [DECODE, PREFILL]
+    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [
+        DECODE_DEPLOYMENT,
+        PREFILL_DEPLOYMENT,
+    ]
     assert_status(out, BlockedStatus, "keda-controller:keda")
 
 
@@ -208,15 +220,17 @@ def test_scaled_object_for_the_worker(
     mock_krh_lightkube_client,
 ):
     """One ScaledObject scales the worker Deployment on the default metric."""
-    state = _state(valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING)
+    state = _state(
+        valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING_ENABLED_CONFIG
+    )
     out, [scaled_object] = _render(ctx, state)
 
     assert mock_krh_apply.call_count == 2
-    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [PREFILL]
+    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [PREFILL_DEPLOYMENT]
     assert out.unit_status == ActiveStatus("Autoscaling 1-3 replicas")
-    assert scaled_object["metadata"]["name"] == DECODE
+    assert scaled_object["metadata"]["name"] == DECODE_DEPLOYMENT
     assert scaled_object["spec"] == {
-        "scaleTargetRef": {"name": DECODE},
+        "scaleTargetRef": {"name": DECODE_DEPLOYMENT},
         "minReplicaCount": 1,
         "maxReplicaCount": 3,
         "pollingInterval": 15,
@@ -234,7 +248,7 @@ def test_scaled_object_for_the_worker(
                     "query": (
                         'sum({__name__=~"vllm:num_requests_running|vllm:num_requests_waiting",'
                         f'k8s_namespace="{state.model.name}",'
-                        f'k8s_pod_name=~"{DECODE}-[^-]+-[^-]+"}})'
+                        f'k8s_pod_name=~"{DECODE_DEPLOYMENT}-[^-]+-[^-]+"}})'
                     ),
                     "threshold": "2",
                     "ignoreNullValues": "false",
@@ -248,18 +262,19 @@ def test_prefill_and_decode_scale_independently(
     ctx, valid_config, llmisvc_relation_ready, autoscaling_relations, serving
 ):
     """Each worker gets its own ScaledObject whose query only matches its own pods."""
-    config = {**AUTOSCALING, "enable-prefill-decode": True}
+    config = {**AUTOSCALING_ENABLED_CONFIG, "enable-prefill-decode": True}
     state = _state(valid_config, [llmisvc_relation_ready, *autoscaling_relations], config)
     _, [decode, prefill] = _render(ctx, state)
 
-    assert decode["spec"]["scaleTargetRef"] == {"name": DECODE}
-    assert prefill["spec"]["scaleTargetRef"] == {"name": PREFILL}
+    assert decode["spec"]["scaleTargetRef"] == {"name": DECODE_DEPLOYMENT}
+    assert prefill["spec"]["scaleTargetRef"] == {"name": PREFILL_DEPLOYMENT}
     decode_pods = re.search(r'k8s_pod_name=~"([^"]+)"', _trigger(decode)["query"]).group(1)
     prefill_pods = re.search(r'k8s_pod_name=~"([^"]+)"', _trigger(prefill)["query"]).group(1)
     # PromQL regex matchers are fully anchored, like re.fullmatch.
-    assert re.fullmatch(decode_pods, f"{DECODE}-7d9f8b6c4-x2k9p")
-    assert not re.fullmatch(decode_pods, f"{PREFILL}-5b8c7d9f6-q4w7z")
-    assert re.fullmatch(prefill_pods, f"{PREFILL}-5b8c7d9f6-q4w7z")
+    # The suffixes are arbitrary; they only mimic the <pod-template-hash>-<random> shape.
+    assert re.fullmatch(decode_pods, f"{DECODE_DEPLOYMENT}-7d9f8b6c4-x2k9p")
+    assert not re.fullmatch(decode_pods, f"{PREFILL_DEPLOYMENT}-5b8c7d9f6-q4w7z")
+    assert re.fullmatch(prefill_pods, f"{PREFILL_DEPLOYMENT}-5b8c7d9f6-q4w7z")
 
 
 @pytest.mark.parametrize(
@@ -288,7 +303,9 @@ def test_metric_presets_and_targets(
     threshold,
 ):
     state = _state(
-        valid_config, [llmisvc_relation_ready, *autoscaling_relations], {**AUTOSCALING, **config}
+        valid_config,
+        [llmisvc_relation_ready, *autoscaling_relations],
+        {**AUTOSCALING_ENABLED_CONFIG, **config},
     )
     _, [scaled_object] = _render(ctx, state)
     assert metric in _trigger(scaled_object)["query"]
@@ -298,8 +315,9 @@ def test_metric_presets_and_targets(
 def test_custom_query_fills_in_placeholders(
     ctx, valid_config, llmisvc_relation_ready, autoscaling_relations, serving
 ):
+    """A custom query gets $namespace and $pods substituted, and $$ escapes a literal $."""
     config = {
-        **AUTOSCALING,
+        **AUTOSCALING_ENABLED_CONFIG,
         "autoscaling-query": 'max(my_metric{ns="$namespace",pod=~"$pods",cost="$$5"})',
         "autoscaling-target": 10.0,
     }
@@ -308,7 +326,7 @@ def test_custom_query_fills_in_placeholders(
     assert _trigger(scaled_object) == {
         "serverAddress": PROMETHEUS_URL,
         "query": (
-            f'max(my_metric{{ns="{state.model.name}",pod=~"{DECODE}-[^-]+-[^-]+",cost="$5"}})'
+            f'max(my_metric{{ns="{state.model.name}",pod=~"{DECODE_DEPLOYMENT}-[^-]+-[^-]+",cost="$5"}})'
         ),
         "threshold": "10",
         "ignoreNullValues": "false",
@@ -335,11 +353,46 @@ def test_scale_up_keeps_serving_workload_active(
         [make_node()] if resource is Node else pods
     )
 
-    state = _state(valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING)
+    state = _state(
+        valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING_ENABLED_CONFIG
+    )
     out = ctx.run(ctx.on.config_changed(), state)
     assert out.unit_status == ActiveStatus(
         "Autoscaling 1-3 replicas; 1/2 workers ready, downloading the model"
     )
+
+
+@pytest.mark.parametrize(
+    "code, expected_status",
+    [
+        pytest.param(400, BlockedStatus, id="rejected-by-webhook"),
+        pytest.param(500, WaitingStatus, id="webhook-unavailable"),
+    ],
+)
+def test_scaled_object_apply_error_does_not_fail_the_hook(
+    ctx,
+    valid_config,
+    llmisvc_relation_ready,
+    autoscaling_relations,
+    serving,
+    mock_krh_apply,
+    mock_krh_lightkube_client,
+    code,
+    expected_status,
+):
+    """KEDA's admission webhook errors surface in the status; existing ScaledObjects stay."""
+    message = "the workload 'llm-integrator-kserve' is already managed by another ScaledObject"
+    error = ApiError(response=httpx.Response(code, json={"code": code, "message": message}))
+    # The LLMInferenceService applies fine; the ScaledObjects are rejected.
+    mock_krh_apply.side_effect = [None, error]
+
+    state = _state(
+        valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING_ENABLED_CONFIG
+    )
+    out = ctx.run(ctx.on.config_changed(), state)
+
+    assert_status(out, expected_status, f"Could not apply the ScaledObjects: {message}")
+    assert _deleted_scaled_objects(mock_krh_lightkube_client) == [PREFILL_DEPLOYMENT]
 
 
 def test_failing_scaled_object_waits(
@@ -354,12 +407,14 @@ def test_failing_scaled_object_waits(
             "message": "Triggers defined in ScaledObject are not working correctly",
         }
     )
-    state = _state(valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING)
+    state = _state(
+        valid_config, [llmisvc_relation_ready, *autoscaling_relations], AUTOSCALING_ENABLED_CONFIG
+    )
     out = ctx.run(ctx.on.config_changed(), state)
     assert_status(
         out,
         WaitingStatus,
-        f"Autoscaling of {DECODE} is not working: Triggers defined in ScaledObject",
+        f"Autoscaling of {DECODE_DEPLOYMENT} is not working: Triggers defined in ScaledObject",
     )
 
 
@@ -392,7 +447,9 @@ def test_failing_scaled_object_waits(
 def test_invalid_autoscaling_config_blocks(
     ctx, valid_config, llmisvc_relation_ready, mock_krh_apply, config, expected_msg
 ):
-    state = _state(valid_config, [llmisvc_relation_ready], {**AUTOSCALING, **config})
+    state = _state(
+        valid_config, [llmisvc_relation_ready], {**AUTOSCALING_ENABLED_CONFIG, **config}
+    )
     out = ctx.run(ctx.on.config_changed(), state)
     assert_status(out, BlockedStatus, expected_msg)
     mock_krh_apply.assert_not_called()
@@ -408,6 +465,6 @@ def test_autoscaling_options_not_validated_when_disabled(
 
 def test_capacity_check_counts_min_replicas(ctx, valid_config, llmisvc_relation_ready):
     """The cluster must fit min-replicas workers; the default node fits 8 CPU workers."""
-    config = {**AUTOSCALING, "min-replicas": 9, "max-replicas": 9}
+    config = {**AUTOSCALING_ENABLED_CONFIG, "min-replicas": 9, "max-replicas": 9}
     out = ctx.run(ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready], config))
     assert_status(out, BlockedStatus, "Cluster fits 8 of 9 workers")

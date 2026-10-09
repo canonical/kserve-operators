@@ -549,10 +549,21 @@ class LLMIntegratorCharm(CharmBase):
                 context = scaled_objects_context(
                     self.app.name, self.model.name, config, server_address
                 )
-                self.scaled_objects_handler.context = context
-                self.scaled_objects_handler.apply()
                 wanted = [scaled_object["name"] for scaled_object in context["scaled_objects"]]
-                status = self._scaled_objects_status(config, wanted)
+                self.scaled_objects_handler.context = context
+                try:
+                    self.scaled_objects_handler.apply()
+                except ApiError as err:
+                    # KEDA's admission webhook rejects e.g. a Deployment another ScaledObject or
+                    # HPA already scales (4xx); a 5xx means the webhook is unavailable.
+                    status_class = (
+                        WaitingStatus if (err.status.code or 0) >= 500 else BlockedStatus
+                    )
+                    status = status_class(
+                        f"Could not apply the ScaledObjects: {err.status.message}"
+                    )
+                else:
+                    status = self._scaled_objects_status(config, wanted)
 
         # Deleting by name works whether or not KEDA (and so the ScaledObject CRD) is installed.
         client = self.resource_handler.lightkube_client
