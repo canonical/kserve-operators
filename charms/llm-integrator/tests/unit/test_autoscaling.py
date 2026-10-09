@@ -26,7 +26,8 @@ SCALED_OBJECTS_TEMPLATE = (
 PROMETHEUS_URL = "http://prometheus-0.prometheus-endpoints.cos.svc.cluster.local:9090"
 DECODE_DEPLOYMENT = "llm-integrator-kserve"
 PREFILL_DEPLOYMENT = "llm-integrator-kserve-prefill"
-AUTOSCALING_ENABLED_CONFIG = {"enable-autoscaling": True}
+AUTOSCALING_ENABLED_CONFIG = {"max-replicas": 3}
+READY_LLMISVC = SimpleNamespace(status={"conditions": [{"type": "Ready", "status": "True"}]})
 
 
 def _keda_relation(ready: bool = True) -> Relation:
@@ -60,7 +61,7 @@ def serving(mock_krh_lightkube_client):
     def get(resource, name, namespace):
         if resource is ScaledObject:
             return SimpleNamespace(status={"conditions": scaled_object_conditions})
-        return SimpleNamespace(status={"conditions": [{"type": "Ready", "status": "True"}]})
+        return READY_LLMISVC
 
     mock_krh_lightkube_client.get.side_effect = get
     return scaled_object_conditions
@@ -96,7 +97,8 @@ def _trigger(scaled_object: dict) -> dict:
 def test_disabled_autoscaling_removes_scaled_objects(
     ctx, valid_config, llmisvc_relation_ready, serving, mock_krh_apply, mock_krh_lightkube_client
 ):
-    """Without autoscaling only the LLMInferenceService is applied; stale ScaledObjects go."""
+    """With max-replicas equal to min-replicas only the LLMInferenceService is applied; stale
+    ScaledObjects go."""
     out = ctx.run(ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready]))
 
     mock_krh_apply.assert_called_once()
@@ -104,6 +106,27 @@ def test_disabled_autoscaling_removes_scaled_objects(
         DECODE_DEPLOYMENT,
         PREFILL_DEPLOYMENT,
     ]
+    assert out.unit_status == ActiveStatus()
+
+
+@pytest.mark.parametrize("replicas", [1, 3])
+@pytest.mark.parametrize("related", [False, True])
+def test_fixed_replicas_ignore_autoscaling_relations(
+    ctx,
+    valid_config,
+    llmisvc_relation_ready,
+    autoscaling_relations,
+    serving,
+    mock_krh_apply,
+    replicas,
+    related,
+):
+    """Without autoscaling the keda and prometheus-api relations are neither needed nor used."""
+    relations = [llmisvc_relation_ready, *(autoscaling_relations if related else [])]
+    config = {"min-replicas": replicas, "max-replicas": replicas}
+    out = ctx.run(ctx.on.config_changed(), _state(valid_config, relations, config))
+
+    mock_krh_apply.assert_called_once()
     assert out.unit_status == ActiveStatus()
 
 
@@ -288,6 +311,11 @@ def test_prefill_and_decode_scale_independently(
         ),
         ({"autoscaling-metric": "num-requests-waiting"}, "vllm:num_requests_waiting{", "2"),
         ({"autoscaling-metric": "kv-cache-usage"}, "vllm:kv_cache_usage_perc{", "0.8"),
+        (
+            {"autoscaling-metric": "kv-cache-usage", "autoscaling-target": 0.5},
+            "vllm:kv_cache_usage_perc{",
+            "0.5",
+        ),
         ({"autoscaling-target": 4.5}, "vllm:num_requests_running", "4.5"),
     ],
 )
@@ -310,27 +338,6 @@ def test_metric_presets_and_targets(
     _, [scaled_object] = _render(ctx, state)
     assert metric in _trigger(scaled_object)["query"]
     assert _trigger(scaled_object)["threshold"] == threshold
-
-
-def test_custom_query_fills_in_placeholders(
-    ctx, valid_config, llmisvc_relation_ready, autoscaling_relations, serving
-):
-    """A custom query gets $namespace and $pods substituted, and $$ escapes a literal $."""
-    config = {
-        **AUTOSCALING_ENABLED_CONFIG,
-        "autoscaling-query": 'max(my_metric{ns="$namespace",pod=~"$pods",cost="$$5"})',
-        "autoscaling-target": 10.0,
-    }
-    state = _state(valid_config, [llmisvc_relation_ready, *autoscaling_relations], config)
-    _, [scaled_object] = _render(ctx, state)
-    assert _trigger(scaled_object) == {
-        "serverAddress": PROMETHEUS_URL,
-        "query": (
-            f'max(my_metric{{ns="{state.model.name}",pod=~"{DECODE_DEPLOYMENT}-[^-]+-[^-]+",cost="$5"}})'
-        ),
-        "threshold": "10",
-        "ignoreNullValues": "false",
-    }
 
 
 def test_scale_up_keeps_serving_workload_active(
@@ -429,18 +436,14 @@ def test_failing_scaled_object_waits(
             "kv-cache-usage",
         ),
         ({"autoscaling-target": -1.0}, "autoscaling-target must be > 0"),
+        (
+            {"autoscaling-metric": "kv-cache-usage", "autoscaling-target": 80.0},
+            "autoscaling-target must be in (0, 1] for kv-cache-usage",
+        ),
         ({"autoscaling-polling-interval": 0}, "autoscaling-polling-interval must be >= 1"),
         (
             {"autoscaling-scale-down-delay": 3601},
             "autoscaling-scale-down-delay must be between 0 and 3600",
-        ),
-        (
-            {"autoscaling-query": "sum(up)"},
-            "autoscaling-target must be set when autoscaling-query is used",
-        ),
-        (
-            {"autoscaling-query": 'sum(up{pod=~"$pod"})', "autoscaling-target": 1.0},
-            "autoscaling-query may only use the $namespace and $pods placeholders",
         ),
     ],
 )
@@ -455,16 +458,16 @@ def test_invalid_autoscaling_config_blocks(
     mock_krh_apply.assert_not_called()
 
 
-def test_autoscaling_options_not_validated_when_disabled(
+def test_autoscaling_options_not_validated_without_autoscaling(
     ctx, valid_config, llmisvc_relation_ready, mock_krh_apply
 ):
-    config = {"min-replicas": 0, "max-replicas": 0, "autoscaling-metric": "gpu-usage"}
+    config = {"autoscaling-metric": "gpu-usage", "autoscaling-target": -1.0}
     ctx.run(ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready], config))
     mock_krh_apply.assert_called_once()
 
 
 def test_capacity_check_counts_min_replicas(ctx, valid_config, llmisvc_relation_ready):
     """The cluster must fit min-replicas workers; the default node fits 8 CPU workers."""
-    config = {**AUTOSCALING_ENABLED_CONFIG, "min-replicas": 9, "max-replicas": 9}
+    config = {"min-replicas": 9, "max-replicas": 9}
     out = ctx.run(ctx.on.config_changed(), _state(valid_config, [llmisvc_relation_ready], config))
     assert_status(out, BlockedStatus, "Cluster fits 8 of 9 workers")

@@ -118,54 +118,45 @@ options:
       recomputes the prompt (no KV-cache transfer). With "nvidia-gpu" the
       cluster must fit two workers of gpu-count GPUs each. When false, the
       model is deployed as a single colocated worker.
-  enable-autoscaling:
-    type: boolean
-    default: false
-    description: >
-      Autoscale the workers with KEDA on a vLLM metric. Requires relations to
-      keda-controller (keda) and to the Prometheus that scrapes kserve-llmisvc's
-      metrics-endpoint (prometheus-api). In prefill/decode mode the decode and
-      prefill workers are scaled independently with the same settings. The
-      model keeps serving while those relations are missing. Prometheus served
-      over TLS is not supported yet.
   min-replicas:
     type: int
     default: 1
     description: >
-      Minimum number of replicas of each worker when enable-autoscaling is
-      true. Must be at least 1: vLLM reports no metrics without a running pod.
+      Number of replicas of each worker, or the minimum while autoscaling. Must
+      be at least 1: vLLM reports no metrics without a running pod.
   max-replicas:
     type: int
-    default: 3
+    default: 1
     description: >
-      Maximum number of replicas of each worker when enable-autoscaling is
-      true. Must be at least min-replicas. The cluster must fit them for
-      scale-up to complete.
+      Maximum number of replicas of each worker. Equal to min-replicas runs a
+      fixed number of replicas; above min-replicas autoscales the workers with
+      KEDA on autoscaling-metric. Autoscaling requires relations to
+      keda-controller (keda) and to the Prometheus that scrapes
+      kserve-llmisvc's metrics-endpoint (prometheus-api); the model keeps
+      serving while they are missing. In prefill/decode mode the decode and
+      prefill workers are scaled independently with the same settings. The
+      cluster must fit max-replicas workers for scale-up to complete.
+      Limitations: Prometheus served over TLS is not supported yet, and the
+      application name must be at most 39 characters (31 with
+      enable-prefill-decode), as Kubernetes truncates longer pod names that
+      the autoscaling query matches.
   autoscaling-metric:
     type: string
     default: "num-requests"
     description: >
-      vLLM metric the workers scale on: "num-requests" (requests being
-      processed plus queued), "num-requests-waiting" (queued requests only) or
-      "kv-cache-usage" (KV-cache utilisation, 0-1). Replicas are set so the
-      metric per replica stays at autoscaling-target.
+      vLLM metric the workers scale on while autoscaling: "num-requests"
+      (requests being processed plus queued), "num-requests-waiting" (queued
+      requests only) or "kv-cache-usage" (KV-cache utilisation, 0-1).
+      Replicas are set so the metric per replica stays at autoscaling-target.
   autoscaling-target:
     type: float
     default: 0.0
     description: >
-      Target value of the autoscaling metric per replica. 0 uses the metric's
-      default: for num-requests 2 on "cpu" and 16 on "nvidia-gpu", for
-      num-requests-waiting 2, for kv-cache-usage 0.8. Required with
-      autoscaling-query.
-  autoscaling-query:
-    type: string
-    default: ""
-    description: >
-      Custom PromQL query that replaces autoscaling-metric. It must return a
-      single value, e.g. by wrapping it in sum(). Use the $namespace and $pods
-      placeholders to select one worker's pods; write $$ for a literal $.
-      Example:
-      sum(vllm:num_requests_waiting{k8s_namespace="$namespace",k8s_pod_name=~"$pods"})
+      Target value of autoscaling-metric per replica: above 0 for
+      num-requests and num-requests-waiting, between 0 and 1 for
+      kv-cache-usage. 0 uses the metric's default: for num-requests 2 on "cpu"
+      and 16 on "nvidia-gpu", for num-requests-waiting 2, for kv-cache-usage
+      0.8.
   autoscaling-polling-interval:
     type: int
     default: 15

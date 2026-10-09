@@ -37,7 +37,7 @@ def scaled_objects_context(
     app_name: str, namespace: str, config: CharmConfig, server_address: str
 ) -> dict:
     """Render context for the ScaledObjects template."""
-    query = Template(config.autoscaling_query or METRIC_QUERIES[config.autoscaling_metric])
+    query = Template(METRIC_QUERIES[config.autoscaling_metric])
     return {
         "namespace": namespace,
         "scaled_objects": [

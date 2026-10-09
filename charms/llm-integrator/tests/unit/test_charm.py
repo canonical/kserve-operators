@@ -494,13 +494,20 @@ def test_template_main_port_override_only_in_disaggregated_mode(ctx, llmisvc_rel
     assert _main(_llmisvc_spec(single)["template"])["args"] == ["--enforce-eager"]
 
 
-def test_template_leaves_replicas_unset(ctx, llmisvc_relation_ready):
-    """Replicas are not rendered so external scalers such as KEDA own them."""
-    spec = _llmisvc_spec(
-        _render(ctx, _state(llmisvc_relation_ready, {"enable-prefill-decode": True}))
-    )
-    assert "replicas" not in spec
-    assert "replicas" not in spec["prefill"]
+@pytest.mark.parametrize(
+    "config, replicas",
+    [
+        pytest.param({}, 1, id="default"),
+        pytest.param({"min-replicas": 3, "max-replicas": 3}, 3, id="fixed"),
+        pytest.param({"max-replicas": 3}, None, id="autoscaling"),
+    ],
+)
+def test_template_replicas(ctx, llmisvc_relation_ready, config, replicas):
+    """Fixed replicas are rendered for both workers; while autoscaling KEDA owns them."""
+    config = {**config, "enable-prefill-decode": True}
+    spec = _llmisvc_spec(_render(ctx, _state(llmisvc_relation_ready, config)))
+    assert spec.get("replicas") == replicas
+    assert spec["prefill"].get("replicas") == replicas
 
 
 def test_template_cpu_worker_defaults(ctx, llmisvc_relation_ready):

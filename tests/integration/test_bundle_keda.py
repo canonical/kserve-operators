@@ -76,7 +76,6 @@ MAX_REPLICAS = 2
 LLM_INTEGRATOR_CONFIG = {
     "model-uri": MODEL_S3_URI,
     "model-name": LLM_MODEL_NAME,
-    "enable-autoscaling": True,
     "max-replicas": MAX_REPLICAS,
     # One request per replica, so the load generator triggers a scale-up straight away.
     "autoscaling-target": 1.0,
@@ -195,8 +194,8 @@ def test_prefill_worker_gets_own_scaled_object(juju: jubilant.Juju):
 
 
 def test_disabling_autoscaling_restores_replicas(juju: jubilant.Juju):
-    logger.info("Disabling autoscaling; the ScaledObjects go and the worker is scaled back")
-    juju.config(LLM_INTEGRATOR_APP, {"enable-autoscaling": False})
+    logger.info("Setting max-replicas to 1; the ScaledObjects go and the worker is scaled back")
+    juju.config(LLM_INTEGRATOR_APP, {"max-replicas": 1})
     for name in (DECODE_DEPLOYMENT, PREFILL_DEPLOYMENT):
         assert_scaled_object_absent(name, juju.model)
     assert_deployment_scaled_to(DECODE_DEPLOYMENT, juju.model, 1)

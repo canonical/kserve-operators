@@ -181,6 +181,7 @@ class LLMIntegratorCharm(CharmBase):
             "model_name": config.served_model_name,
             "storage_initializer_image": config.effective_storage_initializer_image,
             "enable_prefill_decode": config.enable_prefill_decode,
+            "replicas": config.fixed_replicas,
             "is_s3": config.uri_scheme == "s3",
             "use_hf_token": self._use_hf_token,
             **self._worker_context(),
@@ -377,13 +378,12 @@ class LLMIntegratorCharm(CharmBase):
     def _validate_cluster_capacity(self, config: CharmConfig) -> None:
         """Block when no node could ever schedule the workers, e.g. no GPUs in the cluster."""
         resources = config.worker_resources
-        replicas = config.min_replicas if config.enable_autoscaling else 1
         roles = 2 if config.enable_prefill_decode else 1
         request = WorkerRequest(
             cpu=resources["cpu-request"],
             memory=resources["memory-request"],
             gpus=config.worker_gpus,
-            workers=replicas * roles,
+            workers=config.min_replicas * roles,
         )
         nodes = self.resource_handler.lightkube_client.list(Node)
         if issue := find_capacity_issue(nodes, request):
@@ -529,9 +529,11 @@ class LLMIntegratorCharm(CharmBase):
         A missing or unready KEDA or Prometheus never stops serving: the workers keep their
         current replica count and only the returned status reports what is missing.
         """
-        wanted: List[str] = []
+        names = worker_deployments(self.app.name, config.enable_prefill_decode)
+        keep: List[str] = []
         status: StatusBase = ActiveStatus()
-        if config.enable_autoscaling:
+        if config.autoscaling_enabled:
+            keep = names
             try:
                 self._validate_ready_relation(
                     KEDA_RELATION,
@@ -541,36 +543,35 @@ class LLMIntegratorCharm(CharmBase):
                 server_address = self._prometheus_url()
             except ErrorWithStatus as err:
                 status = err.status
-                if isinstance(status, WaitingStatus):
-                    # Keep the current ScaledObjects while a dependency is only temporarily
-                    # unavailable; deleting them would reset scaled-up workers.
-                    wanted = worker_deployments(self.app.name, config.enable_prefill_decode)
+                # A missing relation removes the ScaledObjects. A dependency that is only
+                # temporarily unavailable keeps them, as deleting them resets scaled-up workers.
+                if isinstance(status, BlockedStatus):
+                    keep = []
             else:
-                context = scaled_objects_context(
-                    self.app.name, self.model.name, config, server_address
-                )
-                wanted = [scaled_object["name"] for scaled_object in context["scaled_objects"]]
-                self.scaled_objects_handler.context = context
-                try:
-                    self.scaled_objects_handler.apply()
-                except ApiError as err:
-                    # KEDA's admission webhook rejects e.g. a Deployment another ScaledObject or
-                    # HPA already scales (4xx); a 5xx means the webhook is unavailable.
-                    status_class = (
-                        WaitingStatus if (err.status.code or 0) >= 500 else BlockedStatus
-                    )
-                    status = status_class(
-                        f"Could not apply the ScaledObjects: {err.status.message}"
-                    )
-                else:
-                    status = self._scaled_objects_status(config, wanted)
+                status = self._apply_scaled_objects(config, names, server_address)
 
         # Deleting by name works whether or not KEDA (and so the ScaledObject CRD) is installed.
-        client = self.resource_handler.lightkube_client
+        client = self.scaled_objects_handler.lightkube_client
         for name in worker_deployments(self.app.name, prefill_decode=True):
-            if name not in wanted:
+            if name not in keep:
                 self._delete_resource(client, ScaledObject, name)
         return status
+
+    def _apply_scaled_objects(
+        self, config: CharmConfig, names: List[str], server_address: str
+    ) -> StatusBase:
+        """Apply the ScaledObjects and return the autoscaling status."""
+        self.scaled_objects_handler.context = scaled_objects_context(
+            self.app.name, self.model.name, config, server_address
+        )
+        try:
+            self.scaled_objects_handler.apply()
+        except ApiError as err:
+            # KEDA's admission webhook rejects e.g. a Deployment another ScaledObject or HPA
+            # already scales (4xx); a 5xx means the webhook is unavailable.
+            status_class = WaitingStatus if (err.status.code or 0) >= 500 else BlockedStatus
+            return status_class(f"Could not apply the ScaledObjects: {err.status.message}")
+        return self._scaled_objects_status(config, names)
 
     def _scaled_objects_status(self, config: CharmConfig, names: List[str]) -> StatusBase:
         """Report a ScaledObject KEDA marks not ready, e.g. because its metric query fails."""

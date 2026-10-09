@@ -11,8 +11,7 @@ import json
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
-from string import Template
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from lightkube.utils.quantity import parse_quantity
 from pydantic import (
@@ -133,12 +132,10 @@ class CharmConfig(BaseModel):
     vllm_extra_args: List[str]
     storage_initializer_image: str
     enable_prefill_decode: bool
-    enable_autoscaling: bool
     min_replicas: int
     max_replicas: int
     autoscaling_metric: str
     autoscaling_target: float
-    autoscaling_query: str
     autoscaling_polling_interval: int
     autoscaling_scale_down_delay: int
 
@@ -216,9 +213,7 @@ class CharmConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _check_autoscaling(self) -> "CharmConfig":
-        if not self.enable_autoscaling:
-            return self
+    def _check_replicas(self) -> "CharmConfig":
         if self.min_replicas < 1:
             raise ValueError("min-replicas must be >= 1")
         if self.max_replicas < self.min_replicas:
@@ -226,12 +221,23 @@ class CharmConfig(BaseModel):
                 f"max-replicas ({self.max_replicas}) must be >= "
                 f"min-replicas ({self.min_replicas})"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _check_autoscaling(self) -> "CharmConfig":
+        if not self.autoscaling_enabled:
+            return self
         if self.autoscaling_metric not in AUTOSCALING_METRICS:
             raise ValueError(
                 f"autoscaling-metric must be one of: {', '.join(AUTOSCALING_METRICS)}"
             )
         if self.autoscaling_target < 0:
             raise ValueError("autoscaling-target must be > 0, or 0 for the metric's default")
+        if self.autoscaling_metric == KV_CACHE_USAGE and self.autoscaling_target > 1:
+            raise ValueError(
+                "autoscaling-target must be in (0, 1] for kv-cache-usage, "
+                "or 0 for the metric's default"
+            )
         if self.autoscaling_polling_interval < 1:
             raise ValueError("autoscaling-polling-interval must be >= 1")
         if not 0 <= self.autoscaling_scale_down_delay <= MAX_SCALE_DOWN_DELAY:
@@ -240,19 +246,15 @@ class CharmConfig(BaseModel):
             )
         return self
 
-    @model_validator(mode="after")
-    def _check_autoscaling_query(self) -> "CharmConfig":
-        if not (self.enable_autoscaling and self.autoscaling_query):
-            return self
-        if not self.autoscaling_target:
-            raise ValueError("autoscaling-target must be set when autoscaling-query is used")
-        try:
-            Template(self.autoscaling_query).substitute(namespace="", pods="")
-        except (KeyError, ValueError) as err:
-            raise ValueError(
-                f"autoscaling-query may only use the $namespace and $pods placeholders ({err})"
-            )
-        return self
+    @property
+    def autoscaling_enabled(self) -> bool:
+        """KEDA scales the workers between min-replicas and max-replicas."""
+        return self.max_replicas > self.min_replicas
+
+    @property
+    def fixed_replicas(self) -> Optional[int]:
+        """Replicas of each worker, or None when KEDA sets them."""
+        return None if self.autoscaling_enabled else self.min_replicas
 
     @property
     def is_gpu(self) -> bool:
