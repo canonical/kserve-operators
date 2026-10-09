@@ -40,4 +40,4 @@ LWS_CONTROLLER = CharmDependency("lws-controller", "latest/edge", trust=True)
 S3_INTEGRATOR = CharmDependency("s3-integrator", "2/edge")
 
 # Standalone Prometheus (lighter than full cos-lite) scraping the vLLM metrics.
-PROMETHEUS = CharmDependency("prometheus-k8s", "1/stable", trust=True)
+PROMETHEUS = CharmDependency("prometheus-k8s", "2/stable", trust=True)

@@ -53,6 +53,18 @@ from .helpers import container_status, make_pod
         pytest.param(
             [
                 make_pod(
+                    name="decode",
+                    role="decode",
+                    init_containers=[container_status("storage-initializer", running=True)],
+                ),
+                make_pod(name="prefill", role="prefill", ready=True),
+            ],
+            "downloading the model",
+            id="decode-worker-not-ready-yet",
+        ),
+        pytest.param(
+            [
+                make_pod(
                     containers=[
                         container_status("main", running=True, restarts=1, last_exit_code=1)
                     ]
@@ -88,6 +100,19 @@ def test_starting_workload_is_not_failed(pods, expected):
             ],
             "2/2 workers ready",
             id="every-role-ready",
+        ),
+        pytest.param(
+            [
+                make_pod(name="decode-1", role="decode", ready=True),
+                make_pod(
+                    name="decode-2",
+                    role="decode",
+                    containers=[container_status("main", running=True)],
+                ),
+                make_pod(name="prefill", role="prefill", ready=True),
+            ],
+            "2/3 workers ready, loading the model",
+            id="decode-scaling-up-next-to-ready-prefill",
         ),
     ],
 )

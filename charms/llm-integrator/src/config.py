@@ -113,7 +113,8 @@ def validation_error_message(error: ValidationError) -> str:
 class CharmConfig(BaseModel):
     """The charm's Juju config options (with underscores), validated.
 
-    hf-token-secret is not part of the model: it is resolved and checked by the charm.
+    Fields follow the order of config.yaml. hf-token-secret is not part of the model: it is
+    resolved and checked by the charm.
     """
 
     model_config = ConfigDict(frozen=True, protected_namespaces=())
@@ -121,7 +122,6 @@ class CharmConfig(BaseModel):
     model_uri: str
     model_name: str
     runtime_image: str
-    storage_initializer_image: str
     accelerator: str
     gpu_count: int
     cpu_request: str
@@ -131,6 +131,7 @@ class CharmConfig(BaseModel):
     max_model_len: int
     gpu_memory_utilization: float
     vllm_extra_args: List[str]
+    storage_initializer_image: str
     enable_prefill_decode: bool
     enable_autoscaling: bool
     min_replicas: int
