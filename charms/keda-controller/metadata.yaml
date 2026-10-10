@@ -28,7 +28,7 @@ resources:
   keda-admission-webhooks-image:
     type: oci-image
     description: OCI image for the KEDA admission webhooks.
-    upstream-source: ghcr.io/kedacore/keda-admission-webhooks:2.17.3
+    upstream-source: mvlassis/keda-admission-webhooks:2.17.3
 provides:
   keda:
     interface: keda-sync
