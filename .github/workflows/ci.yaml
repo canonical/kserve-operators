@@ -289,8 +289,8 @@ jobs:
 
       - name: Run KEDA bundle integration test
         env:
-          # Credentials for the S3 bucket hosting the test model; the KEDA bundle
-          # test applies an LLMInferenceService whose storage-initializer needs them.
+          # Credentials for the S3 bucket hosting the test model that llm-integrator
+          # serves; they are handed to it through an s3-integrator.
           AWS_ACCESS_KEY_ID: ${{ secrets.LLM_STORAGE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: eu-central-1

@@ -1,0 +1,28 @@
+{%- for scaled_object in scaled_objects %}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ scaled_object.name }}
+  namespace: {{ namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ scaled_object.name }}
+  minReplicaCount: {{ min_replicas }}
+  maxReplicaCount: {{ max_replicas }}
+  pollingInterval: {{ polling_interval }}
+  advanced:
+    restoreToOriginalReplicaCount: true
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ scale_down_delay }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ server_address | tojson }}
+        query: {{ scaled_object.query | tojson }}
+        threshold: {{ threshold | tojson }}
+{#- Surface a missing metric as a ScaledObject error instead of silently reading 0. #}
+        ignoreNullValues: "false"
+{%- endfor %}

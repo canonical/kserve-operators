@@ -16,3 +16,11 @@ requires:
     interface: s3
     optional: true
     limit: 1
+  keda:
+    interface: keda-sync
+    optional: true
+    limit: 1
+  prometheus-api:
+    interface: prometheus_api
+    optional: true
+    limit: 1

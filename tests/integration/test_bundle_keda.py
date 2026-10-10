@@ -2,86 +2,84 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Bundle integration test for the kserve serving stack scaled by the charmed KEDA.
+"""Bundle integration test for llm-integrator autoscaling with the charmed KEDA.
 
-Deploys the serving stack plus the ``keda`` charm and a standalone Prometheus,
-applies an ``LLMInferenceService`` with no static ``replicas`` (so KEDA owns the
-replica count), and drives its workload Deployment up with a Prometheus
-``ScaledObject`` that scales on a live vLLM metric through the charmed KEDA
-operator/metrics-apiserver. Finally it removes everything and asserts the KEDA
-CRDs and charm-owned resources are cleaned up.
+Deploys the serving stack, keda-controller, a standalone Prometheus scraping the
+vLLM metrics and llm-integrator with autoscaling enabled. It checks that the model
+serves while the autoscaling relations are missing, that the charm then creates a
+ScaledObject per worker, that sustained load scales the worker up, and that
+disabling autoscaling and removing the charms clean everything up. Scaled-up pods
+are never waited for: the tests assert KEDA's desired replica count.
 """
 
 import logging
 import os
-from pathlib import Path
 
 import jubilant
 import pytest
 
-from .helpers.assertions import assert_no_charm_resources_left
+from .helpers.assertions import assert_llmisvc_serving, assert_no_charm_resources_left
 from .helpers.charm_paths import resolve_charm_path, resolve_charm_resources
 from .helpers.charms_dependencies import (
     ENVOY_AI_CONTROLLER,
     ENVOY_CONTROLLER,
     ENVOY_INGRESS,
+    PROMETHEUS,
+    S3_INTEGRATOR,
     SELF_SIGNED_CERTIFICATES,
 )
 from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
+from .helpers.constants import LLM_INTEGRATOR_APP_NAME as LLM_INTEGRATOR_APP
 from .helpers.constants import LLMISVC_APP_NAME as LLMISVC_APP
 from .helpers.constants import LWS_APP_NAME as LWS_APP
-from .helpers.constants import (
-    NAMESPACE_DEFAULT,
-)
 from .helpers.deploy import deploy_serving_stack
-from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_IMAGE
 from .helpers.keda_ops import (
-    apply_prometheus_scaledobject,
     assert_crd_absent,
-    assert_deployment_replicas,
     assert_deployment_scaled_to,
     assert_external_metrics_apiservice_available,
-    delete_scaledobject,
+    assert_scaled_object_absent,
+    assert_scaled_object_ready,
     sustained_workload_load,
+    wait_for_scaled_object,
 )
-from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
+from .helpers.llm_integrator_ops import (
+    deploy_llm_integrator,
+    relate_llm_integrator,
+    remove_llm_integrator,
+    wait_llm_integrator_active,
+    wait_llm_integrator_blocked,
+)
 from .helpers.retry import RETRY_FOR_THREE_MINUTES
+from .helpers.s3_integrator import deploy_s3_integrator
 
 logger = logging.getLogger(__name__)
 logging.getLogger("jubilant.wait").setLevel("WARNING")
 
 KEDA_APP = "keda-controller"
-# Standalone Prometheus (lighter than full cos-lite) to scrape the llmisvc vLLM
-# metrics via the metrics-endpoint relation and back a metric-driven ScaledObject.
-PROMETHEUS_CHARM = "prometheus-k8s"
 PROMETHEUS_APP = "prometheus"
-PROMETHEUS_CHANNEL = "1/stable"
-LLM_MODEL_NAME = "EleutherAI/pythia-70m"
+S3_INTEGRATOR_APP = S3_INTEGRATOR.charm
 KEDA_SCALEDOBJECTS_CRD = "scaledobjects.keda.sh"
-
-LLM_NAME = "keda-bundle-llm"
-# The single-node workload Deployment KServe generates for the LLMInferenceService.
-LLM_DEPLOYMENT = f"{LLM_NAME}-kserve"
-
-TEST_DATA_DIR = Path(__file__).parent / "test_data"
-LLM_MANIFEST = TEST_DATA_DIR / "llmisvc_keda_scale.yaml.j2"
 
 # The test model is pulled from a Canonical S3 bucket (avoids the flaky HF CDN),
 # matching the main bundle test. Credentials come from the environment.
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
 MODEL_S3_URI = os.environ.get("TEST_MODEL_S3_URI", "s3://charmed-kubeflow-llm-storage/pythia-70m")
+S3_ENDPOINT = os.environ.get("S3_ENDPOINT", f"s3.{AWS_REGION}.amazonaws.com")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+LLM_MODEL_NAME = "EleutherAI/pythia-70m"
 
-LLM_CONTEXT = {
-    "name": LLM_NAME,
-    "vllm_image": VLLM_IMAGE,
-    "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
-    "model_s3_uri": MODEL_S3_URI,
-    "aws_access_key_id": AWS_ACCESS_KEY_ID,
-    "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    "aws_region": AWS_REGION,
-    "s3_endpoint": os.environ.get("S3_ENDPOINT", f"s3.{AWS_REGION}.amazonaws.com"),
+# Worker Deployments KServe creates; the charm names each ScaledObject after its Deployment.
+DECODE_DEPLOYMENT = f"{LLM_INTEGRATOR_APP}-kserve"
+PREFILL_DEPLOYMENT = f"{LLM_INTEGRATOR_APP}-kserve-prefill"
+MAX_REPLICAS = 2
+LLM_INTEGRATOR_CONFIG = {
+    "model-uri": MODEL_S3_URI,
+    "model-name": LLM_MODEL_NAME,
+    "max-replicas": MAX_REPLICAS,
+    # One request per replica, so the load generator triggers a scale-up straight away.
+    "autoscaling-target": 1.0,
+    "autoscaling-polling-interval": 5,
 }
 
 
@@ -104,91 +102,103 @@ ENVOY_APPS = (
 )
 
 
-@pytest.mark.abort_on_fail
-def test_setup_stack_and_keda(juju: jubilant.Juju, charms_path: str):
-    if not LLM_MANIFEST.exists():
-        raise RuntimeError(f"LLMInferenceService manifest not found: {LLM_MANIFEST!s}")
+def _deploy_prometheus(juju: jubilant.Juju) -> None:
+    """Deploy the standalone Prometheus, retrying as Charmhub resolution can flake."""
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            try:
+                juju.deploy(
+                    PROMETHEUS.charm,
+                    app=PROMETHEUS_APP,
+                    channel=PROMETHEUS.channel,
+                    trust=PROMETHEUS.trust,
+                )
+            except jubilant.CLIError as exc:
+                if "already exists" not in str(exc):
+                    raise
 
+
+@pytest.mark.abort_on_fail
+def test_setup(juju: jubilant.Juju, charms_path: str):
     deploy_serving_stack(juju, charms_path)
 
-    logger.info("Deploying the keda charm")
+    logger.info("Deploying keda-controller, Prometheus, s3-integrator and llm-integrator")
     keda_charm = resolve_charm_path(charms_path=charms_path, charm_name=KEDA_APP)
     keda_resources = resolve_charm_resources(charm_name=KEDA_APP)
     juju.deploy(charm=str(keda_charm), resources=keda_resources, trust=True)
+    _deploy_prometheus(juju)
+    deploy_s3_integrator(
+        juju,
+        model_s3_uri=MODEL_S3_URI,
+        endpoint=f"https://{S3_ENDPOINT}",
+        region=AWS_REGION,
+        access_key=AWS_ACCESS_KEY_ID,
+        secret_key=AWS_SECRET_ACCESS_KEY,
+    )
+    deploy_llm_integrator(juju, charms_path, LLM_INTEGRATOR_CONFIG)
 
-    logger.info("Waiting for all charms (stack + keda) to be active")
-    juju.wait(jubilant.all_active)
-
-    logger.info("Verifying KEDA external-metrics APIService is Available")
+    logger.info("Relating everything except the autoscaling relations of llm-integrator")
+    juju.integrate(f"{LLMISVC_APP}:metrics-endpoint", f"{PROMETHEUS_APP}:metrics-endpoint")
+    juju.integrate(f"{LLM_INTEGRATOR_APP}:s3-credentials", f"{S3_INTEGRATOR_APP}:s3-credentials")
+    relate_llm_integrator(juju)
+    juju.wait(
+        lambda status: jubilant.all_active(status, [KEDA_APP, PROMETHEUS_APP, S3_INTEGRATOR_APP])
+    )
     assert_external_metrics_apiservice_available()
 
 
-def _integrate(juju: jubilant.Juju, provider: str, requirer: str) -> None:
-    """Integrate two endpoints, treating an already-present relation as success."""
-    try:
-        juju.integrate(provider, requirer)
-    except jubilant.CLIError as exc:
-        if "already exists" not in str(exc):
-            raise
+@pytest.mark.abort_on_fail
+def test_serves_without_autoscaling_relations(juju: jubilant.Juju):
+    logger.info("Waiting for llm-integrator to serve and ask for the keda relation")
+    # Autoscaling problems only show in the status once the workload serves.
+    wait_llm_integrator_blocked(juju, f"{KEDA_APP}:keda")
+    assert_llmisvc_serving(
+        gateway_namespace=juju.model,
+        name=LLM_INTEGRATOR_APP,
+        model=LLM_MODEL_NAME,
+        namespace=juju.model,
+    )
 
 
 @pytest.mark.abort_on_fail
-def test_keda_scales_llmisvc_on_prometheus_metric(juju: jubilant.Juju):
-    logger.info("Deploying standalone Prometheus and relating it to kserve-llmisvc")
-    if PROMETHEUS_APP not in juju.status().apps:
-        # Charmhub resolution can flake transiently; retry the deploy.
-        for attempt in RETRY_FOR_THREE_MINUTES:
-            with attempt:
-                try:
-                    juju.deploy(
-                        PROMETHEUS_CHARM,
-                        app=PROMETHEUS_APP,
-                        channel=PROMETHEUS_CHANNEL,
-                        trust=True,
-                    )
-                except jubilant.CLIError as exc:
-                    if "already exists" in str(exc):
-                        break
-                    raise
-    juju.wait(lambda status: PROMETHEUS_APP in status.apps, successes=1)
-    _integrate(juju, f"{LLMISVC_APP}:metrics-endpoint", f"{PROMETHEUS_APP}:metrics-endpoint")
-    juju.wait(jubilant.all_active)
+def test_charm_creates_scaled_object(juju: jubilant.Juju):
+    logger.info("Relating llm-integrator to keda-controller, then to Prometheus")
+    juju.integrate(f"{LLM_INTEGRATOR_APP}:keda", f"{KEDA_APP}:keda")
+    wait_llm_integrator_blocked(juju, "prometheus-api")
+    juju.integrate(f"{LLM_INTEGRATOR_APP}:prometheus-api", f"{PROMETHEUS_APP}:prometheus-api")
+    wait_llm_integrator_active(juju)
+    message = juju.status().apps[LLM_INTEGRATOR_APP].app_status.message
+    assert message == f"Autoscaling 1-{MAX_REPLICAS} replicas"
 
-    logger.info("Applying LLMInferenceService '%s' (no static replicas)", LLM_NAME)
-    apply_llmisvc_example(
-        manifest_path=str(LLM_MANIFEST),
-        context=LLM_CONTEXT,
-        name=LLM_NAME,
-    )
-    assert_deployment_replicas(LLM_DEPLOYMENT, NAMESPACE_DEFAULT, 1)
+    scaled_object = wait_for_scaled_object(DECODE_DEPLOYMENT, juju.model)
+    assert scaled_object.spec["scaleTargetRef"] == {"name": DECODE_DEPLOYMENT}
+    assert scaled_object.spec["minReplicaCount"] == 1
+    assert scaled_object.spec["maxReplicaCount"] == MAX_REPLICAS
+    assert scaled_object.spec["advanced"]["restoreToOriginalReplicaCount"] is True
+    # Ready means KEDA's query against the related Prometheus returns the vLLM metric.
+    assert_scaled_object_ready(DECODE_DEPLOYMENT, juju.model)
 
-    # KEDA queries the in-cluster Prometheus directly; standalone prometheus-k8s
-    # serves the API at the service root (no Traefik route-prefix).
-    server_address = f"http://{PROMETHEUS_APP}.{juju.model}.svc.cluster.local:9090"
-    query = (
-        f'sum(vllm:num_requests_running{{k8s_namespace="{NAMESPACE_DEFAULT}",'
-        f'k8s_pod_name=~"{LLM_DEPLOYMENT}-.*"}})'
-    )
-    logger.info("Applying a Prometheus ScaledObject targeting %s", LLM_DEPLOYMENT)
-    apply_prometheus_scaledobject(
-        name=LLM_NAME,
-        target_deployment=LLM_DEPLOYMENT,
-        server_address=server_address,
-        query=query,
-        threshold="1",
-        max_replicas=2,
-    )
 
-    logger.info("Driving sustained load; KEDA should scale the workload up to 2 replicas")
-    with sustained_workload_load(LLM_NAME, LLM_MODEL_NAME, NAMESPACE_DEFAULT):
-        # Assert on KEDA's desired replica count (the HPA reacting to the metric),
-        # not ready replicas: a second 3Gi vLLM pod may not schedule on a
-        # resource-constrained CI runner, which is not what this test verifies.
-        assert_deployment_scaled_to(LLM_DEPLOYMENT, NAMESPACE_DEFAULT, 2)
+@pytest.mark.abort_on_fail
+def test_scales_up_on_load(juju: jubilant.Juju):
+    logger.info("Driving sustained load; KEDA should scale the worker to %d", MAX_REPLICAS)
+    with sustained_workload_load(LLM_INTEGRATOR_APP, LLM_MODEL_NAME, juju.model):
+        assert_deployment_scaled_to(DECODE_DEPLOYMENT, juju.model, MAX_REPLICAS)
 
-    logger.info("Cleaning up the ScaledObject and LLMInferenceService")
-    delete_scaledobject(LLM_NAME)
-    delete_llmisvc_example(name=LLM_NAME)
+
+def test_prefill_worker_gets_own_scaled_object(juju: jubilant.Juju):
+    logger.info("Enabling prefill/decode; the prefill worker should get its own ScaledObject")
+    juju.config(LLM_INTEGRATOR_APP, {"enable-prefill-decode": True})
+    scaled_object = wait_for_scaled_object(PREFILL_DEPLOYMENT, juju.model)
+    assert scaled_object.spec["scaleTargetRef"] == {"name": PREFILL_DEPLOYMENT}
+
+
+def test_disabling_autoscaling_restores_replicas(juju: jubilant.Juju):
+    logger.info("Setting max-replicas to 1; the ScaledObjects go and the worker is scaled back")
+    juju.config(LLM_INTEGRATOR_APP, {"max-replicas": 1})
+    for name in (DECODE_DEPLOYMENT, PREFILL_DEPLOYMENT):
+        assert_scaled_object_absent(name, juju.model)
+    assert_deployment_scaled_to(DECODE_DEPLOYMENT, juju.model, 1)
 
 
 def test_remove_leaves_no_charm_resources(juju: jubilant.Juju):
@@ -197,12 +207,16 @@ def test_remove_leaves_no_charm_resources(juju: jubilant.Juju):
     # once kserve-controller clears its finalizer, so kserve-llmisvc must be
     # fully removed while the controller is still up. Under CI's
     # automatically-retry-hooks=false a single stuck remove hook never recovers.
-    logger.info("Removing keda and prometheus first")
-    for app in (KEDA_APP, PROMETHEUS_APP):
+    logger.info("Removing llm-integrator and verifying its resources are gone")
+    if LLM_INTEGRATOR_APP in juju.status().apps:
+        remove_llm_integrator(juju, secret_name=f"{LLM_INTEGRATOR_APP}-s3-creds")
+
+    logger.info("Removing keda, prometheus and s3-integrator")
+    for app in (KEDA_APP, PROMETHEUS_APP, S3_INTEGRATOR_APP):
         if app in juju.status().apps:
             juju.remove_application(app)
     juju.wait(
-        lambda status: KEDA_APP not in status.apps and PROMETHEUS_APP not in status.apps,
+        lambda status: not {KEDA_APP, PROMETHEUS_APP, S3_INTEGRATOR_APP} & set(status.apps),
         successes=1,
     )
 
