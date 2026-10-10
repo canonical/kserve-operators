@@ -10,7 +10,7 @@
     "serving_runtimes__lgbserver": "docker.io/charmedkubeflow/lgbserver:0.17.0-1ddb2d3",
     "serving_runtimes__kserve_mlserver": "docker.io/seldonio/mlserver:1.5.0",
     "serving_runtimes__paddleserver": "docker.io/charmedkubeflow/paddleserver:0.17.0-e671f6f",
-    "serving_runtimes__pmmlserver": "docker.io/charmedkubeflow/pmmlserver:0.17.0-5f4a278-20260825092923",
+    "serving_runtimes__pmmlserver": "docker.io/charmedkubeflow/pmmlserver:0.17.0-5f4a278-20260901032408",
     "serving_runtimes__predictiveserver": "docker.io/charmedkubeflow/predictiveserver:0.17.0-e95a900",
     "serving_runtimes__sklearnserver": "docker.io/charmedkubeflow/sklearnserver:0.17.0-5f4a278-20260825092927",
     "serving_runtimes__tensorflow_serving": "tensorflow/serving:2.6.2",
