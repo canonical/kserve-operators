@@ -9,5 +9,8 @@ output "provides" {
 output "requires" {
   value = {
     kserve_llmisvc = "kserve-llmisvc"
+    s3_credentials = "s3-credentials"
+    keda           = "keda"
+    prometheus_api = "prometheus-api"
   }
 }

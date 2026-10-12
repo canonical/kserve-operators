@@ -13,7 +13,7 @@ from lightkube.resources.core_v1 import Node
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Secret, State
 
-from charm import DEFAULT_IMAGES
+from config import DEFAULT_IMAGES
 
 from .helpers import assert_status, container_status, make_node, make_pod
 
@@ -494,13 +494,20 @@ def test_template_main_port_override_only_in_disaggregated_mode(ctx, llmisvc_rel
     assert _main(_llmisvc_spec(single)["template"])["args"] == ["--enforce-eager"]
 
 
-def test_template_leaves_replicas_unset(ctx, llmisvc_relation_ready):
-    """Replicas are not rendered so external scalers such as KEDA own them."""
-    spec = _llmisvc_spec(
-        _render(ctx, _state(llmisvc_relation_ready, {"enable-prefill-decode": True}))
-    )
-    assert "replicas" not in spec
-    assert "replicas" not in spec["prefill"]
+@pytest.mark.parametrize(
+    "config, replicas",
+    [
+        pytest.param({}, 1, id="default"),
+        pytest.param({"min-replicas": 3, "max-replicas": 3}, 3, id="fixed"),
+        pytest.param({"max-replicas": 3}, None, id="autoscaling"),
+    ],
+)
+def test_template_replicas(ctx, llmisvc_relation_ready, config, replicas):
+    """Fixed replicas are rendered for both workers; while autoscaling KEDA owns them."""
+    config = {**config, "enable-prefill-decode": True}
+    spec = _llmisvc_spec(_render(ctx, _state(llmisvc_relation_ready, config)))
+    assert spec.get("replicas") == replicas
+    assert spec["prefill"].get("replicas") == replicas
 
 
 def test_template_cpu_worker_defaults(ctx, llmisvc_relation_ready):
@@ -724,11 +731,18 @@ def test_template_escapes_s3_credentials(ctx, s3_state, mock_s3_connection_info)
 
 
 def test_remove_deletes_resource(ctx, ready_state, mock_krh_lightkube_client):
-    """The remove event deletes the LLMInferenceService and its Secret."""
+    """The remove event deletes the ScaledObjects first, then the CR and the Secrets."""
     out = ctx.run(ctx.on.remove(), ready_state)
 
-    deleted_kinds = {
-        call.args[0].__name__ for call in mock_krh_lightkube_client.delete.call_args_list
-    }
-    assert deleted_kinds == {"LLMInferenceService", "Secret"}
+    deleted = [
+        (call.args[0].__name__, call.kwargs["name"])
+        for call in mock_krh_lightkube_client.delete.call_args_list
+    ]
+    assert deleted == [
+        ("ScaledObject", "llm-integrator-kserve"),
+        ("ScaledObject", "llm-integrator-kserve-prefill"),
+        ("LLMInferenceService", "llm-integrator"),
+        ("Secret", "llm-integrator-s3-creds"),
+        ("Secret", "llm-integrator-hf-token"),
+    ]
     assert_status(out, MaintenanceStatus, "K8s resources removed")

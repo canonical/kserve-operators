@@ -79,6 +79,7 @@ def make_pod(
     init_containers: Iterable[ContainerStatus] = (),
     containers: Iterable[ContainerStatus] = (),
     unschedulable_message: Optional[str] = None,
+    role: str = "both",
 ) -> Pod:
     """Build a workload Pod with the given container statuses and conditions."""
     conditions = [PodCondition(type="Ready", status="True" if ready else "False")]
@@ -87,7 +88,7 @@ def make_pod(
             PodCondition(type="PodScheduled", status="False", message=unschedulable_message)
         )
     return Pod(
-        metadata=ObjectMeta(name=name),
+        metadata=ObjectMeta(name=name, labels={"llm-d.ai/role": role}),
         status=PodStatus(
             conditions=conditions,
             initContainerStatuses=list(init_containers),
