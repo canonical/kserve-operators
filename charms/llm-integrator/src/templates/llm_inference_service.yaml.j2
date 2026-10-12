@@ -122,7 +122,10 @@ spec:
     name: {{ model_name | tojson }}
   storageInitializer:
     enabled: false
-{#- replicas are left unset so KServe keeps the current count (e.g. set by KEDA). #}
+{#- Without replicas, e.g. while KEDA autoscales, KServe keeps the current count. #}
+{%- if replicas %}
+  replicas: {{ replicas }}
+{%- endif %}
   router:
     scheduler: {}
     route: {}
@@ -130,6 +133,9 @@ spec:
     {{- worker_template(decode_args) | indent(4) }}
 {% if enable_prefill_decode %}
   prefill:
+{%- if replicas %}
+    replicas: {{ replicas }}
+{%- endif %}
     template:
       {{- worker_template(prefill_args) | indent(6) }}
 {% endif %}

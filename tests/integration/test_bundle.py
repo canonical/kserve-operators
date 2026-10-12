@@ -20,6 +20,7 @@ from .helpers.charms_dependencies import (
     ENVOY_CONTROLLER,
     ENVOY_INGRESS,
     LWS_CONTROLLER,
+    S3_INTEGRATOR,
     SELF_SIGNED_CERTIFICATES,
 )
 from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
@@ -36,6 +37,7 @@ from .helpers.llm_integrator_ops import (
     wait_llm_integrator_blocked,
 )
 from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
+from .helpers.s3_integrator import deploy_s3_integrator
 
 logger = logging.getLogger(__name__)
 # Quiet jubilant's very verbose per-poll wait logging during the long waits.
@@ -68,14 +70,8 @@ LLM_INTEGRATOR_HF_SECRET = f"{LLM_INTEGRATOR_APP}-hf-token"
 LLM_INTEGRATOR_MODEL_NAME = "EleutherAI/pythia-70m"
 # The no-GPU test never starts a workload, so the public hf:// copy is enough.
 PUBLIC_HF_MODEL_URI = f"hf://{LLM_INTEGRATOR_MODEL_NAME}"
-# s3-integrator supplies the bucket credentials for an s3:// model URI. The
-# 2/edge track (matching kserve-controller) takes credentials via a Juju secret.
-S3_INTEGRATOR_APP = "s3-integrator"
-S3_INTEGRATOR_CHANNEL = "2/edge"
-# Juju user-secret label holding the S3 access/secret keys handed to
-# s3-integrator. Distinct from the K8s Secret the charm renders for the
-# workload (that one is named ``{app}-s3-creds`` and asserted on cleanup).
-S3_CREDS_JUJU_SECRET_LABEL = "s3-creds"
+# s3-integrator supplies the bucket credentials for an s3:// model URI.
+S3_INTEGRATOR_APP = S3_INTEGRATOR.charm
 # Name of the K8s Secret the llm-integrator charm creates for s3:// models
 # (``{app.name}-s3-creds``); asserted absent after the charm is removed.
 LLM_INTEGRATOR_S3_SECRET = f"{LLM_INTEGRATOR_APP}-s3-creds"
@@ -208,26 +204,15 @@ def test_deploy_llm_via_charm(juju: jubilant.Juju, charms_path: str):
 @pytest.mark.abort_on_fail
 @pytest.mark.cpu_only
 def test_deploy_llm_via_charm_s3(juju: jubilant.Juju, charms_path: str):
-    bucket = MODEL_S3_URI.removeprefix("s3://").split("/", 1)[0]
-
     logger.info("Deploying s3-integrator and providing S3 credentials via a Juju secret")
-    juju.deploy(
-        S3_INTEGRATOR_APP,
-        channel=S3_INTEGRATOR_CHANNEL,
-        config={
-            "endpoint": f"https://{LLMISVC_IMAGE_CONTEXT['s3_endpoint']}",
-            "region": AWS_REGION,
-            "bucket": bucket,
-        },
+    deploy_s3_integrator(
+        juju,
+        model_s3_uri=MODEL_S3_URI,
+        endpoint=f"https://{LLMISVC_IMAGE_CONTEXT['s3_endpoint']}",
+        region=AWS_REGION,
+        access_key=AWS_ACCESS_KEY_ID,
+        secret_key=AWS_SECRET_ACCESS_KEY,
     )
-    secret_uri = juju.cli(
-        "add-secret",
-        S3_CREDS_JUJU_SECRET_LABEL,
-        f"access-key={AWS_ACCESS_KEY_ID}",
-        f"secret-key={AWS_SECRET_ACCESS_KEY}",
-    ).strip()
-    juju.cli("grant-secret", S3_CREDS_JUJU_SECRET_LABEL, S3_INTEGRATOR_APP)
-    juju.config(S3_INTEGRATOR_APP, {"credentials": secret_uri})
     juju.wait(lambda status: status.apps[S3_INTEGRATOR_APP].is_active, timeout=600)
 
     logger.info("Deploying llm-integrator with an s3:// model URI in prefill/decode mode")
