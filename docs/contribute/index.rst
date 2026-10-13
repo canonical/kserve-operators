@@ -11,7 +11,7 @@ Report a problem
 
 `Open an issue <https://github.com/canonical/kserve-operators/issues>`_ for bugs in the
 charms or in this documentation. Do not report security issues there: report them
-privately through `Launchpad <https://wiki.ubuntu.com/DebuggingSecurity#How%20to%20File>`_.
+privately through `Launchpad <https://wiki.ubuntu.com/DebuggingSecurity>`_.
 
 Contribute code
 ---------------

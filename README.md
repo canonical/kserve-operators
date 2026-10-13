@@ -130,7 +130,7 @@ Report bugs and request features in
 ## Security
 
 Please do not report security issues in GitHub issues. Report them through
-[Launchpad](https://wiki.ubuntu.com/DebuggingSecurity#How%20to%20File) instead.
+[Launchpad](https://wiki.ubuntu.com/DebuggingSecurity) instead.
 
 ## License
 
