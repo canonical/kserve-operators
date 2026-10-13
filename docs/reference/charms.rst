@@ -1,7 +1,7 @@
 Charms
 ======
 
-Charmed KServe is made of the charms below. Their Charmhub pages list every
+Charmed llm-d is made of the charms below. Their Charmhub pages list every
 configuration option, integration and action, and are generated from the charms
 themselves.
 

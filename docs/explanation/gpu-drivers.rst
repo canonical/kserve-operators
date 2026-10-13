@@ -1,7 +1,7 @@
 GPU driver installation and management
 ======================================
 
-Charmed KServe runs GPU models on any Kubernetes node that advertises NVIDIA GPUs as the
+Charmed llm-d runs GPU models on any Kubernetes node that advertises NVIDIA GPUs as the
 ``nvidia.com/gpu`` resource. This page explains how that works on the reference
 platform, a single Ubuntu |ubuntu_version| machine with several NVIDIA GPUs, running
 `Canonical Kubernetes`_ and the `NVIDIA GPU Operator`_.

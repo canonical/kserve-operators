@@ -1,4 +1,4 @@
-# Charmed KServe
+# KServe operators
 
 [![On Pull Request](https://github.com/canonical/kserve-operators/actions/workflows/on_pull_request.yaml/badge.svg)](https://github.com/canonical/kserve-operators/actions/workflows/on_pull_request.yaml)
 [![Release](https://github.com/canonical/kserve-operators/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/kserve-operators/actions/workflows/release.yaml)
@@ -6,9 +6,10 @@
 Juju charms that deploy [KServe](https://kserve.github.io/website/) on Kubernetes. They
 serve two purposes:
 
-- **LLM serving**: serve and autoscale open-weight large language models with
-  [vLLM](https://docs.vllm.ai/), behind an [Envoy Gateway](https://gateway.envoyproxy.io/),
-  on CPUs or NVIDIA GPUs, with [KEDA](https://keda.sh/) autoscaling and the
+- **Charmed llm-d**: serve and autoscale open-weight large language models with
+  [vLLM](https://docs.vllm.ai/) and the [llm-d](https://llm-d.ai/) inference scheduler,
+  behind an [Envoy Gateway](https://gateway.envoyproxy.io/), on CPUs or NVIDIA GPUs,
+  with [KEDA](https://keda.sh/) autoscaling and the
   [Canonical Observability Stack](https://documentation.ubuntu.com/observability/).
 - **Classic model serving**: KServe `InferenceService` workloads, as part of
   [Charmed Kubeflow](https://canonical.com/mlops/kubeflow).
@@ -27,7 +28,7 @@ The charms ship KServe 0.17.0.
 The stack also uses [`lws-controller`](https://github.com/canonical/lws-controller-operator),
 the LeaderWorkerSet 0.7.0 controller, which lives in its own repository.
 
-## LLM serving
+## Charmed llm-d
 
 ```mermaid
 flowchart LR

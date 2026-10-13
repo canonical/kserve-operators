@@ -1,7 +1,7 @@
 Architecture
 ============
 
-Charmed KServe is a set of Juju charms that together turn a Kubernetes cluster into an
+Charmed llm-d is a set of Juju charms that together turn a Kubernetes cluster into an
 LLM inference platform. This page explains what each part does, how a request reaches
 a model, and how the stack scales and reports what it is doing.
 

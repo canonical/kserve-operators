@@ -1,7 +1,7 @@
 KServe
 ======
 
-`KServe`_ is a Kubernetes platform for serving machine learning models. Charmed KServe
+`KServe`_ is a Kubernetes platform for serving machine learning models. Charmed llm-d
 uses it in standard (RawDeployment) mode, without Knative or Istio, and relies on its
 ``LLMInferenceService`` resource to serve LLMs.
 
@@ -25,9 +25,9 @@ Role in the stack
 ``llm-integrator``
    Renders one ``LLMInferenceService`` from its configuration.
 
-Charmed KServe also supports classic KServe ``InferenceService`` workloads with Knative,
-as part of `Charmed Kubeflow <https://canonical.com/mlops/kubeflow>`_. That mode is not covered
-by this documentation.
+The same KServe charms also run classic KServe ``InferenceService`` workloads with
+Knative, as part of `Charmed Kubeflow <https://canonical.com/mlops/kubeflow>`_. That mode
+is not covered by this documentation.
 
 Further reading
 ---------------

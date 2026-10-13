@@ -9,8 +9,8 @@ resources into running model servers.
 
 The charm is used in two setups:
 
-- **LLM serving**, with `kserve-llmisvc` and an Envoy gateway, in `standard` mode. See
-  the [Charmed KServe documentation](https://github.com/canonical/kserve-operators/tree/main/docs).
+- **Charmed llm-d** (LLM serving), with `kserve-llmisvc` and an Envoy gateway, in `standard` mode. See
+  the [Charmed llm-d documentation](https://github.com/canonical/kserve-operators/tree/main/docs).
 - **Classic model serving**, as part of
   [Charmed Kubeflow](https://canonical.com/mlops/kubeflow), usually in `knative` mode.
 

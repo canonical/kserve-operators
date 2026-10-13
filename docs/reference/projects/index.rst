@@ -3,7 +3,7 @@
 Underlying projects and dependencies
 ====================================
 
-Charmed KServe packages several open-source projects as Juju charms. This page lists the
+Charmed llm-d packages several open-source projects as Juju charms. This page lists the
 versions shipped with the current release; the pages below describe each project's
 role in the stack.
 

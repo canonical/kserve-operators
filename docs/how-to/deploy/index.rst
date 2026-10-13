@@ -3,7 +3,7 @@
 Deploy the stack with Terraform
 ===============================
 
-This guide prepares a machine and deploys the complete Charmed KServe stack, together
+This guide prepares a machine and deploys the complete Charmed llm-d stack, together
 with the `Canonical Observability Stack`_ (COS), using the `autoscaling-model-serving`_
 Terraform solution.
 

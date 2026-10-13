@@ -1,18 +1,19 @@
 .. _home:
 
-Charmed KServe documentation
-============================
+Charmed llm-d documentation
+===========================
 
-Charmed KServe deploys `KServe`_ with `Juju`_ to serve open-weight large language
-models (LLMs) on your own Kubernetes cluster and GPUs. Models run on `vLLM`_ behind an
-`Envoy Gateway`_, scale with `KEDA`_ on live inference metrics, and report metrics,
-logs and dashboards to the `Canonical Observability Stack`_ (COS).
+Charmed llm-d serves open-weight large language models (LLMs) on your own Kubernetes
+cluster and GPUs. It deploys `KServe`_ and the `llm-d`_ inference scheduler with
+`Juju`_: models run on `vLLM`_ behind an `Envoy Gateway`_, scale with `KEDA`_ on live
+inference metrics, and report metrics, logs and dashboards to the
+`Canonical Observability Stack`_ (COS).
 
 The whole stack, including COS, is deployed with a single Terraform module. A model is
 then one charm and a few configuration options away: point it at a Hugging Face or S3
 model, choose CPU or NVIDIA GPUs, and set how far it may scale.
 
-Charmed KServe is for platform and ML engineers who want to run LLM inference on
+Charmed llm-d is for platform and ML engineers who want to run LLM inference on
 infrastructure they control, with the reproducibility of Juju and Terraform.
 
 .. toctree::
@@ -59,7 +60,7 @@ In this documentation
 Project and community
 ---------------------
 
-Charmed KServe is an open-source project that values its community. Contributions,
+Charmed llm-d is an open-source project that values its community. Contributions,
 suggestions, fixes and constructive feedback are welcome from everyone.
 
 * Read our `Code of conduct`_.

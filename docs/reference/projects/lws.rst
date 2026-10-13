@@ -11,7 +11,7 @@ Role in the stack
 -----------------
 
 ``lws-controller`` runs the LeaderWorkerSet controller and installs its custom
-resources. It is maintained alongside the other Charmed KServe charms, in the
+resources. It is maintained alongside the other Charmed llm-d charms, in the
 `lws-controller-operator`_ repository.
 
 ``kserve-llmisvc`` requires ``lws-controller`` and waits for it to be ready, because
