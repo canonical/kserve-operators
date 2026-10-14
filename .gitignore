@@ -9,7 +9,6 @@ venv/
 *.tfstate*
 .coverage
 coverage.xml
-notes/
 .mypy_cache/
 
 # Local clones of upstream repos, for reference only

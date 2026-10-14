@@ -1,5 +1,7 @@
 .. _kserve-operators: https://github.com/canonical/kserve-operators
 .. _lws-controller-operator: https://github.com/canonical/lws-controller-operator
+.. _keda-controller-operator: https://github.com/canonical/keda-controller-operator
+.. _Charmed Kubeflow documentation: https://documentation.ubuntu.com/charmed-kubeflow/latest/
 .. _autoscaling-model-serving: https://github.com/canonical/autoscaling-model-serving
 .. _KServe: https://kserve.github.io/website/
 .. _vLLM: https://docs.vllm.ai/

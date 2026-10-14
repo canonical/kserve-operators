@@ -88,8 +88,8 @@ To check that the operator finished its validation:
 
    kubectl logs -n gpu-operator-resources -l app=nvidia-operator-validator | grep "all validations are successful"
 
-To see which GPUs a running model uses, run ``nvidia-smi`` in its worker. A model on two
-GPUs under load uses both:
+To see which GPUs a running model uses, run ``nvidia-smi`` in its worker. Under load, a
+model split over two GPUs with tensor parallelism uses both:
 
 .. terminal::
    :scroll:
@@ -119,5 +119,11 @@ The GPU Operator is a Helm release, so it is upgraded, configured and removed wi
 
 Upgrading the operator can change the NVIDIA driver version, which restarts the driver
 on each node and briefly removes its GPUs. Stop or drain GPU models first. The NVIDIA
-documentation lists the supported drivers and Helm values, for example how to pin
-``driver.version``.
+documentation covers the details:
+
+* `Platform support <https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/platform-support.html>`_
+  lists the supported GPUs, operating systems and driver versions.
+* `Chart customization options <https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#chart-customization-options>`_
+  lists the Helm values, for example ``driver.version`` to pin the driver.
+* `Upgrading the GPU Operator <https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/upgrade.html>`_
+  describes the upgrade procedure.

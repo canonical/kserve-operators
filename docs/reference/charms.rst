@@ -8,8 +8,9 @@ themselves.
 Charms from this project
 ------------------------
 
-These charms are developed in the `kserve-operators`_ repository, except
-``lws-controller``, which has its own `lws-controller-operator`_ repository.
+These charms are developed in the `kserve-operators`_ repository, except for
+``lws-controller`` and ``keda-controller``, which have their own
+`lws-controller-operator`_ and `keda-controller-operator`_ repositories.
 
 .. list-table::
    :header-rows: 1
@@ -52,8 +53,9 @@ Dependencies
 Integrations
 ------------
 
-The Terraform solution creates these integrations. ``llm-integrator`` applications add
-their own when you deploy them.
+The Terraform solution creates these integrations, except the ``llm-integrator`` ones:
+you create those with ``juju integrate`` when you deploy a model, as described in
+:doc:`/how-to/run-a-model/index`.
 
 .. mermaid::
 

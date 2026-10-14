@@ -21,11 +21,14 @@ Components
 
 The stack is split into three groups of charms.
 
-**Serving control plane**, from the `kserve-operators`_ repository:
+**Serving control plane**:
 
 ``kserve-controller``
-   The KServe control plane, in standard (RawDeployment) mode. It learns which gateway
-   to attach models to through the ``gateway-metadata`` relation.
+   The KServe controller, which serves ``InferenceService`` resources. For Charmed
+   llm-d it is deployed with ``deployment-mode=standard``, the only mode that accepts
+   a Gateway API gateway; it learns which one to attach models to through the
+   ``gateway-metadata`` relation. ``LLMInferenceServices`` themselves have no deployment
+   mode: they always run as plain Deployments.
 
 ``kserve-llmisvc``
    The controller for KServe's ``LLMInferenceService`` resource. It turns each
@@ -38,14 +41,13 @@ The stack is split into three groups of charms.
    configuration options and, when asked to, creates the KEDA ``ScaledObject`` that
    autoscales it. You deploy one ``llm-integrator`` application for each model.
 
-``keda-controller``
-   `KEDA`_, the event-driven autoscaler. It is only used by models that autoscale.
+**Dependencies**, platform services the serving control plane relies on:
 
 ``lws-controller``
-   `LeaderWorkerSet`_, which ``kserve-llmisvc`` needs for multi-node workloads. It is
-   developed in the `lws-controller-operator`_ repository.
+   `LeaderWorkerSet`_, which ``kserve-llmisvc`` needs for multi-node workloads.
 
-**Dependencies**, published on `Charmhub`_ by other teams:
+``keda-controller``
+   `KEDA`_, the event-driven autoscaler. It is only used by models that autoscale.
 
 ``envoy-controller-k8s``, ``envoy-ai-controller-k8s``, ``envoy-ingress-k8s``
    `Envoy Gateway`_ and `Envoy AI Gateway`_. Together they provide the single entry
@@ -75,25 +77,36 @@ follows:
 #. The scheduler picks the vLLM worker best placed to answer, for example the one
    with the most free KV-cache, and the worker generates the response.
 
+.. _prefill-decode:
+
 Prefill and decode
 ~~~~~~~~~~~~~~~~~~
 
-LLM inference has two phases. *Prefill* processes the whole prompt at once and is
-compute-bound. *Decode* then generates the answer one token at a time and is limited by
-memory bandwidth. On a shared worker a long prompt can stall the token stream of every
-other request.
+LLM inference has two phases. *Prefill* processes the whole prompt in parallel to build
+its KV-cache, and is compute-bound. *Decode* then generates the answer one token at a
+time and is limited by memory bandwidth. On a shared worker a long prompt can stall the
+token stream of every other request.
 
 With prefill/decode enabled, ``llm-integrator`` adds a separate prefill worker next to
-the decode worker, and the scheduler routes each phase to its own pool. Each pool can
-then be sized and scaled on its own. The current release does not transfer the
-KV-cache between the workers: the decode worker recomputes the prompt.
+the decode worker, and each pool can be sized and scaled on its own. A request then
+flows as follows:
+
+#. The router-scheduler picks a decode worker and a prefill worker for the request,
+   and sends it to the decode worker.
+#. In the decode worker, a routing sidecar container receives the request first. vLLM
+   listens on another port behind it.
+#. The sidecar sends the prompt to the chosen prefill worker, then forwards the request
+   to its own vLLM, which generates the answer.
+
+The current release does not transfer the KV-cache between the workers: the decode
+worker recomputes the prompt.
 
 How autoscaling works
 ---------------------
 
 A model autoscales when its ``llm-integrator`` application has ``max-replicas`` greater
 than ``min-replicas``. When they are equal the model runs a fixed number of replicas and
-KEDA is not involved.
+KEDA is not needed.
 
 #. Each vLLM worker exports metrics such as the number of running and waiting
    requests and its KV-cache usage.

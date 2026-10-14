@@ -21,7 +21,7 @@ Versions
      - ``kserve-controller``, ``kserve-llmisvc``
    * - `vLLM`_
      - |vllm_version|
-     - ``llm-integrator`` (default runtime image)
+     - ``llm-integrator`` (default runtime images)
    * - `llm-d`_ inference scheduler
      - |llmd_version|
      - ``kserve-llmisvc``

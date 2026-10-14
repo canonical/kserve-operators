@@ -2,8 +2,8 @@ Canonical Observability Stack
 =============================
 
 The `Canonical Observability Stack`_ (COS) collects metrics, logs and alerts, and shows
-them in Grafana. The stack uses COS Lite: Prometheus, Loki, Grafana, Alertmanager and
-Traefik.
+them in Grafana. Charmed llm-d uses COS Lite: Prometheus, Loki, Grafana, Alertmanager
+and Traefik.
 
 Channel: |cos_channel|
 

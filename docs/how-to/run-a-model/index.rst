@@ -5,7 +5,7 @@ Run a model
 
 This guide serves models with the ``llm-integrator`` charm. Each ``llm-integrator``
 application serves one model: it renders KServe's ``LLMInferenceService`` resource from
-its configuration and keeps it in sync. You do not write any YAML.
+its configuration and keeps it in sync, so you do not need to write any YAML.
 
 .. toctree::
    :hidden:
@@ -163,8 +163,8 @@ Then point ``llm-integrator`` at the model's folder in the bucket:
    juju deploy -m kserve-llm llm-integrator my-model --channel latest/edge --trust \
      --config model-uri=s3://my-models/pythia-70m \
      --config model-name=EleutherAI/pythia-70m
-   juju integrate -m kserve-llm my-model:kserve-llmisvc kserve-llmisvc:kserve-llmisvc
    juju integrate -m kserve-llm my-model:s3-credentials s3-integrator:s3-credentials
+   juju integrate -m kserve-llm my-model:kserve-llmisvc kserve-llmisvc:kserve-llmisvc
 
 Staging large models in S3 also speeds up new replicas, which no longer download from
 Hugging Face.
@@ -254,8 +254,9 @@ settings.
    mixtral-kserve-prefill-7dc786d7b7-ljvzh            1/1     Running   0          4m33s
    mixtral-kserve-router-scheduler-d5d59b57f-2n4r5    1/1     Running   0          4m26s
 
-The decode worker has a second container, the routing sidecar that hands each request
-from the prefill worker to the decode worker.
+The decode worker has a second container, the routing sidecar. It receives each request
+first, sends the prompt to the prefill worker, then passes the request to the decode
+worker's vLLM. See :ref:`prefill-decode` for how the two workers cooperate.
 
 Remove a model
 --------------

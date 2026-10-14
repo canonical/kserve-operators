@@ -6,17 +6,17 @@ A [Juju](https://juju.is) charm that serves one large language model on KServe. 
 renders a KServe `LLMInferenceService` from a few configuration options and keeps it in
 sync, so you can serve a model without writing any YAML.
 
-- Models from Hugging Face (`hf://`, including gated models) or S3 (`s3://`).
-- [vLLM](https://docs.vllm.ai/) on CPU, or on one or more NVIDIA GPUs with tensor
+- Supports models from Hugging Face (`hf://`, including gated models) or S3 (`s3://`).
+- Runs [vLLM](https://docs.vllm.ai/) on CPU, or on one or more NVIDIA GPUs with tensor
   parallelism.
-- Optional prefill/decode split, with separate prefill and decode workers.
-- A fixed number of replicas, or autoscaling with [KEDA](https://keda.sh/) on live vLLM
-  metrics from Prometheus.
-- Status messages that tell a model that is still downloading or loading from one that
-  is failing.
+- Supports an optional prefill/decode split, with separate prefill and decode workers.
+- Scales the workers to a fixed number of replicas, or autoscales them with
+  [KEDA](https://keda.sh/) on live vLLM metrics from Prometheus.
+- Displays status messages that distinguish a model that is still downloading or loading
+  from one that is failing.
 
-Deploy one application per model. The application name is the name of the model's
-`LLMInferenceService`.
+Each application serves one model. The model's `LLMInferenceService` takes the name of
+the Juju application.
 
 ## Deploy
 
@@ -88,14 +88,13 @@ The charm creates a KEDA `ScaledObject` per worker Deployment, scaling on
 `autoscaling-metric` (by default the running plus waiting requests) to keep it at
 `autoscaling-target` per replica. With `max-replicas` equal to `min-replicas` the model
 runs that fixed number of replicas and needs neither KEDA nor Prometheus. A missing
-autoscaling dependency never stops the model from serving: the charm keeps its current
-replicas and reports what is missing.
+autoscaling dependency never stops the model from being served: the charm keeps its
+current replicas and reports what is missing.
 
 ## Configuration
 
-The main options are below. The
-[Charmhub configuration page](https://charmhub.io/llm-integrator/configurations) lists
-them all, with their full descriptions.
+See the [Charmhub configuration page](https://charmhub.io/llm-integrator/configurations)
+for the full description of each option.
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -116,6 +115,18 @@ them all, with their full descriptions.
 | `autoscaling-scale-down-delay` | `300` | Seconds the metric must stay low before a replica is removed. |
 | `runtime-image`, `storage-initializer-image` | Canonical images | Override the vLLM and model download images. See [`default-custom-images.json`](src/default-custom-images.json). |
 
+`vllm-extra-args` cannot set the flags the charm manages: setting one blocks the charm
+with a message naming the option to use instead.
+
+| Flag | Use instead |
+| --- | --- |
+| `--model` | `model-uri` |
+| `--served-model-name` | `model-name` |
+| `--tensor-parallel-size` (`-tp`), `--pipeline-parallel-size` (`-pp`), `--data-parallel-size` (`-dp`) | `gpu-count` |
+| `--max-model-len` | `max-model-len` |
+| `--gpu-memory-utilization` | `gpu-memory-utilization` |
+| `--host`, `--port` | Set by the charm. |
+
 ## Integrations
 
 | Endpoint | Interface | Description |
@@ -127,8 +138,6 @@ them all, with their full descriptions.
 
 ## Limitations
 
-- KV-cache is not transferred between prefill and decode workers: the decode worker
-  recomputes the prompt.
 - Autoscaling does not support Prometheus served over TLS, or application names longer
   than 39 characters (31 with prefill/decode).
 - New replicas download the model from scratch, which can take minutes for large models.

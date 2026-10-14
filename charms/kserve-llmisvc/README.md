@@ -3,7 +3,7 @@
 [![Charmhub](https://charmhub.io/kserve-llmisvc/badge.svg)](https://charmhub.io/kserve-llmisvc)
 
 A [Juju](https://juju.is) charm for KServe's `LLMInferenceService` controller, from
-[KServe](https://kserve.github.io/website/) 0.17.0. It serves large language models with
+[KServe](https://kserve.github.io/website/). It serves large language models with
 [vLLM](https://docs.vllm.ai/) and the [llm-d](https://llm-d.ai/) inference scheduler.
 
 For each `LLMInferenceService`, the controller creates the vLLM worker Deployments, a
@@ -18,10 +18,12 @@ exposes the model. The charm also:
 - forwards its logs to Loki, and passes the Loki address to the vLLM workers so they
   push theirs.
 
-Models are usually created with the [`llm-integrator`](../llm-integrator) charm, but any
-`LLMInferenceService` manifest works.
+Models can be deployed in two ways:
 
-## Deploy
+1. With the [`llm-integrator`](../llm-integrator) charm, for a fully charmed experience.
+2. Manually, by applying your own `LLMInferenceService` resources with `kubectl`.
+
+## Minimal deployment
 
 `kserve-llmisvc` needs `kserve-controller` (in `standard` mode, related to a gateway)
 and `lws-controller`:
@@ -34,13 +36,17 @@ juju integrate kserve-controller:kserve-controller kserve-llmisvc:kserve-control
 juju integrate lws-controller:lws-controller kserve-llmisvc:lws-controller
 ```
 
-`--trust` is required: the charm installs cluster-scoped resources such as CRDs and
-webhooks.
+`--trust` is required: the charm installs the `LLMInferenceService` and
+`LLMInferenceServiceConfig` CRDs, their two `ValidatingWebhookConfigurations`, and the
+`ClusterRole` and `ClusterRoleBinding` of the controller.
 
 The charm waits until both controllers report that they are ready, then publishes its
-own readiness on the `kserve-llmisvc` endpoint. The
-[autoscaling-model-serving](https://github.com/canonical/autoscaling-model-serving)
-Terraform solution deploys and wires the whole stack.
+own readiness on the `kserve-llmisvc` endpoint.
+
+> **Note:** This provides a minimal deployment. For a production-ready deployment of the
+> full stack, please refer to the
+> [autoscaling-model-serving](https://github.com/canonical/autoscaling-model-serving)
+> Terraform solution.
 
 ## Configuration
 

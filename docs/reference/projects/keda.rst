@@ -4,8 +4,6 @@ KEDA
 `KEDA`_ (Kubernetes Event-driven Autoscaling) scales Kubernetes workloads on external
 metrics. It is optional: only autoscaled models use it.
 
-Version: |keda_version|
-
 Role in the stack
 -----------------
 
@@ -16,6 +14,11 @@ An ``llm-integrator`` application with ``max-replicas`` greater than ``min-repli
 creates a KEDA ``ScaledObject`` for each of its worker Deployments. KEDA reads the
 model's vLLM metric from Prometheus and drives a HorizontalPodAutoscaler from it. See
 :doc:`/explanation/architecture`.
+
+With ``max-replicas`` equal to ``min-replicas``, the default, KEDA is not used: the
+charm deletes any ``ScaledObject`` it created and runs each worker with a fixed
+``min-replicas`` replicas. The ``keda`` and ``prometheus-api`` relations are then not
+needed.
 
 ``keda-controller`` does not create any ``ScaledObject`` itself, so you can also scale
 your own workloads with it.

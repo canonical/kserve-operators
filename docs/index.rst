@@ -11,7 +11,8 @@ inference metrics, and report metrics, logs and dashboards to the
 
 The whole stack, including COS, is deployed with a single Terraform module. A model is
 then one charm and a few configuration options away: point it at a Hugging Face or S3
-model, choose CPU or NVIDIA GPUs, and set how far it may scale.
+model, choose CPU or NVIDIA GPUs, and set the minimum and maximum number of replicas for
+autoscaling.
 
 Charmed llm-d is for platform and ML engineers who want to run LLM inference on
 infrastructure they control, with the reproducibility of Juju and Terraform.

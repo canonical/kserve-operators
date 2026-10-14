@@ -65,8 +65,28 @@ endpoint. The ``llm-cos`` deployment does not offer it, so offer it once from th
 Use an existing COS
 -------------------
 
-If COS already runs elsewhere, deploy the ``llm`` product module instead of the
-``llm-cos`` deployment, and pass it the URLs of the three offers. A minimal root module:
+If COS already runs elsewhere, connect the serving stack to it through three offers
+from the COS model. Create them if your COS was not deployed with them:
+
+.. code-block:: bash
+
+   juju offer cos.prometheus:receive-remote-write prometheus-receive-remote-write
+   juju offer cos.grafana:grafana-dashboard grafana-dashboards
+   juju offer cos.loki:logging loki-logging
+
+Then list the offers to get their URLs:
+
+.. terminal::
+
+   juju find-offers -m cos
+
+   Store          URL                                           Access  Interfaces
+   concierge-k8s  admin/cos.grafana-dashboards                  admin   grafana_dashboard:grafana-dashboard
+   concierge-k8s  admin/cos.loki-logging                        admin   loki_push_api:logging
+   concierge-k8s  admin/cos.prometheus-receive-remote-write     admin   prometheus_remote_write:receive-remote-write
+
+Deploy the ``llm`` product module instead of the ``llm-cos`` deployment, and pass it
+those URLs. A minimal root module:
 
 .. code-block:: terraform
 
@@ -80,12 +100,3 @@ If COS already runs elsewhere, deploy the ``llm`` product module instead of the
      logging_offer        = "admin/cos.loki-logging"
      metrics_offer        = "admin/cos.prometheus-receive-remote-write"
    }
-
-The offers must exist before you apply. If your COS was not deployed with them, create
-them in the COS model:
-
-.. code-block:: bash
-
-   juju offer cos.prometheus:receive-remote-write prometheus-receive-remote-write
-   juju offer cos.grafana:grafana-dashboard grafana-dashboards
-   juju offer cos.loki:logging loki-logging

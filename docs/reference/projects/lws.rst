@@ -5,8 +5,6 @@ LeaderWorkerSet
 unit, with one leader and several workers. It is used to serve models that are too large
 for one node, by spreading each replica over several nodes.
 
-Version: |lws_version|
-
 Role in the stack
 -----------------
 

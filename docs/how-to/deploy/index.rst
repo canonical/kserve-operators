@@ -9,12 +9,21 @@ Terraform solution.
 
 When you finish, you have two Juju models:
 
-``kserve-llm``
-   The serving stack: KServe, the Envoy gateway, LeaderWorkerSet, KEDA and an
-   OpenTelemetry collector.
+* ``kserve-llm``, the serving stack:
 
-``cos``
-   COS Lite: Prometheus, Grafana, Loki, Alertmanager and Traefik.
+  * KServe
+  * Envoy gateway
+  * LeaderWorkerSet
+  * KEDA
+  * OpenTelemetry collector
+
+* ``cos``, COS Lite:
+
+  * Prometheus
+  * Grafana
+  * Loki
+  * Alertmanager
+  * Traefik
 
 .. toctree::
    :hidden:
@@ -25,8 +34,8 @@ Requirements
 ------------
 
 * A machine running Ubuntu |ubuntu_version| with ``sudo`` access, at least 8 CPU cores,
-  32 GB of memory and 100 GB of free disk. Models need more: plan for the size of the
-  models you want to serve.
+  32 GB of memory and 100 GB of free disk. Large models need more, so make sure the
+  machine has enough resources to fit the models you want to serve.
 * For GPU models, one or more NVIDIA GPUs on that machine.
 * A free IP address on the machine's network for the gateway's load balancer.
 
@@ -61,8 +70,8 @@ Create the cluster and the Juju controller
 ------------------------------------------
 
 Concierge installs `Canonical Kubernetes`_ and bootstraps a Juju controller on it in one
-step. Create a ``concierge.yaml`` file, and replace ``10.64.140.43/32`` with the free IP
-address for the load balancer:
+step. Create a ``concierge.yaml`` file, and replace ``<lb_ip_address>`` with the free IP
+address for the load balancer, for example ``10.64.140.43/32``:
 
 .. code-block:: yaml
 
@@ -79,9 +88,9 @@ address for the load balancer:
          load-balancer:
            enabled: true
            l2-mode: true
-           cidrs: 10.64.140.43/32
+           cidrs: <lb_ip_address>
        bootstrap-constraints:
-         root-disk: 50G
+         root-disk: 2G
 
 Then run concierge from the directory that contains the file:
 
@@ -89,8 +98,8 @@ Then run concierge from the directory that contains the file:
 
    sudo concierge prepare
 
-When it finishes, ``juju controllers`` lists the new controller and ``kubectl get
-nodes`` shows a ``Ready`` node.
+When it finishes, check that the cluster is up, with ``kubectl get nodes`` showing a
+``Ready`` node, and that the controller is bootstrapped, with ``juju controllers``.
 
 Install the NVIDIA GPU Operator
 -------------------------------
@@ -169,7 +178,7 @@ Check the deployment
 --------------------
 
 The charms take several minutes to settle. Watch them until every application is
-``active``:
+``active/idle``:
 
 .. terminal::
    :scroll:

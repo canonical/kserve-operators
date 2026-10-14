@@ -63,10 +63,6 @@ Removing the application deletes the CRDs (cascading to any `ScaledObject`s) and
 the singleton `external.metrics.k8s.io` APIService, so the aggregation layer is
 left clean.
 
-## KEDA version
-
-This charm ships KEDA **2.17.3**, matching the version vendored by KServe 0.17.0.
-
 ## Contributing
 
 See the repository's [README](../../README.md) and

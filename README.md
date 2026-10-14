@@ -14,8 +14,6 @@ serve two purposes:
 - **Classic model serving**: KServe `InferenceService` workloads, as part of
   [Charmed Kubeflow](https://canonical.com/mlops/kubeflow).
 
-The charms ship KServe 0.17.0.
-
 ## Charms
 
 | Charm | Charmhub | Description |
@@ -26,7 +24,7 @@ The charms ship KServe 0.17.0.
 | [`keda-controller`](charms/keda-controller) | [![keda-controller](https://charmhub.io/keda-controller/badge.svg)](https://charmhub.io/keda-controller) | KEDA, the event-driven autoscaler. |
 
 The stack also uses [`lws-controller`](https://github.com/canonical/lws-controller-operator),
-the LeaderWorkerSet 0.7.0 controller, which lives in its own repository.
+the LeaderWorkerSet controller, which lives in its own repository.
 
 ## Charmed llm-d
 

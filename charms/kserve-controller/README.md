@@ -3,16 +3,27 @@
 [![Charmhub](https://charmhub.io/kserve-controller/badge.svg)](https://charmhub.io/kserve-controller)
 
 A [Juju](https://juju.is) charm for the [KServe](https://kserve.github.io/website/)
-controller, the control plane of KServe 0.17.0. It installs KServe's custom resources,
+controller, the control plane of KServe. It installs KServe's custom resources,
 webhooks and configuration, and runs the controller that turns `InferenceService`
 resources into running model servers.
 
-The charm is used in two setups:
+Large language models use a different resource, `LLMInferenceService`, which this charm
+does not reconcile. Its controller runs in the
+[`kserve-llmisvc`](https://charmhub.io/kserve-llmisvc) charm, which builds on this one:
+it waits for this charm over the `kserve-controller` integration, and uses the gateway
+this charm learns about through `gateway-metadata` to expose each model.
 
-- **Charmed llm-d** (LLM serving), with `kserve-llmisvc` and an Envoy gateway, in `standard` mode. See
-  the [Charmed llm-d documentation](https://github.com/canonical/kserve-operators/tree/main/docs).
-- **Classic model serving**, as part of
-  [Charmed Kubeflow](https://canonical.com/mlops/kubeflow), usually in `knative` mode.
+The charm is used in three setups:
+
+- **Charmed llm-d** (LLM serving): `standard` mode, with `kserve-llmisvc` and an Envoy
+  gateway. See the
+  [Charmed llm-d documentation](https://github.com/canonical/kserve-operators/tree/main/docs).
+- **Classic model serving in `standard` mode**: `InferenceService` workloads as plain
+  Deployments, for example behind an Istio ambient gateway in
+  [Charmed Kubeflow](https://canonical.com/mlops/kubeflow) with the ambient mesh.
+- **Classic model serving in `knative` mode**: serverless `InferenceService` workloads
+  with Knative Serving, behind an Istio sidecar gateway. This mode does not support the
+  Istio ambient mesh, and is not used for LLMs.
 
 ## Deploy
 
@@ -21,18 +32,34 @@ juju deploy kserve-controller --channel latest/edge --trust \
   --config deployment-mode=standard
 ```
 
-`--trust` is required: the charm installs cluster-scoped resources such as CRDs and
-webhooks.
+`--trust` is required: the charm installs cluster-scoped resources:
 
-The charm stays `blocked` until it is related to a gateway:
+- the KServe CRDs: `InferenceService`, `InferenceGraph`, `TrainedModel`,
+  `ServingRuntime`, `ClusterServingRuntime`, `ClusterStorageContainer` and the
+  `LocalModel*` resources;
+- the default `ClusterServingRuntimes` and `ClusterStorageContainer`;
+- KServe's `MutatingWebhookConfiguration` and `ValidatingWebhookConfigurations`;
+- the controller's `ClusterRoles` and `ClusterRoleBindings`.
 
-- For LLM serving, relate it to the Envoy gateway:
+The charm stays `blocked` until it is related to a gateway. Which one depends on the
+setup:
+
+- **Charmed llm-d**: relate it to the Envoy gateway:
 
   ```bash
   juju integrate kserve-controller:gateway-metadata envoy-ingress-k8s:gateway-metadata
   ```
 
-- In `knative` mode, relate it to Istio and Knative Serving:
+- **Classic serving in `standard` mode**: relate it to the Istio ambient gateway and
+  enrol it in the mesh:
+
+  ```bash
+  juju integrate kserve-controller:gateway-metadata istio-ingress-k8s:gateway-metadata
+  juju integrate kserve-controller:service-mesh istio-beacon-k8s:service-mesh
+  ```
+
+- **Classic serving in `knative` mode**: deploy with `--config deployment-mode=knative`
+  and relate it to the Istio sidecar gateway and Knative Serving:
 
   ```bash
   juju integrate istio-pilot:gateway-info kserve-controller:ingress-gateway
@@ -40,7 +67,7 @@ The charm stays `blocked` until it is related to a gateway:
   ```
 
 The [autoscaling-model-serving](https://github.com/canonical/autoscaling-model-serving)
-Terraform solution deploys and wires both setups for you.
+Terraform solution deploys and wires all three setups for you.
 
 ## Configuration
 

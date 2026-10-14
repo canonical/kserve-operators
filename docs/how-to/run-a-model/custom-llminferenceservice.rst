@@ -1,10 +1,12 @@
 Run a custom LLMInferenceService
 ================================
 
-``llm-integrator`` covers the common cases. For anything it does not expose, such as
-custom routing, scaling on your own query, or other KServe features, write the
-``LLMInferenceService`` yourself. The serving stack runs it just the same; you then own
-its lifecycle and its scaling.
+``llm-integrator`` covers the most common cases, with a user-friendly, charmed
+experience for creating and managing ``LLMInferenceService`` resources. For custom use
+cases and anything it does not expose, such as custom routing, scaling on your own
+query, or other KServe features, you can still write your own ``LLMInferenceService``
+resource and apply it directly with ``kubectl``. The serving stack runs it just the
+same; you then own its lifecycle and its scaling.
 
 This guide serves Mixtral-8x7B-Instruct on two GPUs from a manifest, and autoscales it
 with a hand-written KEDA ``ScaledObject``.

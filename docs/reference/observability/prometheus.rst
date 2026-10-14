@@ -1,8 +1,9 @@
 Prometheus
 ==========
 
-All metrics end up in the Prometheus of COS. In the serving model,
-``opentelemetry-collector-k8s`` scrapes the charms and writes the samples to Prometheus.
+All metrics end up in the Prometheus of COS. In the Juju model that holds the serving
+charms, ``opentelemetry-collector-k8s`` scrapes the charms and writes the samples to
+Prometheus.
 
 Metrics sources
 ---------------
@@ -26,13 +27,10 @@ vLLM metrics
 vLLM workers export metrics with the ``vllm:`` prefix. ``kserve-llmisvc`` adds two
 labels that identify the worker:
 
-``k8s_namespace``
-   The namespace of the worker pod, which is the Juju model for models deployed with
-   ``llm-integrator``.
-
-``k8s_pod_name``
-   The worker pod. Pods of the ``<name>-kserve`` Deployment are decode (or combined)
-   workers; pods of ``<name>-kserve-prefill`` are prefill workers.
+* ``k8s_namespace``: the namespace of the worker pod, which is the Juju model for models
+  deployed with ``llm-integrator``.
+* ``k8s_pod_name``: the worker pod. Pods of the ``<name>-kserve`` Deployment are decode
+  (or combined) workers; pods of ``<name>-kserve-prefill`` are prefill workers.
 
 The metrics used for autoscaling are:
 
