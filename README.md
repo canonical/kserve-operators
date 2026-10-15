@@ -21,7 +21,6 @@ serve two purposes:
 | [`kserve-controller`](charms/kserve-controller) | [![kserve-controller](https://charmhub.io/kserve-controller/badge.svg)](https://charmhub.io/kserve-controller) | KServe control plane, in standard or Knative mode. |
 | [`kserve-llmisvc`](charms/kserve-llmisvc) | [![kserve-llmisvc](https://charmhub.io/kserve-llmisvc/badge.svg)](https://charmhub.io/kserve-llmisvc) | Controller for `LLMInferenceService`, with vLLM metrics, alerts and dashboards. |
 | [`llm-integrator`](charms/llm-integrator) | [![llm-integrator](https://charmhub.io/llm-integrator/badge.svg)](https://charmhub.io/llm-integrator) | Serves one LLM from Juju configuration, optionally autoscaled. |
-| [`keda-controller`](charms/keda-controller) | [![keda-controller](https://charmhub.io/keda-controller/badge.svg)](https://charmhub.io/keda-controller) | KEDA, the event-driven autoscaler. |
 
 The stack also uses [`lws-controller`](https://github.com/canonical/lws-controller-operator),
 the LeaderWorkerSet controller, which lives in its own repository.
