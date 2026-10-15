@@ -1,0 +1,22 @@
+.. _kserve-operators: https://github.com/canonical/kserve-operators
+.. _lws-controller-operator: https://github.com/canonical/lws-controller-operator
+.. _keda-controller-operator: https://github.com/canonical/keda-controller-operator
+.. _Charmed Kubeflow documentation: https://documentation.ubuntu.com/charmed-kubeflow/latest/
+.. _autoscaling-model-serving: https://github.com/canonical/autoscaling-model-serving
+.. _KServe: https://kserve.github.io/website/
+.. _vLLM: https://docs.vllm.ai/
+.. _KEDA: https://keda.sh/
+.. _LeaderWorkerSet: https://lws.sigs.k8s.io/
+.. _llm-d: https://llm-d.ai/
+.. _Envoy Gateway: https://gateway.envoyproxy.io/
+.. _Envoy AI Gateway: https://aigateway.envoyproxy.io/
+.. _Juju: https://juju.is/
+.. _Terraform: https://developer.hashicorp.com/terraform
+.. _Juju Terraform provider: https://registry.terraform.io/providers/juju/juju/latest/docs
+.. _Canonical Kubernetes: https://documentation.ubuntu.com/canonical-kubernetes/latest/
+.. _concierge: https://github.com/canonical/concierge
+.. _NVIDIA GPU Operator: https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/index.html
+.. _Canonical Observability Stack: https://documentation.ubuntu.com/observability/
+.. _Charmhub: https://charmhub.io/
+.. _Code of conduct: https://ubuntu.com/community/docs/ethos/code-of-conduct
+.. _Matrix: https://matrix.to/#/#charmhub-mlops-kubeflow:ubuntu.com
