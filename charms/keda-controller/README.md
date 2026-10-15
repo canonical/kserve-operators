@@ -1,4 +1,6 @@
-# KEDA charm
+# keda-controller
+
+[![Charmhub](https://charmhub.io/keda-controller/badge.svg)](https://charmhub.io/keda-controller)
 
 A [Juju](https://juju.is) charm that packages [KEDA](https://keda.sh)
 (Kubernetes Event-driven Autoscaling) as a single sidecar application: the
@@ -9,12 +11,14 @@ certificates itself.
 
 It is workload-agnostic: it does not create `ScaledObject`s. Users (or other
 charms) create their own `ScaledObject`/`ScaledJob`/`TriggerAuthentication`
-resources once KEDA is deployed.
+resources once KEDA is deployed. For example, the
+[`llm-integrator`](../llm-integrator) charm creates `ScaledObject`s to autoscale LLMs
+on vLLM metrics.
 
 ## Deploy
 
 ```bash
-juju deploy keda-controller --trust
+juju deploy keda-controller --channel latest/edge --trust
 ```
 
 `--trust` is required: the charm needs cluster-scoped permissions to install the
@@ -59,6 +63,11 @@ Removing the application deletes the CRDs (cascading to any `ScaledObject`s) and
 the singleton `external.metrics.k8s.io` APIService, so the aggregation layer is
 left clean.
 
-## KEDA version
+## Contributing
 
-This charm ships KEDA **2.17.3**, matching the version vendored by KServe 0.17.0.
+See the repository's [README](../../README.md) and
+[CONTRIBUTING.md](../../CONTRIBUTING.md) for how to build and test the charm.
+
+## License
+
+The charm is distributed under the Apache License 2.0; see [LICENSE](LICENSE).
