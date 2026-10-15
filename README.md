@@ -1,232 +1,137 @@
-## KServe Operators - a component of the Charmed Kubeflow distribution from Canonical
-[![CharmHub Badge](https://charmhub.io/kubeflow/badge.svg)](https://charmhub.io/kubeflow)
-[![On Pull Request](https://github.com/canonical/kserve-operators/actions/workflows/on_pull_request.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_pull_request.yaml)
-[![On Push](https://github.com/canonical/kserve-operators/actions/workflows/on_push.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/on_push.yaml)
-[![Release Charm to track](https://github.com/canonical/kserve-operators/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/kserve-operators/blob/main/.github/workflows/release.yaml)
+# KServe operators
 
-This repository hosts the Kubernetes Python Operators for KServe
-(see [CharmHub](https://charmhub.io/?q=dex-auth)).
+[![On Pull Request](https://github.com/canonical/kserve-operators/actions/workflows/on_pull_request.yaml/badge.svg)](https://github.com/canonical/kserve-operators/actions/workflows/on_pull_request.yaml)
+[![Release](https://github.com/canonical/kserve-operators/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/kserve-operators/actions/workflows/release.yaml)
 
-Upstream documentation can be found at https://kserve.github.io/website/0.8/
+Juju charms that deploy [KServe](https://kserve.github.io/website/) on Kubernetes. They
+serve two purposes:
 
-## Usage
+- **Charmed llm-d**: serve and autoscale open-weight large language models with
+  [vLLM](https://docs.vllm.ai/) and the [llm-d](https://llm-d.ai/) inference scheduler,
+  behind an [Envoy Gateway](https://gateway.envoyproxy.io/), on CPUs or NVIDIA GPUs,
+  with [KEDA](https://keda.sh/) autoscaling and the
+  [Canonical Observability Stack](https://documentation.ubuntu.com/observability/).
+- **Classic model serving**: KServe `InferenceService` workloads, as part of
+  [Charmed Kubeflow](https://canonical.com/mlops/kubeflow).
 
-### Supported versions
+## Charms
 
-* Kubernetes 1.24
-* istio-operators 1.16/stable
-* knative-operators 1.8/stable
+| Charm | Charmhub | Description |
+| --- | --- | --- |
+| [`kserve-controller`](charms/kserve-controller) | [![kserve-controller](https://charmhub.io/kserve-controller/badge.svg)](https://charmhub.io/kserve-controller) | KServe control plane, in standard or Knative mode. |
+| [`kserve-llmisvc`](charms/kserve-llmisvc) | [![kserve-llmisvc](https://charmhub.io/kserve-llmisvc/badge.svg)](https://charmhub.io/kserve-llmisvc) | Controller for `LLMInferenceService`, with vLLM metrics, alerts and dashboards. |
+| [`llm-integrator`](charms/llm-integrator) | [![llm-integrator](https://charmhub.io/llm-integrator/badge.svg)](https://charmhub.io/llm-integrator) | Serves one LLM from Juju configuration, optionally autoscaled. |
+| [`keda-controller`](charms/keda-controller) | [![keda-controller](https://charmhub.io/keda-controller/badge.svg)](https://charmhub.io/keda-controller) | KEDA, the event-driven autoscaler. |
 
-### Pre-requisites
+The stack also uses [`lws-controller`](https://github.com/canonical/lws-controller-operator),
+the LeaderWorkerSet controller, which lives in its own repository.
 
-* Kubernetes cluster
->NOTE: If you are using Microk8s, it is assumed you have run `microk8s enable dns storage rbac metallb:"10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111"`.
+## Charmed llm-d
 
-* `istio-pilot` and `istio-ingressgateway`. See "Deploy dependencies" for deploy instructions.
-
-### Add a model and set variables
-
-```
-MODEL_NAME="kserve"
-DEFAULT_GATEWAY="kserve-gateway"
-juju add-model ${MODEL_NAME}
-```
-
-### Deploy dependencies
-
-kserve-operators require istio-operators to be deployed in the cluster. To correctly configure them, you can:
-
-```
-ISTIO_CHANNEL=1.16/stable
-juju deploy istio-pilot --config default-gateway=${DEFAULT_GATEWAY} --channel ${ISTIO_CHANNEL} --trust
-juju deploy istio-gateway istio-ingressgateway --config kind="ingress" --channel ${ISTIO_CHANNEL} --trust
-juju relate istio-pilot istio-ingressgateway
+```mermaid
+flowchart LR
+    client([Client]) -->|OpenAI API| gateway[Envoy gateway]
+    gateway --> scheduler[Router-scheduler]
+    scheduler --> workers[vLLM workers]
+    workers -->|metrics| prometheus[(Prometheus in COS)]
+    autoscaler[KEDA] -->|queries| prometheus
+    autoscaler -->|scales| workers
 ```
 
-#### Only for Serverless mode
+`kserve-controller` and `kserve-llmisvc` run the KServe control plane. Each model is an
+`llm-integrator` application that renders a KServe `LLMInferenceService` from a few
+configuration options: a Hugging Face or S3 model URI, CPU or GPU, and the replica
+range. KServe turns it into vLLM workers and a route on the Envoy gateway, and KEDA
+scales them on live vLLM metrics.
 
-For serverless operations kserve-operators depends on knative-serving. To correctly configure it, you can:
+### Quick start
 
-> NOTE: these instructions assume you have deployed Microk8s and MetalLB is enabled. If your cloud configuration is different than this, please refer to [knative-operators](https://github.com/canonical/knative-operators#usage) documentation.
+The [autoscaling-model-serving](https://github.com/canonical/autoscaling-model-serving)
+Terraform solution deploys the whole stack, and COS, into an existing Juju controller:
 
-```
-KNATIVE_CHANNEL=1.8/stable
-juju deploy knative-operator --channel ${KNATIVE_CHANNEL} --trust
-juju deploy knative-serving --config namespace="knative-serving" --config istio.gateway.namespace=${MODEL_NAME} --config istio.gateway.name=${DEFAULT_GATEWAY} --channel ${KNATIVE_CHANNEL} --trust
-```
-
-### Deploy in `RawDeployment` mode
-
-kserve-operators support `RawDeployment` mode to manage `InferenceService`, which removes the KNative dependency and unlocks some of its limitations, like mounting multiple volumes. Please note this mode is not loaded with serverless capabilities, for that you'd need to deploy in `Serverless` mode.
-
-1. Deploy `kserver-controller`
-
-```
-juju deploy kserve-controller --channel <channel> --trust
+```bash
+git clone https://github.com/canonical/autoscaling-model-serving.git
+cd autoscaling-model-serving && git checkout track/0.3
+cd terraform/deployments/llm-cos
+terraform init && terraform apply
 ```
 
-2. Relate `kserve-controller` and `istio-pilot`
+Then serve a model and query it:
 
-```
-juju relate istio-pilot:gateway-info kserve-controller:ingress-gateway
-```
+```bash
+juju deploy -m kserve-llm llm-integrator pythia --channel latest/edge --trust \
+  --config model-uri=hf://EleutherAI/pythia-70m
+juju integrate -m kserve-llm pythia:kserve-llmisvc kserve-llmisvc:kserve-llmisvc
 
-> `channel` is the available channels of the Charmed KServe:
-* latest/edge
-* 0.10/stable
-
-### Deploy in `Serverless` mode
-
-kserve-operatos support `Serveless` mode to manage event driven `InferenceService`s, which enables autoscaling on demand, and supports scaling down to zero.
-
-1. Deploy `kserver-controller`
-
-```
-juju deploy kserve-controller --channel <channel> --config deployment-mode="serverless" --trust
+GW=$(kubectl get gateway -n kserve-llm envoy-ingress-k8s -o jsonpath='{.status.addresses[0].value}')
+curl "http://$GW/kserve-llm/pythia/v1/completions" -H 'Content-Type: application/json' \
+  -d '{"model": "EleutherAI/pythia-70m", "prompt": "Kubernetes is", "max_tokens": 30}'
 ```
 
-2. Relate `kserve-controller` and `istio-pilot`
+The [documentation](docs) covers preparing a GPU machine, connecting COS, GPU models,
+gated models, S3 models and autoscaling. To build and preview it locally, run
+`make run` in the `docs` directory.
 
-```
-juju relate istio-pilot:gateway-info kserve-controller:ingress-gateway
-```
+## Classic model serving
 
-3. Relate `kserve-controller` and `knative-serving`
+`kserve-controller` also runs KServe for `InferenceService` workloads, in one of two
+modes set by its `deployment-mode` option:
 
-```
-juju relate kserve-controller:local-gateway knative-serving:local-gateway
-```
+- `knative`, the default: serverless serving with scale to zero, behind an Istio
+  sidecar gateway and Knative Serving.
+- `standard`: plain Kubernetes Deployments (RawDeployment), behind an ambient Istio
+  gateway, without Knative.
 
-## Deploy a simple `InferenceService`
+It is deployed as part of [Charmed Kubeflow](https://canonical.com/mlops/kubeflow). To
+deploy KServe alone, use the `kserve` product of the
+[autoscaling-model-serving](https://github.com/canonical/autoscaling-model-serving)
+Terraform solution, which wires Istio and, in Knative mode, Knative Serving.
 
-To deploy a simple example of an `InferenceServer`, you can use the one provided in `examples/`
+### Custom images
 
-> NOTE: this example is based on [First InferenceService](https://kserve.github.io/website/0.9/get_started/first_isvc/#2-create-an-inferenceservice)
+`kserve-controller` comes with a set of images used by KServe workloads, listed in
+[`default-custom-images.json`](charms/kserve-controller/src/default-custom-images.json).
+Override any of them with the `custom_images` option, in YAML or JSON. Images you do
+not set keep their defaults:
 
-1. Create an `InferenceService` in a testing namespace
-
-```
-USER_NS="kserve-testing"
-kubectl create ns ${USER_NS}
-kubectl apply -f sklearn-iris.yaml -n${USER_NS}
-```
-
-2. Check the `InferenceService` status
-
-```
-kubectl get inferenceservices sklearn-iris -n${USER_NS}
+```bash
+juju config kserve-controller custom_images='{"configmap__agent": "custom:1.0", "serving_runtimes__lgbserver": "custom:2.1"}'
 ```
 
-3. Determine the URL for performing inference
+`kserve-llmisvc` has the same `custom_images` option for its images, and `llm-integrator`
+has `runtime-image` and `storage-initializer-image`.
 
-* Using the `ClusterIP`
+## Development
 
-> NOTE: this method can only be used for performing inference within the cluster.
+The repository holds one directory per charm under [`charms`](charms), shared
+integration tests under [`tests/integration`](tests/integration), and the documentation
+under [`docs`](docs). `tox` is the only tool you need; it installs the rest.
 
-```
-SERVICE_IP=$(kubectl get svc sklearn-iris-predictor-default -n${USER_NS} -ojsonpath='{.spec.clusterIP}')
-INFERENCE_URL="${SERVICE_IP}/v1/models/sklearn-iris:predict"
-```
-
-* Using the `InferenceService` URL
-
-```
-kubectl get inferenceservice sklearn-iris -n${USER_NS}
-# From the output, take the URL
-INFERENCE_URL="${URL}/v1/models/sklearn-iris:predict"
+```bash
+tox -e kserve-controller-lint          # lint one charm
+tox -e llm-integrator-unit             # unit-test one charm
+tox -e bundle-integration -- --charms-path=$PWD/charms   # integration tests of the stack
 ```
 
-4. Perform inference
+Each charm's `tox.ini` also has a `fmt` environment, for example
+`tox -c charms/llm-integrator -e fmt`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for
+managing dependencies and upgrading the upstream KServe version.
 
-Create a file with the input request:
+## Contributing
 
-```
-cat <<EOF > "./iris-input.json"
-{
-  "instances": [
-    [6.8,  2.8,  4.8,  1.4],
-    [6.0,  3.4,  4.5,  1.6]
-  ]
-}
-EOF
-```
+Canonical welcomes contributions. Please read the
+[contributor licence agreement](https://canonical.com/legal/contributors) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
 
-Now call the `InferenceService`:
+Report bugs and request features in
+[GitHub issues](https://github.com/canonical/kserve-operators/issues).
 
-```
-curl -v $INFERENCE_URL -d @iris-input.json
-```
+## Security
 
-Expected output:
+Please do not report security issues in GitHub issues. Report them through
+[Launchpad](https://wiki.ubuntu.com/DebuggingSecurity) instead.
 
-```
-{"predictions": [1, 1]}
-```
+## License
 
-## Looking for a fully supported platform for MLOps?
-
-Canonical [Charmed Kubeflow](https://charmed-kubeflow.io) is a state of the art, fully supported MLOps platform that helps data scientists collaborate on AI innovation on any cloud from concept to production, offered by Canonical - the publishers of [Ubuntu](https://ubuntu.com).
-
-[![Kubeflow diagram](https://res.cloudinary.com/canonical/image/fetch/f_auto,q_auto,fl_sanitize,w_350,h_304/https://assets.ubuntu.com/v1/10400c98-Charmed-kubeflow-Topology-header.svg)](https://charmed-kubeflow.io)
-
-Charmed Kubeflow is free to use: the solution can be deployed in any environment without constraints, paywall or restricted features. Data labs and MLOps teams only need to train their data scientists and engineers once to work consistently and efficiently on any cloud – or on-premise.
-
-Charmed Kubeflow offers a centralised, browser-based MLOps platform that runs on any conformant Kubernetes – offering enhanced productivity, improved governance and reducing the risks associated with shadow IT.
-
-Learn more about deploying and using Charmed Kubeflow at [https://charmed-kubeflow.io](https://charmed-kubeflow.io).
-
-### Key features
-* Centralised, browser-based data science workspaces: **familiar experience**
-* Multi user: **one environment for your whole data science team**
-* NVIDIA GPU support: **accelerate deep learning model training**
-* Apache Spark integration: **empower big data driven model training**
-* Ideation to production: **automate model training & deployment**
-* AutoML: **hyperparameter tuning, architecture search**
-* Composable: **edge deployment configurations available**
-
-### What’s included in Charmed Kubeflow 1.4
-* LDAP Authentication
-* Jupyter Notebooks
-* Work with Python and R
-* Support for TensorFlow, Pytorch, MXNet, XGBoost
-* TFServing, Seldon-Core
-* Katib (autoML)
-* Apache Spark
-* Argo Workflows
-* Kubeflow Pipelines
-
-### Why engineers and data scientists choose Charmed Kubeflow
-* Maintenance: Charmed Kubeflow offers up to two years of maintenance on select releases
-* Optional 24/7 support available, [contact us here](https://charmed-kubeflow.io/contact-us) for more information
-* Optional dedicated fully managed service available, [contact us here](https://charmed-kubeflow.io/contact-us) for more information or [learn more about Canonical’s Managed Apps service](https://ubuntu.com/managed/apps).
-* Portability: Charmed Kubeflow can be deployed on any conformant Kubernetes, on any cloud or on-premise
-
-### Documentation
-Please see the [official docs site](https://charmed-kubeflow.io/docs) for complete documentation of the Charmed Kubeflow distribution.
-
-## Setting Custom Images for Kserve controller
-
-KServe controller comes with a set of preconfigured images that are used in Kserve workloads. The default images are listed in [default-custom-images.json](https://github.com/canonical/kserve-operators/blob/main/charms/kserve-controller/src/default-custom-images.json)
-
-These images can be overridden in the charm configuration under custom_images in the charms/kserve-controller/config.yaml file. Whenever you leave the custom_images field empty in the config, the default images will be used (listed above). You can specify your own images with the config by filling one or multiple entries. The config accepts either YAML or JSON entries. For example.
-
-```
-juju config kserve-controller custom_images='{"configmap__agent": "custom:1.0", "serving_runtimes__lgbserver": "cuustom:2.1"}'
-```
-
-These images are being used in *.j2 files under charms/kserve-controller/src/templates/*.j2.
-
-### Bugs and feature requests
-If you find a bug in our operator or want to request a specific feature, please file a bug here:
-[https://github.com/canonical/dex-auth-operator/issues](https://github.com/canonical/dex-auth-operator/issues)
-
-### License
-Charmed Kubeflow is free software, distributed under the [Apache Software License, version 2.0](https://github.com/canonical/dex-auth-operator/blob/master/LICENSE).
-
-### Contributing
-Canonical welcomes contributions to Charmed Kubeflow. Please check out our [contributor agreement](https://ubuntu.com/legal/contributors) if you're interested in contributing to the distribution.
-
-### Security
-Security issues in Charmed Kubeflow can be reported through [LaunchPad](https://wiki.ubuntu.com/DebuggingSecurity#How%20to%20File). Please do not file GitHub issues about security issues.
-
-
+The charms are distributed under the Apache License 2.0; see the `LICENSE` file in each
+charm's directory.
