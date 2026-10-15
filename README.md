@@ -23,7 +23,9 @@ serve two purposes:
 | [`llm-integrator`](charms/llm-integrator) | [![llm-integrator](https://charmhub.io/llm-integrator/badge.svg)](https://charmhub.io/llm-integrator) | Serves one LLM from Juju configuration, optionally autoscaled. |
 
 The stack also uses [`lws-controller`](https://github.com/canonical/lws-controller-operator),
-the LeaderWorkerSet controller, which lives in its own repository.
+the LeaderWorkerSet controller, and
+[`keda-controller`](https://github.com/canonical/keda-controller-operator),
+the event-driven autoscaler, which live in their own repositories.
 
 ## Charmed llm-d
 
