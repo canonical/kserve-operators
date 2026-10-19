@@ -19,11 +19,11 @@ import jubilant
 import pytest
 
 from .helpers.assertions import assert_llmisvc_serving, assert_no_charm_resources_left
-from .helpers.charm_paths import resolve_charm_path, resolve_charm_resources
 from .helpers.charms_dependencies import (
     ENVOY_AI_CONTROLLER,
     ENVOY_CONTROLLER,
     ENVOY_INGRESS,
+    KEDA_CONTROLLER,
     PROMETHEUS,
     S3_INTEGRATOR,
     SELF_SIGNED_CERTIFICATES,
@@ -123,9 +123,7 @@ def test_setup(juju: jubilant.Juju, charms_path: str):
     deploy_serving_stack(juju, charms_path)
 
     logger.info("Deploying keda-controller, Prometheus, s3-integrator and llm-integrator")
-    keda_charm = resolve_charm_path(charms_path=charms_path, charm_name=KEDA_APP)
-    keda_resources = resolve_charm_resources(charm_name=KEDA_APP)
-    juju.deploy(charm=str(keda_charm), resources=keda_resources, trust=True)
+    juju.deploy(KEDA_CONTROLLER.charm, channel=KEDA_CONTROLLER.channel, trust=KEDA_CONTROLLER.trust)
     _deploy_prometheus(juju)
     deploy_s3_integrator(
         juju,
