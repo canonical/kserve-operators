@@ -29,7 +29,7 @@ The charm is used in three setups:
 
 ```bash
 juju deploy kserve-controller --channel latest/edge --trust \
-  --config deployment-mode=standard
+  --config deployment-mode=rawdeployment
 ```
 
 `--trust` is required: the charm installs cluster-scoped resources:
