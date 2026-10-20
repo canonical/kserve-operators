@@ -3,8 +3,8 @@
 Contribute
 ==========
 
-Charmed llm-d is developed in the open on GitHub, in the `kserve-operators`_
-repository. The Terraform solution lives in the `autoscaling-model-serving`_ repository.
+Charmed KServe is developed in the open on GitHub, in the `kserve-operators`_
+repository.
 
 Report a problem
 ----------------

@@ -1,14 +1,12 @@
 .. _reference-projects:
 
-Underlying projects and dependencies
-====================================
+KServe
+======
 
-Charmed llm-d packages several open-source projects as Juju charms. This page lists the
-versions shipped with the current release; the pages below describe each project's
-role in the stack.
-
-Versions
---------
+`KServe`_ is a Kubernetes platform for serving machine learning models. The
+``kserve-controller`` charm installs its custom resources, webhooks and configuration,
+and runs the controller that turns ``InferenceService`` resources into running model
+servers.
 
 .. list-table::
    :header-rows: 1
@@ -18,61 +16,18 @@ Versions
      - Delivered by
    * - `KServe`_
      - |kserve_version|
-     - ``kserve-controller``, ``kserve-llmisvc``
-   * - `vLLM`_
-     - |vllm_version|
-     - ``llm-integrator`` (default runtime images)
-   * - `llm-d`_ inference scheduler
-     - |llmd_version|
-     - ``kserve-llmisvc``
-   * - `KEDA`_
-     - |keda_version|
-     - ``keda-controller``
-   * - `LeaderWorkerSet`_
-     - |lws_version|
-     - ``lws-controller``
-   * - `Envoy Gateway`_
-     - |envoy_gateway_version|
-     - ``envoy-controller-k8s``, ``envoy-ingress-k8s``
-   * - `Envoy AI Gateway`_
-     - |envoy_ai_gateway_version|
-     - ``envoy-ai-controller-k8s``
-   * - `Canonical Observability Stack`_
-     - Channel |cos_channel|
-     - COS Lite charms
+     - ``kserve-controller``
 
-The stack is tested on the following platform:
+The charm runs KServe in one of two modes, set by its ``deployment-mode`` option:
 
-.. list-table::
-   :header-rows: 1
+* ``serverless`` (default): serverless serving with scale to zero, behind an Istio
+  sidecar gateway and Knative Serving.
+* ``rawdeployment``: plain Kubernetes Deployments, without Knative.
 
-   * - Component
-     - Version
-   * - Ubuntu
-     - |ubuntu_version|
-   * - `Canonical Kubernetes`_
-     - Channel |k8s_channel|
-   * - `Juju`_
-     - Channel |juju_channel|
-   * - `Terraform`_
-     - |terraform_version| or later, with the `Juju Terraform provider`_
-       |juju_provider_version| or later
-   * - `NVIDIA GPU Operator`_
-     - Latest Helm chart, installed with Helm |helm_version|
-   * - `autoscaling-model-serving`_
-     - Branch |solution_track|
+The charm is published on the ``0.15/stable`` channel of `Charmhub`_.
 
-The charms are published on the |charm_channel| channel of `Charmhub`_.
+Further reading
+---------------
 
-Projects
---------
-
-.. toctree::
-   :maxdepth: 1
-
-   kserve
-   vllm
-   keda
-   lws
-   envoy
-   cos
+* `KServe documentation <https://kserve.github.io/website/>`_
+* `KServe on GitHub <https://github.com/kserve/kserve>`_
