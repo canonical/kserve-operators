@@ -79,8 +79,7 @@ modes set by its `deployment-mode` option:
 
 - `knative`, the default: serverless serving with scale to zero, behind an Istio
   sidecar gateway and Knative Serving.
-- `standard`: plain Kubernetes Deployments (RawDeployment), behind an ambient Istio
-  gateway, without Knative.
+- `rawdeployment`: plain Kubernetes Deployments (RawDeployment), without Knative.
 
 It is deployed as part of [Charmed Kubeflow](https://canonical.com/mlops/kubeflow). To
 deploy KServe alone, use the `kserve` product of the
