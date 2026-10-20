@@ -20,7 +20,7 @@ import textwrap
 #######################
 
 # Project name
-project = "Charmed llm-d"
+project = "Charmed KServe"
 
 # Author name; used in the default copyright statement in the page footer
 author = "Canonical Ltd."
@@ -147,9 +147,8 @@ rediraffe_dir_only = True
 # <first sentence of home page>".
 llms_txt_description = textwrap.dedent(
     """\
-    This is the documentation for Charmed llm-d, a set of Juju charms and a Terraform
-    solution that deploy KServe to serve and autoscale large language models with vLLM
-    on Kubernetes, with optional NVIDIA GPUs and Canonical Observability Stack.
+    This is the documentation for Charmed KServe, a Juju charm that deploys KServe
+    on Kubernetes to serve machine learning models, as part of Charmed Kubeflow.
     """
 )
 
