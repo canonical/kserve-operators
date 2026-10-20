@@ -108,9 +108,9 @@ integration tests under [`tests/integration`](tests/integration), and the docume
 under [`docs`](docs). `tox` is the only tool you need; it installs the rest.
 
 ```bash
-tox -e kserve-controller-lint          # lint one charm
-tox -e llm-integrator-unit             # unit-test one charm
-tox -e bundle-integration -- --charms-path=$PWD/charms   # integration tests of the stack
+tox -e controller-lint                 # lint the charm
+tox -e controller-unit                # unit-test the charm
+tox -e controller-integration -- --model kubeflow   # integration tests
 ```
 
 Each charm's `tox.ini` also has a `fmt` environment, for example
