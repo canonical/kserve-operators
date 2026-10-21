@@ -480,6 +480,7 @@ async def test_inference_service_proxy_envs_configuration(
             assert no_proxy_env == test_no_proxy
 
 
+@pytest.mark.abort_on_fail
 async def test_replace_object_storage_relation_with_s3_integrator(ops_test: OpsTest):
     """Swap the `object-storage` relation for `s3-credentials`.
 
@@ -513,6 +514,7 @@ async def test_replace_object_storage_relation_with_s3_integrator(ops_test: OpsT
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+@pytest.mark.abort_on_fail
 async def test_user_namespace_has_new_manifests(
     ops_test: OpsTest, lightkube_client: lightkube.Client, test_namespace: str
 ):
@@ -541,6 +543,7 @@ async def test_user_namespace_has_new_manifests(
     assert service_account.secrets[0].name == manifests_name
 
 
+@pytest.mark.abort_on_fail
 async def test_block_when_both_storage_relations_related(ops_test: OpsTest):
     """Relating both storage backends blocks the charm; removing one recovers it.
 
