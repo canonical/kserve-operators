@@ -45,7 +45,7 @@ from pydantic import ValidationError
 from autoscaling import scaled_objects_context, worker_deployments
 from capacity import WorkerRequest, find_capacity_issue
 from config import CharmConfig, validation_error_message
-from workload_status import diagnose_workload
+from workload_status import PREFILL_DECODE_ROLES, diagnose_workload
 
 log = logging.getLogger(__name__)
 
@@ -513,7 +513,8 @@ class LLMIntegratorCharm(CharmBase):
             namespace=self.model.name,
             labels={"app.kubernetes.io/name": name, "kserve.io/component": "workload"},
         )
-        state = diagnose_workload(pods)
+        expected_roles = PREFILL_DECODE_ROLES if self._config.enable_prefill_decode else None
+        state = diagnose_workload(pods, expected_roles)
         if state.failed:
             return BlockedStatus(
                 f"LLMInferenceService {name} failed: {state.message}. "

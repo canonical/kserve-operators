@@ -5,7 +5,7 @@
 
 import pytest
 
-from workload_status import diagnose_workload
+from workload_status import PREFILL_DECODE_ROLES, diagnose_workload
 
 from .helpers import container_status, make_pod
 
@@ -171,3 +171,47 @@ def test_broken_container_fails_workload(container, expected):
 def test_clean_restart_is_not_a_failure():
     container = container_status("main", running=True, restarts=1, last_exit_code=0)
     assert not diagnose_workload([make_pod(containers=[container])]).failed
+
+
+@pytest.mark.parametrize(
+    "pods, expected",
+    [
+        pytest.param(
+            [make_pod(name="decode", role="decode", ready=True)],
+            "waiting for the prefill workers to be created",
+            id="prefill-worker-missing",
+        ),
+        pytest.param(
+            [make_pod(name="prefill", role="prefill", ready=True)],
+            "waiting for the decode workers to be created",
+            id="decode-worker-missing",
+        ),
+        pytest.param(
+            [
+                make_pod(
+                    name="decode",
+                    role="decode",
+                    containers=[container_status("main", running=True)],
+                )
+            ],
+            "waiting for the prefill workers to be created",
+            id="prefill-worker-missing-decode-loading",
+        ),
+    ],
+)
+def test_missing_expected_role_does_not_serve(pods, expected):
+    """A ready worker for one role must not count as serving when another role has no pods."""
+    state = diagnose_workload(pods, expected_roles=PREFILL_DECODE_ROLES)
+    assert not state.serving
+    assert not state.failed
+    assert state.message == expected
+
+
+def test_every_expected_role_ready_serves():
+    pods = [
+        make_pod(name="decode", role="decode", ready=True),
+        make_pod(name="prefill", role="prefill", ready=True),
+    ]
+    state = diagnose_workload(pods, expected_roles=PREFILL_DECODE_ROLES)
+    assert state.serving
+    assert state.message == "2/2 workers ready"
