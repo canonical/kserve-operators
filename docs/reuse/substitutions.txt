@@ -1,0 +1,23 @@
+.. Versions of the stack and its platform. Update this file on every release.
+
+.. |kserve_version| replace:: 0.17.0
+.. |vllm_version| replace:: 0.19.0
+.. |llmd_version| replace:: 0.4.0
+.. |keda_version| replace:: 2.17.3
+.. |lws_version| replace:: 0.7.0
+.. |envoy_gateway_version| replace:: 1.7.0
+.. |envoy_ai_gateway_version| replace:: 0.6.0
+.. |charm_channel| replace:: ``latest/edge``
+.. |solution_track| replace:: ``track/0.3``
+.. |cos_channel| replace:: ``2/stable``
+.. |ubuntu_version| replace:: 24.04 LTS
+.. |k8s_channel| replace:: ``1.33-classic/stable``
+.. |juju_channel| replace:: ``3.6/stable``
+.. |terraform_version| replace:: 1.9
+.. |juju_provider_version| replace:: 1.1.1
+.. |helm_version| replace:: 3.20
+
+.. Images the charms render by default; keep in sync with charms/*/src/default-custom-images.json.
+
+.. |vllm_gpu_image| replace:: docker.io/charmedkubeflow/vllm-cuda-gpu:0.19.0-fb65d6a-20260924131041
+.. |storage_initializer_image| replace:: docker.io/charmedkubeflow/storage-initializer:0.17.0-07d37fb
