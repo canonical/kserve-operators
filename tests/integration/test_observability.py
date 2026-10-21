@@ -72,7 +72,12 @@ IMAGE_CONTEXT = {
 
 # Signals we expect to reach COS. Metric names must match the charm's alert rules
 # (src/prometheus_alert_rules/) and dashboards (src/grafana_dashboards/).
-CONTROLLER_METRIC = f'up{{juju_application="{LLMISVC_APP_NAME}"}}'
+# A real controller-runtime metric, scoped to the controller scrape job: ``up`` would
+# also match failed scrapes (up=0) and the metrics-proxy job of the same application.
+CONTROLLER_METRIC = (
+    "controller_runtime_reconcile_total"
+    f'{{juju_application="{LLMISVC_APP_NAME}",job=~".*llmisvc-controller.*"}}'
+)
 VLLM_METRIC_CANDIDATES = (
     "vllm:num_requests_running",
     "vllm:kv_cache_usage_perc",
@@ -156,7 +161,9 @@ def test_cos_data_published(juju: jubilant.Juju):
             host = get_cos_address(juju)
 
             logger.info("Checking controller metrics reached Prometheus...")
-            assert metric_has_samples(query_prometheus(juju, host, CONTROLLER_METRIC))
+            assert metric_has_samples(
+                query_prometheus(juju, host, CONTROLLER_METRIC)
+            ), "no kserve-llmisvc controller metrics found in Prometheus"
 
             logger.info("Checking vLLM workload metrics reached Prometheus...")
             assert any(
