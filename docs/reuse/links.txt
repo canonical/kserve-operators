@@ -1,0 +1,9 @@
+.. _kserve-operators: https://github.com/canonical/kserve-operators
+.. _Charmed Kubeflow documentation: https://documentation.ubuntu.com/charmed-kubeflow/latest/
+.. _KServe: https://kserve.github.io/website/
+.. _Juju: https://juju.is/
+.. _Canonical Observability Stack: https://documentation.ubuntu.com/observability/
+.. _Charmhub: https://charmhub.io/
+.. _Code of conduct: https://ubuntu.com/community/docs/ethos/code-of-conduct
+.. _Matrix: https://matrix.to/#/#charmhub-mlops-kubeflow:ubuntu.com
+.. _Charmed Kubeflow: https://canonical.com/mlops/kubeflow
