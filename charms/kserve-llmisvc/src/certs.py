@@ -4,11 +4,13 @@
 
 import tempfile
 from pathlib import Path
-from subprocess import check_call
+from subprocess import check_call, run
 
 from jinja2 import Template
 
 SSL_CONFIG_FILE = "src/templates/ssl.conf.j2"
+# Renew the serving certificate this long before it expires.
+RENEW_BEFORE_SECONDS = 30 * 24 * 60 * 60
 
 
 def gen_certs(service_name: str, namespace: str, webhook_service: str):
@@ -88,3 +90,16 @@ def gen_certs(service_name: str, namespace: str, webhook_service: str):
             "key": (tmp_path / "server.key").read_text(),
             "ca": (tmp_path / "ca.crt").read_text(),
         }
+
+
+def cert_expires_soon(cert: str, within_seconds: int = RENEW_BEFORE_SECONDS) -> bool:
+    """Return True if the PEM certificate expires within ``within_seconds``.
+
+    A certificate that cannot be parsed is also reported as expiring, so it gets replaced.
+    """
+    result = run(
+        ["openssl", "x509", "-noout", "-checkend", str(within_seconds)],
+        input=cert.encode(),
+        capture_output=True,
+    )
+    return result.returncode != 0

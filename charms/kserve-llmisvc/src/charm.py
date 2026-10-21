@@ -36,7 +36,7 @@ from ops.model import (
 )
 from ops.pebble import APIError, Layer, PathError, ProtocolError
 
-from certs import gen_certs
+from certs import cert_expires_soon, gen_certs
 
 log = logging.getLogger(__name__)
 
@@ -615,7 +615,12 @@ class KServeLLMISVCCharm(CharmBase):
         self.unit.status = MaintenanceStatus("K8s resources removed")
 
     def _gen_certs_if_missing(self) -> None:
-        """Generate certs if they are not present in stored state."""
+        """Generate certs if they are missing from stored state or about to expire.
+
+        The renewed cert, key and CA are stored together; the next reconcile pushes them
+        to the controller, renders the new CA into the webhooks' caBundle and restarts
+        the controller.
+        """
         log.info("Generating certificates if missing.")
         for cert_attribute in ["cert", "ca", "key"]:
             try:
@@ -624,6 +629,9 @@ class KServeLLMISVCCharm(CharmBase):
             except AttributeError:
                 self._gen_certs()
                 return
+        if cert_expires_soon(self._stored.cert):
+            log.info("Serving certificate expires soon, renewing the certificates.")
+            self._gen_certs()
 
     def _gen_certs(self):
         """Generate and persist self-signed certs for webhook server."""

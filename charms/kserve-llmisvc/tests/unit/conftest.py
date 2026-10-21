@@ -63,6 +63,13 @@ def mock_gen_certs():
 
 
 @pytest.fixture(autouse=True)
+def mock_cert_expires_soon():
+    """Treat stored certificates as valid unless a test says otherwise."""
+    with patch("charm.cert_expires_soon", return_value=False) as m:
+        yield m
+
+
+@pytest.fixture(autouse=True)
 def mock_load_generic_resources():
     """Avoid talking to the apiserver during generic-resource registration."""
     with patch("charm.load_in_cluster_generic_resources") as m:
