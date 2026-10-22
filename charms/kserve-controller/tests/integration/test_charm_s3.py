@@ -125,10 +125,8 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         config={"platform": ""},
         trust=True,
     )
-    # Wait for istio-k8s to be active before deploying the rest of istio-ingress-k8s
-    # and istio-beacon-k8s:
-    # - istio-ingress-k8s can fail its hooks on missing CRDs
-    # - istio-beacon-k8s can be stuck in maintenance if ztunnel isn't ready
+    # istio-ingress-k8s and istio-beacon-k8s need CRDs from istio-k8s,
+    # so wait until istio-k8s is active before deploying them
     await ops_test.model.wait_for_idle(
         apps=[ISTIO_K8S_APP],
         status="active",
