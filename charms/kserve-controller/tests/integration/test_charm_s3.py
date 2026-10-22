@@ -125,6 +125,15 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         config={"platform": ""},
         trust=True,
     )
+    # istio-ingress-k8s and istio-beacon-k8s need CRDs from istio-k8s,
+    # so wait until istio-k8s is active before deploying them
+    await ops_test.model.wait_for_idle(
+        apps=[ISTIO_K8S_APP],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=600,
+    )
     await ops_test.model.deploy(
         ISTIO_INGRESS_K8S_APP,
         channel=istio_channel,
