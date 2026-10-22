@@ -125,11 +125,10 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         config={"platform": ""},
         trust=True,
     )
-    # Wait for istio-k8s to be active before deploying the rest of the ecosystem: istio-k8s
-    # installs the Istio CRDs and the ambient data plane (istio-cni, ztunnel) that
-    # istio-ingress-k8s and istio-beacon-k8s depend on. Deploying them concurrently is racy:
-    # istio-ingress-k8s can fail its hooks on missing CRDs, and istio-beacon-k8s can restart its
-    # pod into the mesh before ztunnel is ready, leaving it stuck in maintenance status.
+    # Wait for istio-k8s to be active before deploying the rest of istio-ingress-k8s
+    # and istio-beacon-k8s:
+    # - istio-ingress-k8s can fail its hooks on missing CRDs
+    # - istio-beacon-k8s can be stuck in maintenance if ztunnel isn't ready
     await ops_test.model.wait_for_idle(
         apps=[ISTIO_K8S_APP],
         status="active",
