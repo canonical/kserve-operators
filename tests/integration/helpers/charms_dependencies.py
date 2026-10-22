@@ -33,10 +33,10 @@ SELF_SIGNED_CERTIFICATES = CharmDependency("self-signed-certificates", "latest/s
 
 # lws-controller manages the LeaderWorkerSet CRD and controller that kserve-llmisvc
 # depends on for multi-node serving.
-LWS_CONTROLLER = CharmDependency("lws-controller", "latest/edge", trust=True)
+LWS_CONTROLLER = CharmDependency("lws-controller", "0.7/candidate", trust=True)
 
 # keda-controller is needed only for autoscaled models.
-KEDA_CONTROLLER = CharmDependency("keda-controller", "latest/edge", trust=True)
+KEDA_CONTROLLER = CharmDependency("keda-controller", "2.17/candidate", trust=True)
 
 # s3-integrator supplies the bucket credentials for an s3:// model URI. The 2/edge
 # track (matching kserve-controller) takes credentials via a Juju secret.
