@@ -107,7 +107,19 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
         config={"default-gateway": ISTIO_INGRESS_GATEWAY},
         trust=ISTIO_PILOT.trust,
     )
+<<<<<<< HEAD:charms/kserve-controller/tests/integration/test_charm.py
 
+=======
+    # istio-ingress-k8s and istio-beacon-k8s need CRDs from istio-k8s,
+    # so wait until istio-k8s is active before deploying them
+    await ops_test.model.wait_for_idle(
+        apps=[ISTIO_K8S_APP],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=False,
+        timeout=600,
+    )
+>>>>>>> f0d1dfc (test: wait for istio-k8s to be active before deploying ingress and beacon (#739)):charms/kserve-controller/tests/integration/test_charm_s3.py
     await ops_test.model.deploy(
         ISTIO_GATEWAY.charm,
         application_name=ISTIO_GATEWAY_APP_NAME,
