@@ -1,0 +1,141 @@
+{#- Pod template shared by the decode (spec.template) and prefill (spec.prefill.template) workers. #}
+{%- macro worker_template(args) %}
+volumes:
+  - name: kserve-pvc-source
+    emptyDir: {}
+{%- if shm_size %}
+{#- Overrides the presets' 1Gi dshm volume mounted at /dev/shm. #}
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: {{ shm_size }}
+{%- endif %}
+{#- KServe's own initializer is capped at 1Gi of memory, too little for multi-GB models. #}
+initContainers:
+  - name: storage-initializer
+    image: {{ storage_initializer_image | tojson }}
+    args:
+      - {{ model_uri | tojson }}
+      - /mnt/models
+    env:
+{%- if is_s3 %}
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: {{ s3_secret_name }}
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: {{ s3_secret_name }}
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_DEFAULT_REGION
+        value: {{ s3_region | tojson }}
+      - name: S3_ENDPOINT
+        value: {{ s3_endpoint | tojson }}
+      - name: S3_USE_HTTPS
+        value: "{{ s3_use_https }}"
+      - name: S3_VERIFY_SSL
+        value: "1"
+{%- else %}
+{%- if use_hf_token %}
+      - name: HF_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: {{ hf_secret_name }}
+            key: HF_TOKEN
+{%- endif %}
+      - name: HF_HUB_ENABLE_HF_TRANSFER
+        value: "0"
+      - name: HF_HUB_DOWNLOAD_TIMEOUT
+        value: "60"
+{%- endif %}
+    volumeMounts:
+      - name: kserve-pvc-source
+        mountPath: /mnt/models
+containers:
+  - name: main
+    image: {{ runtime_image | tojson }}
+{%- if args %}
+    args:
+{%- for arg in args %}
+      - {{ arg | tojson }}
+{%- endfor %}
+{%- endif %}
+    securityContext:
+      runAsNonRoot: false
+    env:
+      - name: VLLM_LOGGING_LEVEL
+        value: INFO
+{%- if not is_gpu %}
+      - name: VLLM_CPU_KVCACHE_SPACE
+        value: "1"
+{%- endif %}
+    volumeMounts:
+      - name: kserve-pvc-source
+        mountPath: /mnt/models
+        readOnly: true
+    resources:
+      requests:
+        cpu: {{ resources["cpu-request"] | tojson }}
+        memory: {{ resources["memory-request"] | tojson }}
+{%- if gpu_count %}
+        nvidia.com/gpu: "{{ gpu_count }}"
+{%- endif %}
+      limits:
+        cpu: {{ resources["cpu-limit"] | tojson }}
+        memory: {{ resources["memory-limit"] | tojson }}
+{%- if gpu_count %}
+        nvidia.com/gpu: "{{ gpu_count }}"
+{%- endif %}
+{%- endmacro %}
+{% if is_s3 %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ s3_secret_name }}
+  namespace: {{ namespace }}
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: {{ s3_access_key | tojson }}
+  AWS_SECRET_ACCESS_KEY: {{ s3_secret_access_key | tojson }}
+---
+{% elif use_hf_token %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ hf_secret_name }}
+  namespace: {{ namespace }}
+type: Opaque
+stringData:
+  HF_TOKEN: {{ hf_token | tojson }}
+---
+{% endif %}
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: {{ app_name }}
+  namespace: {{ namespace }}
+spec:
+  model:
+    uri: {{ model_uri | tojson }}
+    name: {{ model_name | tojson }}
+  storageInitializer:
+    enabled: false
+{#- Without replicas, e.g. while KEDA autoscales, KServe keeps the current count. #}
+{%- if replicas %}
+  replicas: {{ replicas }}
+{%- endif %}
+  router:
+    scheduler: {}
+    route: {}
+  template:
+    {{- worker_template(decode_args) | indent(4) }}
+{% if enable_prefill_decode %}
+  prefill:
+{%- if replicas %}
+    replicas: {{ replicas }}
+{%- endif %}
+    template:
+      {{- worker_template(prefill_args) | indent(6) }}
+{% endif %}

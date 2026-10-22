@@ -1,4 +1,4 @@
-# Source manifests/contrib/kserve/kserve/kserve_kubeflow.yaml
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,6 +14,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ app_name }}
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -74,6 +75,7 @@ webhooks:
     - pods
   sideEffects: None
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -105,6 +107,7 @@ webhooks:
     - inferencegraphs
   sideEffects: None
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -136,6 +139,7 @@ webhooks:
     - inferenceservices
   sideEffects: None
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -167,6 +171,7 @@ webhooks:
           - servingruntimes
     sideEffects: None
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -198,6 +203,7 @@ webhooks:
     - trainedmodels
   sideEffects: None
 ---
+# Source: https://github.com/kserve/kserve/blob/v0.17.0/charts/kserve-resources/files/kserve/resources.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:

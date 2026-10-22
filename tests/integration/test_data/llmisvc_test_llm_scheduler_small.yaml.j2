@@ -1,0 +1,62 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: test-llm-scheduler-small
+  namespace: default
+spec:
+  model:
+    uri: {{ model_s3_uri }}
+    name: EleutherAI/pythia-70m
+  storageInitializer:
+    enabled: false
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  template:
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: {{ storage_initializer_image }}
+        args:
+          - {{ model_s3_uri }}
+          - /mnt/models
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            value: "{{ aws_access_key_id }}"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "{{ aws_secret_access_key }}"
+          - name: AWS_DEFAULT_REGION
+            value: "{{ aws_region }}"
+          - name: S3_ENDPOINT
+            value: "{{ s3_endpoint }}"
+          - name: S3_USE_HTTPS
+            value: "1"
+          - name: S3_VERIFY_SSL
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+    containers:
+      - name: main
+        image: {{ vllm_image }}
+        securityContext:
+          runAsNonRoot: false
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "1"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "3Gi"
+          limits:
+            cpu: "2"
+            memory: "8Gi"
