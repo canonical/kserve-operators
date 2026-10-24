@@ -13,6 +13,8 @@ test_data:
     VAR_AWS_SECRET_ACCESS_KEY: secret/aws_secret_key
     VAR_HF_TOKEN: secret/hf_token
   test_cmds: |
+    # Fail the job as soon as a setup step or the tests fail.
+    set -e
     echo "--------------------------------------------------------------------------------------------------------------------"
     echo "Running test commands on the device"
     echo "--------------------------------------------------------------------------------------------------------------------"
