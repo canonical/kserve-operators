@@ -10,7 +10,7 @@ decide between them.
 """
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Set
 
 from lightkube.models.core_v1 import ContainerStatus
 from lightkube.resources.core_v1 import Pod
@@ -19,6 +19,8 @@ STORAGE_INITIALIZER_CONTAINER = "storage-initializer"
 MAIN_CONTAINER = "main"
 # Worker role KServe puts on workload pods: "both", or "decode" / "prefill".
 ROLE_LABEL = "llm-d.ai/role"
+DECODE_ROLE = "decode"
+PREFILL_ROLE = "prefill"
 
 # Container waiting reasons that will not resolve without user action.
 _FAILED_WAITING_REASONS = {
@@ -64,9 +66,22 @@ def _role(pod: Pod) -> Optional[str]:
     return (pod.metadata.labels or {}).get(ROLE_LABEL) if pod.metadata else None
 
 
-def _serves_every_role(pods: List[Pod]) -> bool:
-    """True when each worker role has at least one ready pod."""
-    return {_role(pod) for pod in pods} == {_role(pod) for pod in pods if _is_ready(pod)}
+def _required_roles(pods: List[Pod], prefill_decode: bool) -> Set[Optional[str]]:
+    """Roles that need a ready pod: those of existing pods plus the configured ones.
+
+    The configured roles are needed because a worker whose pods were never created
+    (e.g. blocked by a ResourceQuota) leaves no pod to infer its role from.
+    """
+    roles = {_role(pod) for pod in pods}
+    if prefill_decode:
+        roles |= {DECODE_ROLE, PREFILL_ROLE}
+    return roles
+
+
+def _missing_roles(pods: List[Pod], prefill_decode: bool) -> List[Optional[str]]:
+    """Required roles without a ready pod, sorted for a stable message."""
+    ready = {_role(pod) for pod in pods if _is_ready(pod)}
+    return sorted(_required_roles(pods, prefill_decode) - ready, key=str)
 
 
 def _progress(pod: Pod) -> str:
@@ -86,8 +101,12 @@ def _progress(pod: Pod) -> str:
     return "starting the workload pods"
 
 
-def diagnose_workload(pods: Iterable[Pod]) -> WorkloadState:
-    """Return a failure if any workload container is broken, otherwise whether it serves."""
+def diagnose_workload(pods: Iterable[Pod], prefill_decode: bool = False) -> WorkloadState:
+    """Return a failure if any workload container is broken, otherwise whether it serves.
+
+    With ``prefill_decode`` both the decode and the prefill worker need a ready pod
+    to serve, even if the pods of one of them were never created.
+    """
     pods = list(pods)
     if not pods:
         return WorkloadState(failed=False, message="waiting for the workload pods to be created")
@@ -102,9 +121,17 @@ def diagnose_workload(pods: Iterable[Pod]) -> WorkloadState:
                 return WorkloadState(failed=True, message=f"pod {pod.metadata.name}: {failure}")
 
     not_ready = [pod for pod in pods if not _is_ready(pod)]
-    if _serves_every_role(pods):
+    missing = _missing_roles(pods, prefill_decode)
+    if not missing:
         message = f"{len(pods) - len(not_ready)}/{len(pods)} workers ready"
         if not_ready:
             message += f", {_progress(not_ready[0])}"
         return WorkloadState(failed=False, message=message, serving=True)
-    return WorkloadState(failed=False, message=_progress(not_ready[0]))
+    # Report on a worker that keeps the service from serving, not on an extra replica.
+    blocking = [pod for pod in not_ready if _role(pod) in missing]
+    if blocking:
+        return WorkloadState(failed=False, message=_progress(blocking[0]))
+    roles = " and ".join(str(role) for role in missing)
+    return WorkloadState(
+        failed=False, message=f"waiting for the {roles} worker pods to be created"
+    )
