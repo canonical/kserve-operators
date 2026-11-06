@@ -13,7 +13,6 @@ test_data:
     VAR_AWS_SECRET_ACCESS_KEY: secret/aws_secret_key
     VAR_HF_TOKEN: secret/hf_token
   test_cmds: |
-    # Fail the job if any command fails, so the workflow's status check sees it
     set -e
     echo "--------------------------------------------------------------------------------------------------------------------"
     echo "Running test commands on the device"
@@ -57,7 +56,7 @@ test_data:
     ssh -t ubuntu@$DEVICE_IP 'ls -alR'
     ssh -t ubuntu@$DEVICE_IP 'sudo concierge prepare --trace'
     echo "--------------------------------------------------------------------------------------------------------------------"
-    
+
     echo "Install the nvidia operator"
     echo "--------------------------------------------------------------------------------------------------------------------"
     # install the nvidia operator
@@ -84,7 +83,7 @@ test_data:
     ssh -t ubuntu@$DEVICE_IP 'git clone https://github.com/canonical/kserve-operators.git'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && ls'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && git checkout {{ branch }}'
-    # install venv and tox 
+    # install venv and tox
     ssh -t ubuntu@$DEVICE_IP 'sudo apt-get install python3-venv python3-pip --yes'
     ssh -t ubuntu@$DEVICE_IP 'python3 -m venv kserve-operators/venv'
     ssh -t ubuntu@$DEVICE_IP 'cd kserve-operators && ./venv/bin/pip install tox'
