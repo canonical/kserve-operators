@@ -513,7 +513,7 @@ class LLMIntegratorCharm(CharmBase):
             namespace=self.model.name,
             labels={"app.kubernetes.io/name": name, "kserve.io/component": "workload"},
         )
-        state = diagnose_workload(pods)
+        state = diagnose_workload(pods, prefill_decode=self._config.enable_prefill_decode)
         if state.failed:
             return BlockedStatus(
                 f"LLMInferenceService {name} failed: {state.message}. "
