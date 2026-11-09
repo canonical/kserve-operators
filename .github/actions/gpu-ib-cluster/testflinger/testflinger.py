@@ -432,7 +432,9 @@ def submit_job(job: Job) -> str | None:
     UUID_REGEX = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
     job_id = None
-    result = _cli(["submit"], input=json.dumps(job))
+    # Queue behind busy agents instead of failing when the CLI cannot see an
+    # online agent (busy, briefly offline, or a failed agent lookup).
+    result = _cli(["submit", "--wait-for-available-agents"], input=json.dumps(job))
     # The output should look like
     # "Job submitted successfully!\njob_id: <uuid>\n"
     if rmatch := re.search(f"job_id: (?P<job_id>{UUID_REGEX})", result):

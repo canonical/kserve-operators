@@ -31,8 +31,7 @@ import_ids_json="$(printf '%s\n' "${import_ids[@]}" | jq -R . | jq -cs .)"
 # The test phase runs on the agent host, which reaches the device as ubuntu.
 inject_cmds="$(cat <<EOF
 set -e
-ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@\$DEVICE_IP \\
-  "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$(cat "$SSH_PRIVATE_KEY.pub")' >> ~/.ssh/authorized_keys"
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@\$DEVICE_IP "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$(cat "$SSH_PRIVATE_KEY.pub")' >> ~/.ssh/authorized_keys"
 echo "Injected ephemeral key into \$DEVICE_IP"
 EOF
 )"
