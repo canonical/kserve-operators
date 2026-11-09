@@ -67,9 +67,6 @@ outputs:
   vllm-controller:
     description: Name of the Juju controller inside the K8s cluster (current controller)
     value: ${{ steps.vllm.outputs.vllm_controller }}
-  runner-address:
-    description: user@ip of this runner, reachable via SSH by the ssh-import-ids while the job runs
-    value: ${{ steps.runner-access.outputs.runner_address }}
 
 runs:
   using: composite
@@ -112,11 +109,6 @@ runs:
     - name: Install prerequisites
       shell: bash
       run: ${{ github.action_path }}/../scripts/00-install-prereqs.sh
-
-    - name: Grant runner SSH access to ssh-import-ids
-      id: runner-access
-      shell: bash
-      run: ${{ github.action_path }}/../scripts/grant-runner-access.sh
 
     - name: Reserve Testflinger machines
       id: reserve
@@ -161,6 +153,4 @@ runs:
           yq -r '.[] | "| " + (.agent // "?") + " | [" + .job_id + "](https://testflinger.canonical.com/jobs/" + .job_id + ") | " + ((.username // "") + "@" + (.IP // "pending")) + " |"' "$JOB_DATA_PATH"
           echo
           echo "SSH access: \`${SSH_IMPORT_IDS}\` (e.g. \`ssh ubuntu@<address>\`)."
-          echo
-          echo "Runner (while the job runs): \`ssh ${{ steps.runner-access.outputs.runner_address }}\`, state in \`$STATE_DIR\`."
         } >> "$GITHUB_STEP_SUMMARY"

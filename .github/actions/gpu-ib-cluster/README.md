@@ -66,14 +66,10 @@ It never fails. With `release-machines: "false"`, the reservations are kept
   `reserve_data.ssh_keys`. With `keep-reservation`, log in with
   `ssh ubuntu@<ip>` (the IPs are in the job summary). On a worker,
   `sudo k8s config` prints the kubeconfig.
-- **Runner:** `scripts/grant-runner-access.sh` (part of `setup`) also adds the
-  `ssh-import-ids` keys to the runner's `~/.ssh/authorized_keys`, in a marked
-  block that `release` removes. The runner address is in the job summary. A
-  runner only exists while its job runs, so set the workflow input
-  `hold-runner-minutes` to keep it alive after the tests, with the Juju client,
-  kubeconfig and sshuttle still working. Run `touch ~/gpu-ib-continue` on the
-  runner to end the hold early. The caller's network must be able to reach the
-  runner's IP.
+- **Runner:** not reachable via inbound SSH (private endpoint), and the tmate
+  relay is blocked too. To debug, set `keep-reservation` and work from the
+  reserved machines (e.g. via the bastion); diagnostics are uploaded as an
+  artifact.
 
 ## Secrets
 

@@ -37,12 +37,6 @@ if [[ -f ~/.ssh/config ]]; then
   sed -i "\|^# BEGIN gpu-ib-cluster $STATE_DIR\$|,\|^# END gpu-ib-cluster $STATE_DIR\$|d" ~/.ssh/config
 fi
 
-log "Revoking runner access granted to SSH_IMPORT_IDS"
-if [[ -f ~/.ssh/authorized_keys ]]; then
-  sed -i "\|^# BEGIN $RUNNER_ACCESS_MARKER\$|,\|^# END $RUNNER_ACCESS_MARKER\$|d" ~/.ssh/authorized_keys
-fi
-rm -f "$HOLD_RELEASE_FILE"
-
 log "Removing Juju client entries"
 for controller in "$VLLM_CONTROLLER_NAME" "$JUJU_CONTROLLER_NAME"; do
   juju unregister -y "$controller" 2>/dev/null
