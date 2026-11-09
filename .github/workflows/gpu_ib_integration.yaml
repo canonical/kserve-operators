@@ -27,6 +27,11 @@ on:
         required: false
         default: "6"
         type: string
+      hold-runner-minutes:
+        description: Keep the runner (with Juju/kubectl state) alive this long before releasing, for SSH debugging (0 = no hold)
+        required: false
+        default: "0"
+        type: string
       run-tests:
         description: Run the GPU integration tests (false = only build the infrastructure)
         required: false
@@ -165,6 +170,12 @@ jobs:
           name: diagnostics-gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.diagnostics.outputs.path }}
           if-no-files-found: ignore
+
+      - name: Hold runner for debugging
+        if: always() && steps.setup.outputs.state-dir != '' && inputs.hold-runner-minutes != '0'
+        env:
+          HOLD_MINUTES: ${{ inputs.hold-runner-minutes }}
+        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/hold-runner.sh "$HOLD_MINUTES"
 
       - name: Release cluster
         if: always()

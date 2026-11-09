@@ -44,6 +44,10 @@ export CLUSTER_DATA_PATH="$STATE_DIR/testflinger-cluster-data.yaml"
 export KUBECONFIG_PATH="$STATE_DIR/kubeconfig"
 export VENV_DIR="$STATE_DIR/venv"
 export SSHUTTLE_PIDFILE="$STATE_DIR/sshuttle.pid"
+# Marker of the ~/.ssh/authorized_keys block written by grant-runner-access.sh.
+export RUNNER_ACCESS_MARKER="gpu-ib-cluster runner access $STATE_DIR"
+# Touch this file on the runner to end a hold-runner step early.
+export HOLD_RELEASE_FILE="$HOME/gpu-ib-continue"
 # Ephemeral keypair generated per run by 00-install-prereqs.sh.
 export SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-$STATE_DIR/id_ed25519}"
 
