@@ -60,7 +60,7 @@ chmod 700 "$HOME/.ssh"
 
 log "Tool versions:"
 juju version
-kubectl version --client 2>/dev/null | head -1
+kubectl version --client 2>/dev/null | sed -n 1p
 helm version --short
 yq --version
 testflinger-cli --help >/dev/null && echo "testflinger-cli ok"

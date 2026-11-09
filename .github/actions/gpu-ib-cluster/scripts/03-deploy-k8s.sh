@@ -23,13 +23,13 @@ machine_ids=()
 for addr in "${workers[@]}"; do
   ip="${addr#*@}"
   id="$(juju machines -m "$JUJU_MODEL" --format json \
-    | jq -r --arg ip "$ip" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | head -1)"
+    | jq -r --arg ip "$ip" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | sed -n 1p)"
   if [[ -z "$id" ]]; then
     log "Adding manual machine $addr"
     juju add-machine -m "$JUJU_MODEL" "ssh:$addr" \
       --private-key "$SSH_PRIVATE_KEY" --public-key "$SSH_PRIVATE_KEY.pub"
     id="$(juju machines -m "$JUJU_MODEL" --format json \
-      | jq -r --arg ip "$ip" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | head -1)"
+      | jq -r --arg ip "$ip" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | sed -n 1p)"
     [[ -n "$id" ]] || die "Cannot find Juju machine for $addr"
   fi
   machine_ids+=("$id")
