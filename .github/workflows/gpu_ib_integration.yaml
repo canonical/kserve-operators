@@ -12,6 +12,7 @@ name: GPU + InfiniBand integration tests
 on:
   # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
   # main, so the first runs are triggered by pushes to the feature branch.
+  # Push runs only set up and release the infrastructure (no charms, no tests).
   push:
     branches:
       - ci/gpu-ib-integration
@@ -75,6 +76,7 @@ permissions:
 jobs:
   get-charm-paths:
     name: Get charm paths
+    if: github.event_name == 'workflow_dispatch' && inputs.run-tests
     runs-on: ubuntu-latest
     outputs:
       charm-paths: ${{ steps.get-charm-paths.outputs.charm-paths }}
@@ -91,6 +93,7 @@ jobs:
       matrix:
         charm: ${{ fromJSON(needs.get-charm-paths.outputs.charm-paths) }}
     name: Build charm | ${{ matrix.charm }}
+    if: github.event_name == 'workflow_dispatch' && inputs.run-tests
     needs:
       - get-charm-paths
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v53.0.0
@@ -105,6 +108,8 @@ jobs:
     name: GPU + InfiniBand integration tests
     needs:
       - build
+    # The build is skipped when not running the tests.
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
     # Includes waiting for the Testflinger agents to be free.
     timeout-minutes: 2880
@@ -127,19 +132,19 @@ jobs:
           vllm-controller-name: vllm
 
       - name: Set up Python
-        if: inputs.run-tests != false
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install tox
-        if: inputs.run-tests != false
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
         run: python -m pip install --quiet tox
 
       # Under $HOME (state dir): the strictly confined juju snap cannot read
       # charm files outside it.
       - name: Download packed charm(s)
-        if: inputs.run-tests != false
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
         timeout-minutes: 5
         uses: actions/download-artifact@v4
         with:
@@ -148,7 +153,7 @@ jobs:
           path: ${{ steps.setup.outputs.state-dir }}
 
       - name: Run GPU bundle integration tests
-        if: inputs.run-tests != false
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           CHARMS_PATH: ${{ steps.setup.outputs.state-dir }}/charms/
