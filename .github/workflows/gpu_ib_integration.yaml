@@ -12,12 +12,30 @@ name: GPU + InfiniBand integration tests
 on:
   # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
   # main, so the first runs are triggered by pushes to the feature branch.
-  # Push runs only set up and release the infrastructure (no charms, no tests).
+  # Push runs only set up K8s on tor-k8s-smoke and release it (no charms, no tests).
   push:
     branches:
       - ci/gpu-ib-integration
   workflow_dispatch:
     inputs:
+      cluster:
+        description: Testflinger cluster spec (.github/actions/gpu-ib-cluster/testflinger/cluster-specs)
+        required: false
+        default: tor-A100_x2_IB
+        type: choice
+        options:
+          - tor-A100_x2_IB
+          - tor-k8s-smoke
+      up-to:
+        description: Last infrastructure stage (tests need all)
+        required: false
+        default: all
+        type: choice
+        options:
+          - k8s
+          - gpu-operator
+          - network-operator
+          - all
       ssh-import-ids:
         description: "lp:/gh: identities (space separated) with SSH access to the machines"
         required: true
@@ -67,7 +85,7 @@ on:
 # One run at a time per Testflinger cluster: runs queue instead of competing
 # for the same agents.
 concurrency:
-  group: gpu-ib-tor-A100_x2_IB
+  group: gpu-ib-${{ inputs.cluster || 'tor-k8s-smoke' }}
   cancel-in-progress: false
 
 permissions:
@@ -76,7 +94,7 @@ permissions:
 jobs:
   get-charm-paths:
     name: Get charm paths
-    if: github.event_name == 'workflow_dispatch' && inputs.run-tests
+    if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'
     runs-on: ubuntu-latest
     outputs:
       charm-paths: ${{ steps.get-charm-paths.outputs.charm-paths }}
@@ -93,7 +111,7 @@ jobs:
       matrix:
         charm: ${{ fromJSON(needs.get-charm-paths.outputs.charm-paths) }}
     name: Build charm | ${{ matrix.charm }}
-    if: github.event_name == 'workflow_dispatch' && inputs.run-tests
+    if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'
     needs:
       - get-charm-paths
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v53.0.0
@@ -122,6 +140,8 @@ jobs:
         uses: ./.github/actions/gpu-ib-cluster/setup
         with:
           ssh-import-ids: ${{ inputs.ssh-import-ids || 'lp:dariofaccin' }}
+          cluster: ${{ inputs.cluster || 'tor-k8s-smoke' }}
+          up-to: ${{ inputs.up-to || 'k8s' }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
           reservation-timeout-hours: ${{ inputs.reservation-timeout-hours || '6' }}
@@ -132,19 +152,19 @@ jobs:
           vllm-controller-name: vllm
 
       - name: Set up Python
-        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install tox
-        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'
         run: python -m pip install --quiet tox
 
       # Under $HOME (state dir): the strictly confined juju snap cannot read
       # charm files outside it.
       - name: Download packed charm(s)
-        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'
         timeout-minutes: 5
         uses: actions/download-artifact@v4
         with:
@@ -153,7 +173,7 @@ jobs:
           path: ${{ steps.setup.outputs.state-dir }}
 
       - name: Run GPU bundle integration tests
-        if: github.event_name == 'workflow_dispatch' && inputs.run-tests
+        if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           CHARMS_PATH: ${{ steps.setup.outputs.state-dir }}/charms/

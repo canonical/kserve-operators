@@ -20,6 +20,11 @@ which provides the RDMA shared device plugin (`rdma/rdma_shared_device_ib`). A
 second Juju controller (`vllm`) is bootstrapped inside K8s; the tests run
 against it.
 
+[`tor-k8s-smoke`](testflinger/cluster-specs/tor-k8s-smoke.yaml) (controller
+luma, workers torchtusk and beldam, no InfiniBand) validates the setup with
+`up-to: k8s`. The `up-to` input (`k8s`, `gpu-operator`, `network-operator`,
+`all`) stops the setup after that stage; the tests need `all`.
+
 ## Actions
 
 ### `setup`
