@@ -11,7 +11,7 @@ inputs:
     description: "Space/comma separated lp:/gh: identities with SSH access to the reserved machines"
     required: true
   testflinger-client-id:
-    description: Testflinger client ID (enables job_priority overrides)
+    description: Testflinger client ID
     required: false
     default: ""
   testflinger-secret-key:
@@ -46,6 +46,12 @@ inputs:
     description: NVIDIA Network Operator Helm chart version
     required: false
     default: 26.7.0
+  job-priority-overrides:
+    description: >-
+      Submit with the job_priority values of testflinger/job-configs/agent-job-overrides.yaml
+      (the Testflinger client must be allowed to use them)
+    required: false
+    default: "false"
   vllm-controller-name:
     description: Name of the Juju controller bootstrapped inside the K8s cluster
     required: false
@@ -84,6 +90,7 @@ runs:
         IN_GPU_OPERATOR_VERSION: ${{ inputs.gpu-operator-version }}
         IN_NETWORK_OPERATOR_VERSION: ${{ inputs.network-operator-version }}
         IN_VLLM_CONTROLLER_NAME: ${{ inputs.vllm-controller-name }}
+        IN_JOB_PRIORITY_OVERRIDES: ${{ inputs.job-priority-overrides }}
       run: |
         set -euo pipefail
         for v in IN_RESERVATION_HOURS IN_ACQUIRE_HOURS; do
@@ -102,6 +109,7 @@ runs:
           echo "GPU_OPERATOR_VERSION=$IN_GPU_OPERATOR_VERSION"
           echo "NETWORK_OPERATOR_VERSION=$IN_NETWORK_OPERATOR_VERSION"
           echo "VLLM_CONTROLLER_NAME=$IN_VLLM_CONTROLLER_NAME"
+          echo "JOB_PRIORITY_OVERRIDES=$IN_JOB_PRIORITY_OVERRIDES"
         } >> "$GITHUB_ENV"
         echo "state-dir=$state_dir" >> "$GITHUB_OUTPUT"
         echo "kubeconfig=$state_dir/kubeconfig" >> "$GITHUB_OUTPUT"

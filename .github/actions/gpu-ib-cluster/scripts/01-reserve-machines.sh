@@ -46,10 +46,10 @@ log "Job config ($job_config):"
 cat "$job_config"
 
 overrides_args=()
-if [[ -n "${TESTFLINGER_CLIENT_ID:-}" && -n "${TESTFLINGER_SECRET_KEY:-}" ]]; then
+if [[ "${JOB_PRIORITY_OVERRIDES:-false}" == true ]]; then
+  [[ -n "${TESTFLINGER_CLIENT_ID:-}" && -n "${TESTFLINGER_SECRET_KEY:-}" ]] \
+    || die "JOB_PRIORITY_OVERRIDES=true needs TESTFLINGER_CLIENT_ID and TESTFLINGER_SECRET_KEY"
   overrides_args=(--agent-job-overrides-path "$TESTFLINGER_DIR/job-configs/agent-job-overrides.yaml")
-else
-  log "No Testflinger credentials: submitting without job_priority overrides"
 fi
 
 group "Reserving cluster '$CLUSTER' (series $SERIES)"
