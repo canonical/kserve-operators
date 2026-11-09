@@ -1,0 +1,30 @@
+name: Release GPU + InfiniBand cluster
+description: >-
+  Cancels the Testflinger reservations made by the `setup` action and cleans the
+  local state (sshuttle tunnel, ~/.ssh/config block, Juju client entries,
+  ephemeral key). Never fails; run it in an `if: always()` step.
+
+inputs:
+  release-machines:
+    description: Cancel the Testflinger jobs. "false" keeps the machines (until the reservation timeout) and only cleans local state.
+    required: false
+    default: "true"
+  testflinger-client-id:
+    description: Testflinger client ID
+    required: false
+    default: ""
+  testflinger-secret-key:
+    description: Testflinger secret key
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Release cluster
+      shell: bash
+      env:
+        RELEASE_MACHINES: ${{ inputs.release-machines }}
+        TESTFLINGER_CLIENT_ID: ${{ inputs.testflinger-client-id }}
+        TESTFLINGER_SECRET_KEY: ${{ inputs.testflinger-secret-key }}
+      run: ${{ github.action_path }}/../scripts/99-release.sh

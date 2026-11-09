@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+# Releases the Testflinger reservations (machines are reprovisioned, so no
+# Juju/K8s teardown is needed) and cleans the local state: sshuttle tunnel,
+# ~/.ssh/config block, Juju client entries, kubeconfig and the ephemeral key.
+# Best effort: never fails, so it is safe in `if: always()` steps.
+# RELEASE_MACHINES=false keeps the reservations (debugging) and only cleans
+# the local state of this host.
+#
+# Outputs:
+#   stdout: progress
+#   Exit code: 0
+
+source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
+set +e
+
+if [[ "${RELEASE_MACHINES:-true}" != "true" ]]; then
+  log "RELEASE_MACHINES=${RELEASE_MACHINES}: keeping the Testflinger reservations"
+elif [[ -s "$JOB_DATA_PATH" ]]; then
+  log "Cancelling Testflinger jobs"
+  while IFS= read -r job_id; do
+    [[ -n "$job_id" && "$job_id" != "null" ]] || continue
+    testflinger-cli cancel "$job_id" || echo "Cannot cancel $job_id (already finished?)"
+  done < <(yq '.[].job_id' "$JOB_DATA_PATH")
+else
+  log "No job data at $JOB_DATA_PATH: nothing to cancel"
+fi
+
+log "Stopping sshuttle tunnel"
+if [[ -f "$SSHUTTLE_PIDFILE" ]]; then
+  sudo kill "$(cat "$SSHUTTLE_PIDFILE")" 2>/dev/null || kill "$(cat "$SSHUTTLE_PIDFILE")" 2>/dev/null
+  rm -f "$SSHUTTLE_PIDFILE"
+fi
+
+log "Removing ~/.ssh/config block"
+if [[ -f ~/.ssh/config ]]; then
+  sed -i "\|^# BEGIN gpu-ib-cluster $STATE_DIR\$|,\|^# END gpu-ib-cluster $STATE_DIR\$|d" ~/.ssh/config
+fi
+
+log "Removing Juju client entries"
+for controller in "$VLLM_CONTROLLER_NAME" "$JUJU_CONTROLLER_NAME"; do
+  juju unregister -y "$controller" 2>/dev/null
+done
+juju remove-cloud --client "$VLLM_CONTROLLER_NAME" 2>/dev/null
+juju remove-cloud --client "$MANUAL_CLOUD_NAME" 2>/dev/null
+
+if [[ -d "$STATE_DIR" ]]; then
+  while IFS= read -r addr; do
+    ssh-keygen -R "${addr#*@}" &>/dev/null
+  done < <([[ -s "$JOB_DATA_PATH" ]] && machine_addresses)
+  log "Removing local state $STATE_DIR"
+  rm -rf "$STATE_DIR"
+fi
+
+log "Released."
+exit 0

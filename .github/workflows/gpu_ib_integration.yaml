@@ -1,0 +1,189 @@
+name: GPU + InfiniBand integration tests
+
+# Reserves real GPU machines connected via InfiniBand on Testflinger, builds a
+# Canonical K8s cluster with the NVIDIA GPU and Network Operators on them,
+# bootstraps a Juju controller in it and runs the GPU bundle integration tests
+# against the charms packed from the dispatched ref.
+# See .github/actions/gpu-ib-cluster/README.md.
+#
+# workflow_dispatch only: it uses a self-hosted runner and lab hardware, so it
+# must never run on (fork) pull requests.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ssh-import-ids:
+        description: "lp:/gh: identities (space separated) with SSH access to the machines"
+        required: true
+        default: lp:dariofaccin
+        type: string
+      keep-reservation:
+        description: Keep the machines after the run (debugging); they are released at the reservation timeout
+        required: false
+        default: false
+        type: boolean
+      reservation-timeout-hours:
+        description: Testflinger reservation timeout in hours (upper bound of a kept reservation)
+        required: false
+        default: "6"
+        type: string
+      run-tests:
+        description: Run the GPU integration tests (false = only build the infrastructure)
+        required: false
+        default: true
+        type: boolean
+      pytest-args:
+        description: Extra pytest arguments, e.g. "-k gpu"
+        required: false
+        default: ""
+        type: string
+      juju-channel:
+        description: Juju snap channel
+        required: false
+        default: 3.6/stable
+        type: string
+      k8s-channel:
+        description: k8s charm channel
+        required: false
+        default: 1.34/stable
+        type: string
+      gpu-operator-version:
+        description: NVIDIA GPU Operator Helm chart version
+        required: false
+        default: v26.7.2
+        type: string
+      network-operator-version:
+        description: NVIDIA Network Operator Helm chart version
+        required: false
+        default: 26.7.0
+        type: string
+
+# One run at a time per Testflinger cluster: runs queue instead of competing
+# for the same agents.
+concurrency:
+  group: gpu-ib-tor-A100_x2_IB
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  get-charm-paths:
+    name: Get charm paths
+    runs-on: ubuntu-latest
+    outputs:
+      charm-paths: ${{ steps.get-charm-paths.outputs.charm-paths }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get paths for all charms in this repo
+        id: get-charm-paths
+        uses: canonical/kubeflow-ci/actions/get-charm-paths@main
+
+  build:
+    strategy:
+      matrix:
+        charm: ${{ fromJSON(needs.get-charm-paths.outputs.charm-paths) }}
+    name: Build charm | ${{ matrix.charm }}
+    needs:
+      - get-charm-paths
+    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v53.0.0
+    with:
+      path-to-charm-directory: ${{ matrix.charm }}
+      cache: true
+    permissions:
+      actions: read
+      contents: read
+
+  gpu-ib-integration:
+    name: GPU + InfiniBand integration tests
+    needs:
+      - build
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    # Includes waiting for the Testflinger agents to be free.
+    timeout-minutes: 2880
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up cluster
+        id: setup
+        uses: ./.github/actions/gpu-ib-cluster/setup
+        with:
+          ssh-import-ids: ${{ inputs.ssh-import-ids }}
+          testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          reservation-timeout-hours: ${{ inputs.reservation-timeout-hours }}
+          juju-channel: ${{ inputs.juju-channel }}
+          k8s-channel: ${{ inputs.k8s-channel }}
+          gpu-operator-version: ${{ inputs.gpu-operator-version }}
+          network-operator-version: ${{ inputs.network-operator-version }}
+          vllm-controller-name: vllm
+
+      - name: Set up Python
+        if: inputs.run-tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tox
+        if: inputs.run-tests
+        run: python -m pip install --quiet tox
+
+      # Under $HOME (state dir): the strictly confined juju snap cannot read
+      # charm files outside it.
+      - name: Download packed charm(s)
+        if: inputs.run-tests
+        timeout-minutes: 5
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ needs.build.outputs.artifact-prefix }}-*
+          merge-multiple: true
+          path: ${{ steps.setup.outputs.state-dir }}
+
+      - name: Run GPU bundle integration tests
+        if: inputs.run-tests
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CHARMS_PATH: ${{ steps.setup.outputs.state-dir }}/charms/
+          PYTEST_ARGS: ${{ inputs.pytest-args }}
+        run: |
+          juju switch "${{ steps.setup.outputs.vllm-controller }}"
+          read -r -a extra_args <<<"$PYTEST_ARGS"
+          tox -e bundle-integration-gpu -- --keep-models --charms-path="$CHARMS_PATH" "${extra_args[@]}"
+
+      - name: Collect diagnostics
+        if: always() && steps.setup.outputs.state-dir != ''
+        id: diagnostics
+        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/collect-diagnostics.sh "${{ runner.temp }}/diagnostics"
+
+      - name: Upload diagnostics
+        if: always() && steps.diagnostics.outputs.path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.diagnostics.outputs.path }}
+          if-no-files-found: ignore
+
+      - name: Release cluster
+        if: always()
+        uses: ./.github/actions/gpu-ib-cluster/release
+        with:
+          release-machines: ${{ !inputs.keep-reservation }}
+          testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+
+      - name: Kept reservation
+        if: always() && inputs.keep-reservation
+        env:
+          SSH_IMPORT_IDS: ${{ inputs.ssh-import-ids }}
+          HOURS: ${{ inputs.reservation-timeout-hours }}
+        run: |
+          {
+            echo "### Reservation kept"
+            echo
+            echo "The machines in the table above stay reserved for up to ${HOURS}h; log in with \`${SSH_IMPORT_IDS}\`."
+            echo "The Juju client state of this run was removed from the runner. On a worker, \`sudo k8s config\` prints the kubeconfig."
+            echo "Cancel early with \`testflinger-cli cancel <job-id>\`."
+          } >> "$GITHUB_STEP_SUMMARY"

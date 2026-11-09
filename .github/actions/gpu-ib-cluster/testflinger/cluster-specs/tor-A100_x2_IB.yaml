@@ -1,0 +1,10 @@
+ # DGXA100 machines connected to each other via InfiniBand
+ worker-gpu:
+   count: 2
+   queues:
+     - cortez
+     - blanka
+ controller:
+   count: 1
+   queues:
+     - akis

@@ -1,0 +1,156 @@
+name: Set up GPU + InfiniBand cluster on Testflinger
+description: >-
+  Reserves the Testflinger cluster (Juju controller host + GPU workers), bootstraps
+  a Juju manual-cloud controller, deploys Canonical K8s, the NVIDIA GPU Operator and
+  the NVIDIA Network Operator (verified with ib_send_bw), then bootstraps a Juju
+  controller inside the K8s cluster. This host is the orchestrator; always pair
+  with the `release` action in an `if: always()` step.
+
+inputs:
+  ssh-import-ids:
+    description: "Space/comma separated lp:/gh: identities with SSH access to the reserved machines"
+    required: true
+  testflinger-client-id:
+    description: Testflinger client ID (enables job_priority overrides)
+    required: false
+    default: ""
+  testflinger-secret-key:
+    description: Testflinger secret key
+    required: false
+    default: ""
+  cluster:
+    description: Testflinger cluster spec name (testflinger/cluster-specs/<cluster>.yaml)
+    required: false
+    default: tor-A100_x2_IB
+  reservation-timeout-hours:
+    description: How long the machines stay reserved (upper bound, released earlier by the release action)
+    required: false
+    default: "6"
+  acquire-timeout-hours:
+    description: Max time to wait for the agents to become available
+    required: false
+    default: "43"
+  juju-channel:
+    description: Juju snap channel
+    required: false
+    default: 3.6/stable
+  k8s-channel:
+    description: k8s charm channel
+    required: false
+    default: 1.34/stable
+  gpu-operator-version:
+    description: NVIDIA GPU Operator Helm chart version
+    required: false
+    default: v26.7.2
+  network-operator-version:
+    description: NVIDIA Network Operator Helm chart version
+    required: false
+    default: 26.7.0
+  vllm-controller-name:
+    description: Name of the Juju controller bootstrapped inside the K8s cluster
+    required: false
+    default: vllm
+
+outputs:
+  state-dir:
+    description: Directory with the cluster state (job data, kubeconfig, ephemeral key)
+    value: ${{ steps.env.outputs.state-dir }}
+  kubeconfig:
+    description: Path to the admin kubeconfig of the K8s cluster
+    value: ${{ steps.env.outputs.kubeconfig }}
+  controller:
+    description: user@ip of the Juju manual controller host
+    value: ${{ steps.reserve.outputs.controller }}
+  workers:
+    description: JSON array of user@ip of the GPU workers
+    value: ${{ steps.reserve.outputs.workers }}
+  vllm-controller:
+    description: Name of the Juju controller inside the K8s cluster (current controller)
+    value: ${{ steps.vllm.outputs.vllm_controller }}
+
+runs:
+  using: composite
+  steps:
+    - name: Export cluster environment
+      id: env
+      shell: bash
+      env:
+        IN_CLUSTER: ${{ inputs.cluster }}
+        IN_SSH_IMPORT_IDS: ${{ inputs.ssh-import-ids }}
+        IN_RESERVATION_HOURS: ${{ inputs.reservation-timeout-hours }}
+        IN_ACQUIRE_HOURS: ${{ inputs.acquire-timeout-hours }}
+        IN_JUJU_CHANNEL: ${{ inputs.juju-channel }}
+        IN_K8S_CHANNEL: ${{ inputs.k8s-channel }}
+        IN_GPU_OPERATOR_VERSION: ${{ inputs.gpu-operator-version }}
+        IN_NETWORK_OPERATOR_VERSION: ${{ inputs.network-operator-version }}
+        IN_VLLM_CONTROLLER_NAME: ${{ inputs.vllm-controller-name }}
+      run: |
+        set -euo pipefail
+        for v in IN_RESERVATION_HOURS IN_ACQUIRE_HOURS; do
+          [[ "${!v}" =~ ^[0-9]+$ ]] || { echo "::error::$v must be a whole number of hours"; exit 1; }
+        done
+        state_dir="$HOME/gpu-ib-cluster-state-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        {
+          echo "STATE_DIR=$state_dir"
+          echo "KUBECONFIG=$state_dir/kubeconfig"
+          echo "CLUSTER=$IN_CLUSTER"
+          echo "SSH_IMPORT_IDS=$IN_SSH_IMPORT_IDS"
+          echo "RESERVATION_TIMEOUT_SECONDS=$(( IN_RESERVATION_HOURS * 3600 ))"
+          echo "ACQUIRE_TIMEOUT_SECONDS=$(( IN_ACQUIRE_HOURS * 3600 ))"
+          echo "JUJU_CHANNEL=$IN_JUJU_CHANNEL"
+          echo "K8S_CHANNEL=$IN_K8S_CHANNEL"
+          echo "GPU_OPERATOR_VERSION=$IN_GPU_OPERATOR_VERSION"
+          echo "NETWORK_OPERATOR_VERSION=$IN_NETWORK_OPERATOR_VERSION"
+          echo "VLLM_CONTROLLER_NAME=$IN_VLLM_CONTROLLER_NAME"
+        } >> "$GITHUB_ENV"
+        echo "state-dir=$state_dir" >> "$GITHUB_OUTPUT"
+        echo "kubeconfig=$state_dir/kubeconfig" >> "$GITHUB_OUTPUT"
+
+    - name: Install prerequisites
+      shell: bash
+      run: ${{ github.action_path }}/../scripts/00-install-prereqs.sh
+
+    - name: Reserve Testflinger machines
+      id: reserve
+      shell: bash
+      env:
+        TESTFLINGER_CLIENT_ID: ${{ inputs.testflinger-client-id }}
+        TESTFLINGER_SECRET_KEY: ${{ inputs.testflinger-secret-key }}
+      run: ${{ github.action_path }}/../scripts/01-reserve-machines.sh
+
+    - name: Bootstrap Juju manual controller
+      shell: bash
+      run: ${{ github.action_path }}/../scripts/02-bootstrap-juju.sh
+
+    - name: Deploy Canonical K8s
+      shell: bash
+      run: ${{ github.action_path }}/../scripts/03-deploy-k8s.sh
+
+    - name: Deploy NVIDIA GPU Operator
+      shell: bash
+      run: ${{ github.action_path }}/../scripts/04-deploy-gpu-operator.sh
+
+    - name: Deploy NVIDIA Network Operator and verify InfiniBand
+      shell: bash
+      run: ${{ github.action_path }}/../scripts/05-deploy-network-operator.sh
+
+    - name: Bootstrap Juju controller in K8s
+      id: vllm
+      shell: bash
+      run: ${{ github.action_path }}/../scripts/06-bootstrap-vllm-controller.sh
+
+    - name: Write job summary
+      if: always()
+      shell: bash
+      run: |
+        source "${{ github.action_path }}/../scripts/env.sh"
+        [[ -s "$JOB_DATA_PATH" ]] && command -v yq >/dev/null || exit 0
+        {
+          echo "### Testflinger cluster \`$CLUSTER\`"
+          echo
+          echo "| Agent | Job | Address |"
+          echo "|---|---|---|"
+          yq -r '.[] | "| " + (.agent // "?") + " | [" + .job_id + "](https://testflinger.canonical.com/jobs/" + .job_id + ") | " + ((.username // "") + "@" + (.IP // "pending")) + " |"' "$JOB_DATA_PATH"
+          echo
+          echo "SSH access: \`${SSH_IMPORT_IDS}\` (e.g. \`ssh ubuntu@<address>\`)."
+        } >> "$GITHUB_STEP_SUMMARY"
