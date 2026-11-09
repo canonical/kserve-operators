@@ -42,5 +42,8 @@ sed -i "\|^# BEGIN $RUNNER_ACCESS_MARKER\$|,\|^# END $RUNNER_ACCESS_MARKER\$|d" 
 } >> ~/.ssh/authorized_keys
 
 addr="$(whoami)@$(hostname -I | awk '{print $1}')"
-log "Runner access: ssh $addr"
+log "Runner access: ssh $addr (all addresses: $(hostname -I))"
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+  echo "::notice title=Runner SSH access::ssh $addr (all addresses: $(hostname -I | xargs))"
+fi
 gh_output runner_address "$addr"
