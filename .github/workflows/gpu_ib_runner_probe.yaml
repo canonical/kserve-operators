@@ -1,0 +1,68 @@
+# TEMPORARY (do not merge): probes the self-hosted runner used by
+# gpu_ib_integration.yaml without reserving any hardware. Runs on push to the
+# feature branch because workflow_dispatch only works once a workflow is on main.
+name: GPU IB runner probe (temporary)
+
+on:
+  push:
+    branches:
+      - ci/gpu-ib-integration
+    paths:
+      - .github/workflows/gpu_ib_runner_probe.yaml
+
+concurrency:
+  group: gpu-ib-runner-probe
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    timeout-minutes: 45
+    env:
+      SSH_IMPORT_IDS: lp:dariofaccin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner facts
+        run: |
+          set -x
+          whoami; hostname; hostname -I; cat /etc/os-release | head -3
+          ip -br addr; ip route
+          sudo -n true && echo "SUDO: ok" || echo "SUDO: unavailable"
+          systemctl is-active ssh sshd 2>/dev/null || true
+          sudo -n ss -tlnp 2>/dev/null | grep -E ':22\b' || ss -tln | grep -E ':22\b' || echo "no sshd listening on :22"
+          curl -s --max-time 10 https://ifconfig.me && echo " (public egress IP)" || true
+          env | grep -iE '^(http|https|no)_proxy=' || echo "no proxy env"
+
+      - name: Connectivity checks
+        run: |
+          check() {
+            if timeout 8 bash -c "exec 3<>/dev/tcp/$2/$3" 2>/dev/null; then
+              echo "OK   $1 ($2:$3)"
+            else
+              echo "FAIL $1 ($2:$3)"
+            fi
+          }
+          check "Testflinger API"         testflinger.canonical.com 443
+          check "tmate relay"             ssh.tmate.io 22
+          check "akis (controller) ssh"   10.241.201.11 22
+          check "blanka (worker) ssh"     10.241.199.15 22
+          check "cortez (worker) ssh"     10.241.199.13 22
+          check "docker.io mirror"        10.141.186.140 5000
+          check "registry.k8s.io mirror"  10.141.186.145 5000
+          check "NVIDIA helm repo"        helm.ngc.nvidia.com 443
+          check "Charmhub"                api.charmhub.io 443
+          check "Snap store"              api.snapcraft.io 443
+
+      - name: Grant runner SSH access
+        run: .github/actions/gpu-ib-cluster/scripts/grant-runner-access.sh
+
+      - name: Hold runner for SSH test
+        run: .github/actions/gpu-ib-cluster/scripts/hold-runner.sh 20
+
+      - name: Revoke runner SSH access
+        if: always()
+        run: .github/actions/gpu-ib-cluster/scripts/99-release.sh
