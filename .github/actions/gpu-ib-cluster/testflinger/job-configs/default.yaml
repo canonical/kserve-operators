@@ -4,6 +4,8 @@
 #   - reserve_data.timeout: RESERVATION_TIMEOUT_SECONDS
 #   - test_data.test_cmds: injects the per-run ephemeral public key. The
 #     test phase runs before reserve, on the agent host, with $DEVICE_IP.
+# job_priority needs the Testflinger client credentials (repo secrets).
+job_priority: 10
 reserve_data:
   ssh_keys: []
   timeout: 21600

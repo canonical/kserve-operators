@@ -80,7 +80,7 @@ It never fails. With `release-machines: "false"`, the reservations are kept
 
 | Secret | Used for |
 |---|---|
-| `TESTFLINGER_CLIENT_ID`, `TESTFLINGER_SECRET_KEY` | Authenticating to Testflinger; `job_priority` overrides (setup input `job-priority-overrides`) only if the client is allowed to use them |
+| `TESTFLINGER_CLIENT_ID`, `TESTFLINGER_SECRET_KEY` | Authenticating to Testflinger and submitting every job with `job_priority: 10` |
 | `HF_TOKEN` | The gated Hugging Face model in the GPU test |
 
 ## Requirements on the runner

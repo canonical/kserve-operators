@@ -3,9 +3,9 @@
 worker-gpu:
   count: 2
   queues:
-    - akis
-    - beldam
+    - cortez
+    - buzzsaw
 controller:
   count: 1
   queues:
-    - luma
+    - hidon
