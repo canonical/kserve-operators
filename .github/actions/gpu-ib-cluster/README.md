@@ -21,7 +21,7 @@ second Juju controller (`vllm`) is bootstrapped inside K8s; the tests run
 against it.
 
 [`tor-k8s-smoke`](testflinger/cluster-specs/tor-k8s-smoke.yaml) (controller
-luma, workers torchtusk and beldam, no InfiniBand) validates the setup with
+hidon, workers cortez and buzzsaw) validates the setup with
 `up-to: k8s`. The `up-to` input (`k8s`, `gpu-operator`, `network-operator`,
 `all`) stops the setup after that stage; the tests need `all`.
 
@@ -80,7 +80,7 @@ It never fails. With `release-machines: "false"`, the reservations are kept
 
 | Secret | Used for |
 |---|---|
-| `TESTFLINGER_CLIENT_ID`, `TESTFLINGER_SECRET_KEY` | Authenticating to Testflinger and submitting every job with `job_priority: 10` |
+| `TESTFLINGER_CLIENT_ID`, `TESTFLINGER_SECRET_KEY` | Authenticating to Testflinger; `job_priority` overrides (setup input `job-priority-overrides`) only if the client is allowed to use them |
 | `HF_TOKEN` | The gated Hugging Face model in the GPU test |
 
 ## Requirements on the runner

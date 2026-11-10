@@ -1,5 +1,5 @@
-# Generic GPU machines (no InfiniBand), for validating the setup up to K8s
-# (up-to: k8s). luma (Tesla T4 edge server) only hosts the Juju controller.
+# Machines for validating the setup up to K8s (up-to: k8s). The controller
+# only hosts the Juju controller.
 worker-gpu:
   count: 2
   queues:
