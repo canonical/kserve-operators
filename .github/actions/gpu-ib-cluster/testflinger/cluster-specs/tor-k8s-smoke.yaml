@@ -3,7 +3,7 @@
 worker-gpu:
   count: 2
   queues:
-    - torchtusk
+    - akis
     - beldam
 controller:
   count: 1
