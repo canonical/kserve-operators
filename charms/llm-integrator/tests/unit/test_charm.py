@@ -448,6 +448,45 @@ def test_unavailable_workload_status_comes_from_pods(
     assert_status(out, expected_status, expected_msg)
 
 
+@pytest.mark.parametrize(
+    "prefill_decode, expected_status, expected_msg",
+    [
+        pytest.param(
+            True,
+            WaitingStatus,
+            "waiting for the prefill worker pods to be created",
+            id="prefill-decode-missing-prefill",
+        ),
+        pytest.param(False, ActiveStatus, "1/1 workers ready", id="single-role"),
+    ],
+)
+def test_unavailable_workload_needs_every_configured_role(
+    ctx,
+    llmisvc_relation_ready,
+    mock_krh_lightkube_client,
+    prefill_decode,
+    expected_status,
+    expected_msg,
+):
+    """With prefill/decode, a ready decode pod alone does not make the charm Active."""
+    mock_krh_lightkube_client.get.side_effect = None
+    mock_krh_lightkube_client.get.return_value = _ready_condition(
+        "False",
+        reason="MinimumReplicasUnavailable",
+        message="Deployment does not have minimum availability.",
+    )
+    role = "decode" if prefill_decode else "both"
+    pod = make_pod(name="decode", role=role, ready=True)
+    mock_krh_lightkube_client.list.side_effect = lambda resource, **_: (
+        [make_node()] if resource is Node else [pod]
+    )
+    state_in = _state(llmisvc_relation_ready, {"enable-prefill-decode": prefill_decode})
+
+    out = ctx.run(ctx.on.config_changed(), state_in)
+
+    assert_status(out, expected_status, expected_msg)
+
+
 def test_context_maps_config_to_manifest(ctx, ready_state):
     """The render context maps config and identity onto the manifest fields."""
     with ctx(ctx.on.config_changed(), ready_state) as manager:
