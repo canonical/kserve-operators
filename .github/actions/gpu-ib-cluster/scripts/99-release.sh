@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Releases the Testflinger reservations (machines are reprovisioned, so no
-# Juju/K8s teardown is needed) and cleans the local state: sshuttle tunnel,
+# Juju/K8s teardown is needed) and cleans the local state: sshuttle tunnels,
 # ~/.ssh/config block, Juju client entries, kubeconfig and the ephemeral key.
 # Best effort: never fails, so it is safe in `if: always()` steps.
 # RELEASE_MACHINES=false keeps the reservations (debugging) and only cleans
@@ -26,11 +26,12 @@ else
   log "No job data at $JOB_DATA_PATH: nothing to cancel"
 fi
 
-log "Stopping sshuttle tunnel"
-if [[ -f "$SSHUTTLE_PIDFILE" ]]; then
-  sudo kill "$(cat "$SSHUTTLE_PIDFILE")" 2>/dev/null || kill "$(cat "$SSHUTTLE_PIDFILE")" 2>/dev/null
-  rm -f "$SSHUTTLE_PIDFILE"
-fi
+log "Stopping sshuttle tunnels"
+for pidfile in "$STATE_DIR"/sshuttle-*.pid; do
+  [[ -f "$pidfile" ]] || continue
+  kill "$(cat "$pidfile")" 2>/dev/null || sudo kill "$(cat "$pidfile")" 2>/dev/null
+  rm -f "$pidfile"
+done
 
 log "Removing ~/.ssh/config block"
 if [[ -f ~/.ssh/config ]]; then

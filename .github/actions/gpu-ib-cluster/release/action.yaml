@@ -1,7 +1,7 @@
 name: Release GPU + InfiniBand cluster
 description: >-
   Cancels the Testflinger reservations made by the `setup` action and cleans the
-  local state (sshuttle tunnel, ~/.ssh/config block, Juju client entries,
+  local state (sshuttle tunnels, ~/.ssh/config block, Juju client entries,
   ephemeral key). Never fails; run it in an `if: always()` step.
 
 inputs:

@@ -13,7 +13,7 @@ Cluster spec [`tor-A100_x2_IB`](testflinger/cluster-specs/tor-A100_x2_IB.yaml):
 |---|---|---|
 | `controller` | akis | Juju manual-cloud controller (`controller-manual-cloud`) only |
 | `worker-gpu` | cortez, blanka | Canonical K8s nodes (8x A100 each, InfiniBand `ibp18s0`) |
-| GH runner | — | Orchestrator: juju/kubectl/helm client, sshuttle to the LB CIDR, tox |
+| GH runner | — | Orchestrator: juju/kubectl/helm client, sshuttle tunnels (Juju API, K8s API, LB CIDR), tox |
 
 The K8s cluster runs the NVIDIA GPU Operator and the NVIDIA Network Operator,
 which provides the RDMA shared device plugin (`rdma/rdma_shared_device_ib`). A
@@ -35,8 +35,8 @@ Runs [`scripts/00` to `06`](scripts/) in order:
 |---|---|
 | `00-install-prereqs.sh` | Installs the juju/kubectl/helm/testflinger-cli snaps, jq/sshuttle, yq, the Testflinger wrapper venv, and generates the **ephemeral SSH keypair** |
 | `01-reserve-machines.sh` | Reserves the cluster with [`deploy_testflinger_cluster.py`](testflinger/), then prepares the hosts (inotify limits, RDMA modules) |
-| `02-bootstrap-juju.sh` | Manual cloud on the controller host, then `juju bootstrap` |
-| `03-deploy-k8s.sh` | Enlists the workers as manual machines, deploys the `k8s` charm, starts sshuttle to the LB CIDR, exports the kubeconfig |
+| `02-bootstrap-juju.sh` | Starts the sshuttle tunnels, adds a manual cloud on the controller host, then runs `juju bootstrap` |
+| `03-deploy-k8s.sh` | Enlists the workers as manual machines, deploys the `k8s` charm, exports the kubeconfig |
 | `04-deploy-gpu-operator.sh` | Installs the GPU Operator with Helm and waits for the GPU node labels |
 | `05-deploy-network-operator.sh` | Installs the Network Operator, prepares the IB modules and PCI ACS, applies the NicClusterPolicy, runs an `ib_send_bw` check between the workers |
 | `06-bootstrap-vllm-controller.sh` | `juju add-k8s vllm --storage csi-rawfile-default`, `juju bootstrap vllm vllm`, `juju switch vllm` |
@@ -86,7 +86,9 @@ It never fails. With `release-machines: "false"`, the reservations are kept
 ## Requirements on the runner
 
 - Ubuntu with passwordless `sudo`, for snaps, apt and sshuttle.
-- Network reach to the Testflinger API and to the reserved machines (tor lab).
+- Network reach to the Testflinger API and SSH (port 22) to the reserved machines
+  (tor lab). Other ports are reset, so the Juju API (17070), the K8s API (6443)
+  and the LB CIDR go through sshuttle tunnels (`start_lab_tunnels` in `env.sh`).
 - The workers pull images through the lab mirrors (`K8S_REGISTRIES` in
   [`scripts/env.sh`](scripts/env.sh)).
 

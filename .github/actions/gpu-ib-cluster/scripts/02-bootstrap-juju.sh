@@ -13,6 +13,8 @@ require_cluster_data
 controller_addr="$(controller_address)"
 [[ "$controller_addr" == *@* ]] || die "No controller address in $CLUSTER_DATA_PATH"
 
+start_lab_tunnels
+
 if juju controllers --format json 2>/dev/null | jq -e --arg c "$JUJU_CONTROLLER_NAME" '.controllers[$c]' >/dev/null; then
   log "Controller '$JUJU_CONTROLLER_NAME' already exists, skipping bootstrap."
   log "If it is stale (old reservation), run: juju unregister -y $JUJU_CONTROLLER_NAME"

@@ -6,7 +6,7 @@
 #
 # Outputs:
 #   $KUBECONFIG_PATH: admin kubeconfig of the cluster
-#   sshuttle tunnel to $LB_CIDR via the first worker
+#   sshuttle tunnels to the Juju/K8s APIs and $LB_CIDR (see start_lab_tunnels)
 #   Exit code: 0 on success, non-zero on failure
 
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
@@ -36,11 +36,7 @@ for addr in "${workers[@]}"; do
 done
 log "Workers enlisted as machines: ${machine_ids[*]}"
 
-if ! pgrep -f "sshuttle -r ${workers[0]} .*$LB_CIDR" >/dev/null; then
-  log "Starting sshuttle to ${workers[0]} for $LB_CIDR"
-  sshuttle -r "${workers[0]}" -e "ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=accept-new" \
-    --daemon --pidfile "$SSHUTTLE_PIDFILE" "$LB_CIDR"
-fi
+start_lab_tunnels
 
 if ! juju status -m "$JUJU_MODEL" --format json | jq -e '.applications.k8s' >/dev/null; then
   log "Deploying k8s ($K8S_CHANNEL) to machines ${machine_ids[*]}"

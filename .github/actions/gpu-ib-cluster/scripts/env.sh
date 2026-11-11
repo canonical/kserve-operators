@@ -43,7 +43,7 @@ export JOB_DATA_PATH="$STATE_DIR/testflinger-job-data.yaml"
 export CLUSTER_DATA_PATH="$STATE_DIR/testflinger-cluster-data.yaml"
 export KUBECONFIG_PATH="$STATE_DIR/kubeconfig"
 export VENV_DIR="$STATE_DIR/venv"
-export SSHUTTLE_PIDFILE="$STATE_DIR/sshuttle.pid"
+# One pidfile per sshuttle tunnel: $STATE_DIR/sshuttle-<name>.pid
 # Ephemeral keypair generated per run by 00-install-prereqs.sh.
 export SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-$STATE_DIR/id_ed25519}"
 
@@ -110,6 +110,33 @@ controller_address() {
 # Worker addresses (user@ip) as a JSON array, in cluster-spec order.
 worker_addresses_json() {
   yq -o json -I0 '[.["worker-gpu"][].machine_address]' "$CLUSTER_DATA_PATH"
+}
+
+# Starts (idempotently) a daemonized sshuttle tunnel named $1 through $2
+# (user@ip) for the remaining subnet[:port] arguments.
+start_tunnel() {
+  local name="$1" remote="$2"; shift 2
+  local pidfile="$STATE_DIR/sshuttle-$name.pid"
+  if [[ -s "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    return 0
+  fi
+  log "Starting sshuttle '$name' via $remote for: $*"
+  sshuttle -r "$remote" -e "ssh ${SSH_OPTS[*]}" --daemon --pidfile "$pidfile" "$@"
+}
+
+# The runner can only reach the lab on port 22 (other ports get reset), so the
+# Juju API, the K8s API and the LB CIDR are tunnelled over SSH. Each tunnel
+# goes through a host that is not one of its destinations and is scoped to
+# ports, so SSH to every machine stays direct (no tunnel loops).
+start_lab_tunnels() {
+  local controller_ip workers worker_ip k8s_subnets=()
+  controller_ip="$(controller_address)"; controller_ip="${controller_ip#*@}"
+  mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
+  for worker_ip in "${workers[@]}"; do
+    k8s_subnets+=("${worker_ip#*@}/32:6443")
+  done
+  start_tunnel juju-lb "${workers[0]}" "$controller_ip/32:17070" "$LB_CIDR"
+  start_tunnel k8s-api "$(controller_address)" "${k8s_subnets[@]}"
 }
 
 kctl() { kubectl --kubeconfig "$KUBECONFIG_PATH" "$@"; }
