@@ -72,7 +72,8 @@ IMAGE_CONTEXT = {
 
 # Signals we expect to reach COS. Metric names must match the charm's alert rules
 # (src/prometheus_alert_rules/) and dashboards (src/grafana_dashboards/).
-CONTROLLER_METRIC = f'up{{juju_application="{LLMISVC_APP_NAME}"}}'
+# A metric the controller itself exports: unlike ``up``, a failed scrape cannot produce it.
+CONTROLLER_METRIC = f'leader_election_master_status{{juju_application="{LLMISVC_APP_NAME}"}}'
 VLLM_METRIC_CANDIDATES = (
     "vllm:num_requests_running",
     "vllm:kv_cache_usage_perc",
