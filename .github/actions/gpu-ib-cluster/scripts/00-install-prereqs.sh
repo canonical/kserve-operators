@@ -24,8 +24,6 @@ snap_install() {
 
 group "Installing snaps (juju $JUJU_CHANNEL, kubectl, helm, testflinger-cli)"
 snap_install juju --channel="$JUJU_CHANNEL"
-# Manual clouds bootstrap over SSH; the strict juju snap needs ~/.ssh access.
-sudo snap connect juju:ssh-keys || true
 snap_install kubectl --classic --channel="$KUBECTL_CHANNEL"
 snap_install helm --classic --channel="$HELM_CHANNEL"
 snap_install testflinger-cli

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # Collects cluster diagnostics into $1 (default $STATE_DIR/diagnostics):
-# Juju status/logs of both controllers, Kubernetes objects and events, GPU and
-# NIC operator state, and per-worker nvidia-smi / InfiniBand port counters.
+# Juju status/logs of the vllm controller, Kubernetes objects and events, GPU
+# and NIC operator state, and per-worker k8s status / nvidia-smi / InfiniBand
+# port counters.
 # Best effort: never fails.
 #
 # Outputs:
@@ -22,15 +23,15 @@ run() {
   timeout 300 "$@" >> "$out/$file" 2>&1
 }
 
-for controller in "$VLLM_CONTROLLER_NAME" "$JUJU_CONTROLLER_NAME"; do
-  juju show-controller "$controller" &>/dev/null || continue
+controller="$VLLM_CONTROLLER_NAME"
+if juju show-controller "$controller" &>/dev/null; then
   while IFS= read -r model; do
     [[ -n "$model" ]] || continue
     safe="${controller}_${model//\//_}"
     run "juju-status_${safe}.txt" juju status -m "$controller:$model" --relations --storage
     run "juju-debug-log_${safe}.txt" juju debug-log -m "$controller:$model" --replay --no-tail --limit 20000
   done < <(juju models -c "$controller" --format json | jq -r '.models[]."short-name"')
-done
+fi
 
 if [[ -s "$KUBECONFIG_PATH" ]]; then
   export KUBECONFIG="$KUBECONFIG_PATH"
@@ -53,6 +54,7 @@ if [[ -s "$CLUSTER_DATA_PATH" ]]; then
     # shellcheck disable=SC2016  # expanded on the remote host
     timeout 120 ssh "${SSH_OPTS[@]}" "$addr" '
       hostname; uptime; echo
+      sudo k8s status 2>&1; echo
       nvidia-smi 2>&1 || sudo find /run/nvidia/driver -maxdepth 3 -name nvidia-smi -exec chroot /run/nvidia/driver nvidia-smi \; 2>&1
       echo; ip -br link
       for p in /sys/class/infiniband/*/ports/*; do

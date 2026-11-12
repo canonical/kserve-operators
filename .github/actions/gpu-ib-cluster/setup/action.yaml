@@ -1,9 +1,9 @@
 name: Set up GPU + InfiniBand cluster on Testflinger
 description: >-
-  Reserves the Testflinger cluster (Juju controller host + GPU workers), bootstraps
-  a Juju manual-cloud controller, deploys Canonical K8s, the NVIDIA GPU Operator and
-  the NVIDIA Network Operator (verified with ib_send_bw), then bootstraps a Juju
-  controller inside the K8s cluster. This host is the orchestrator; always pair
+  Reserves the Testflinger GPU workers (prepared by the job's test phase), forms a
+  Canonical K8s (snap) cluster, deploys the NVIDIA GPU Operator and the NVIDIA
+  Network Operator (verified with ib_send_bw), then bootstraps a Juju controller
+  inside the K8s cluster. This host is the orchestrator; always pair
   with the `release` action in an `if: always()` step.
 
 inputs:
@@ -35,9 +35,9 @@ inputs:
     required: false
     default: 3.6/stable
   k8s-channel:
-    description: k8s charm channel
+    description: k8s snap channel
     required: false
-    default: 1.34/stable
+    default: 1.34-classic/stable
   gpu-operator-version:
     description: NVIDIA GPU Operator Helm chart version
     required: false
@@ -47,11 +47,15 @@ inputs:
     required: false
     default: 26.7.0
   up-to:
-    description: >-
-      Last stage to set up: k8s, gpu-operator, network-operator or all (adds the
-      Juju controller in K8s)
+    description: "Last operator stage to set up: k8s, gpu-operator or network-operator"
     required: false
-    default: all
+    default: network-operator
+  vllm-controller:
+    description: >-
+      Bootstrap the Juju controller inside K8s after the operator stages
+      ("true"/"false"); needed by the tests
+    required: false
+    default: "true"
   job-priority-overrides:
     description: >-
       Submit with the job_priority values of testflinger/job-configs/agent-job-overrides.yaml
@@ -61,7 +65,7 @@ inputs:
   tmate:
     description: >-
       Open a detached canonical/action-tmate session on the runner before the
-      Juju bootstrap ("true"/"false"); the job waits for it to be closed at the end
+      K8s deployment ("true"/"false"); the job waits for it to be closed at the end
     required: false
     default: "false"
   vllm-controller-name:
@@ -76,9 +80,6 @@ outputs:
   kubeconfig:
     description: Path to the admin kubeconfig of the K8s cluster
     value: ${{ steps.env.outputs.kubeconfig }}
-  controller:
-    description: user@ip of the Juju manual controller host
-    value: ${{ steps.reserve.outputs.controller }}
   workers:
     description: JSON array of user@ip of the GPU workers
     value: ${{ steps.reserve.outputs.workers }}
@@ -109,8 +110,8 @@ runs:
         for v in IN_RESERVATION_HOURS IN_ACQUIRE_HOURS; do
           [[ "${!v}" =~ ^[0-9]+$ ]] || { echo "::error::$v must be a whole number of hours"; exit 1; }
         done
-        [[ "$IN_UP_TO" =~ ^(k8s|gpu-operator|network-operator|all)$ ]] \
-          || { echo "::error::up-to must be one of k8s, gpu-operator, network-operator, all"; exit 1; }
+        [[ "$IN_UP_TO" =~ ^(k8s|gpu-operator|network-operator)$ ]] \
+          || { echo "::error::up-to must be one of k8s, gpu-operator, network-operator"; exit 1; }
         state_dir="$HOME/gpu-ib-cluster-state-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         {
           echo "STATE_DIR=$state_dir"
@@ -147,29 +148,25 @@ runs:
       with:
         detached: true
 
-    - name: Bootstrap Juju manual controller
-      shell: bash
-      run: ${{ github.action_path }}/../scripts/02-bootstrap-juju.sh
-
     - name: Deploy Canonical K8s
       shell: bash
-      run: ${{ github.action_path }}/../scripts/03-deploy-k8s.sh
+      run: ${{ github.action_path }}/../scripts/02-deploy-k8s.sh
 
     - name: Deploy NVIDIA GPU Operator
       if: inputs.up-to != 'k8s'
       shell: bash
-      run: ${{ github.action_path }}/../scripts/04-deploy-gpu-operator.sh
+      run: ${{ github.action_path }}/../scripts/03-deploy-gpu-operator.sh
 
     - name: Deploy NVIDIA Network Operator and verify InfiniBand
-      if: inputs.up-to == 'network-operator' || inputs.up-to == 'all'
+      if: inputs.up-to == 'network-operator'
       shell: bash
-      run: ${{ github.action_path }}/../scripts/05-deploy-network-operator.sh
+      run: ${{ github.action_path }}/../scripts/04-deploy-network-operator.sh
 
     - name: Bootstrap Juju controller in K8s
       id: vllm
-      if: inputs.up-to == 'all'
+      if: inputs.vllm-controller == 'true'
       shell: bash
-      run: ${{ github.action_path }}/../scripts/06-bootstrap-vllm-controller.sh
+      run: ${{ github.action_path }}/../scripts/05-bootstrap-vllm-controller.sh
 
     - name: Write job summary
       if: always()

@@ -2,7 +2,8 @@
 
 # Releases the Testflinger reservations (machines are reprovisioned, so no
 # Juju/K8s teardown is needed) and cleans the local state: sshuttle tunnels,
-# ~/.ssh/config block, Juju client entries, kubeconfig and the ephemeral key.
+# aproxy bypass rules, the vllm Juju client entries, kubeconfig and the
+# ephemeral key.
 # Best effort: never fails, so it is safe in `if: always()` steps.
 # RELEASE_MACHINES=false keeps the reservations (debugging) and leaves the
 # local state untouched (state dir with kubeconfig, Juju client entries,
@@ -43,17 +44,9 @@ while read -r handle; do
 done < <(sudo nft -a list chain ip aproxy output 2>/dev/null \
   | grep -F "comment \"$APROXY_RULE_COMMENT\"" | sed -n 's/.*# handle \([0-9]*\)$/\1/p')
 
-log "Removing ~/.ssh/config block"
-if [[ -f ~/.ssh/config ]]; then
-  sed -i "\|^# BEGIN gpu-ib-cluster $STATE_DIR\$|,\|^# END gpu-ib-cluster $STATE_DIR\$|d" ~/.ssh/config
-fi
-
 log "Removing Juju client entries"
-for controller in "$VLLM_CONTROLLER_NAME" "$JUJU_CONTROLLER_NAME"; do
-  juju unregister -y "$controller" 2>/dev/null
-done
+juju unregister -y "$VLLM_CONTROLLER_NAME" 2>/dev/null
 juju remove-cloud --client "$VLLM_CONTROLLER_NAME" 2>/dev/null
-juju remove-cloud --client "$MANUAL_CLOUD_NAME" 2>/dev/null
 
 if [[ -d "$STATE_DIR" ]]; then
   while IFS= read -r addr; do

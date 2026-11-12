@@ -12,8 +12,8 @@ name: GPU + InfiniBand integration tests
 on:
   # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
   # main, so the first runs are triggered by pushes to the feature branch.
-  # Push runs set up the whole stack on tor-A100_x2_IB, run the GPU tests and
-  # keep the reservation.
+  # Push runs set up K8s and the GPU Operator on tor-k8s-smoke (no vllm
+  # controller, no tests) and keep the reservation.
   push:
     branches:
       - ci/gpu-ib-integration
@@ -28,22 +28,21 @@ on:
           - tor-A100_x2_IB
           - tor-k8s-smoke
       up-to:
-        description: Last infrastructure stage (tests need all)
+        description: Last operator stage (the tests need at least gpu-operator)
         required: false
-        default: all
+        default: network-operator
         type: choice
         options:
           - k8s
           - gpu-operator
           - network-operator
-          - all
       ssh-import-ids:
         description: "lp:/gh: identities (space separated) with SSH access to the machines; gh:<triggering user> is always added"
         required: true
         default: lp:dariofaccin
         type: string
       tmate:
-        description: Open a detached tmate session on the runner before the Juju bootstrap
+        description: Open a detached tmate session on the runner before the K8s deployment
         required: false
         default: false
         type: boolean
@@ -58,7 +57,7 @@ on:
         default: "6"
         type: string
       run-tests:
-        description: Run the GPU integration tests (false = only build the infrastructure)
+        description: Bootstrap the vllm controller and run the GPU integration tests (tor-A100_x2_IB only; false = only build the infrastructure)
         required: false
         default: true
         type: boolean
@@ -73,9 +72,9 @@ on:
         default: 3.6/stable
         type: string
       k8s-channel:
-        description: k8s charm channel
+        description: k8s snap channel
         required: false
-        default: 1.34/stable
+        default: 1.34-classic/stable
         type: string
       gpu-operator-version:
         description: NVIDIA GPU Operator Helm chart version
@@ -91,7 +90,7 @@ on:
 # One run at a time per Testflinger cluster: runs queue instead of competing
 # for the same agents.
 concurrency:
-  group: gpu-ib-${{ inputs.cluster || 'tor-A100_x2_IB' }}
+  group: gpu-ib-${{ inputs.cluster || 'tor-k8s-smoke' }}
   cancel-in-progress: false
 
 permissions:
@@ -100,7 +99,7 @@ permissions:
 jobs:
   get-charm-paths:
     name: Get charm paths
-    if: github.event_name == 'push' || (inputs.run-tests && inputs.up-to == 'all')
+    if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
     runs-on: ubuntu-latest
     outputs:
       charm-paths: ${{ steps.get-charm-paths.outputs.charm-paths }}
@@ -117,7 +116,7 @@ jobs:
       matrix:
         charm: ${{ fromJSON(needs.get-charm-paths.outputs.charm-paths) }}
     name: Build charm | ${{ matrix.charm }}
-    if: github.event_name == 'push' || (inputs.run-tests && inputs.up-to == 'all')
+    if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
     needs:
       - get-charm-paths
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v53.0.0
@@ -159,15 +158,16 @@ jobs:
         uses: ./.github/actions/gpu-ib-cluster/setup
         with:
           ssh-import-ids: ${{ steps.ssh-ids.outputs.ids }}
-          cluster: ${{ inputs.cluster || 'tor-A100_x2_IB' }}
-          up-to: ${{ inputs.up-to || 'all' }}
+          cluster: ${{ inputs.cluster || 'tor-k8s-smoke' }}
+          up-to: ${{ inputs.up-to || 'gpu-operator' }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
           reservation-timeout-hours: ${{ inputs.reservation-timeout-hours || '6' }}
           juju-channel: ${{ inputs.juju-channel || '3.6/stable' }}
-          k8s-channel: ${{ inputs.k8s-channel || '1.34/stable' }}
+          k8s-channel: ${{ inputs.k8s-channel || '1.34-classic/stable' }}
           gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
+          vllm-controller: ${{ inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s' }}
           vllm-controller-name: vllm
           tmate: ${{ github.event_name == 'push' || inputs.tmate }}
 
@@ -178,20 +178,20 @@ jobs:
         uses: canonical/action-tmate@main
 
       - name: Set up Python
-        if: github.event_name == 'push' || (inputs.run-tests && inputs.up-to == 'all')
+        if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       # The tox envs install the test dependencies with poetry.
       - name: Install tox and poetry
-        if: github.event_name == 'push' || (inputs.run-tests && inputs.up-to == 'all')
+        if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
         run: python -m pip install --quiet tox poetry
 
       # Under $HOME (state dir): the strictly confined juju snap cannot read
       # charm files outside it.
       - name: Download packed charm(s)
-        if: github.event_name == 'push' || (inputs.run-tests && inputs.up-to == 'all')
+        if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
         timeout-minutes: 5
         uses: actions/download-artifact@v4
         with:
@@ -200,7 +200,7 @@ jobs:
           path: ${{ steps.setup.outputs.state-dir }}
 
       - name: Run GPU bundle integration tests
-        if: github.event_name == 'push' || (inputs.run-tests && inputs.up-to == 'all')
+        if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
         env:
           # Credentials for the S3 bucket hosting the test model (as in ci.yaml).
           AWS_ACCESS_KEY_ID: ${{ secrets.LLM_STORAGE_AWS_ACCESS_KEY_ID }}

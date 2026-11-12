@@ -5,10 +5,10 @@
 # map their inputs onto these).
 #
 # Topology (Testflinger cluster spec tor-A100_x2_IB):
-#   controller[0] (akis)            -> Juju manual-cloud controller only
-#   worker-gpu[0..1] (cortez/blanka) -> Canonical K8s nodes (GPUs + InfiniBand)
+#   worker-gpu[0..1] (cortez/blanka) -> Canonical K8s snap nodes (GPUs + InfiniBand);
+#                                       worker-gpu[0] bootstraps, the others join
 #   this host (GH runner)            -> orchestrator: juju/kubectl/helm client,
-#                                       sshuttle to the LB CIDR, tests
+#                                       sshuttle to the K8s API and the LB CIDR, tests
 
 # SSH_OPTS is consumed by the scripts that source this file.
 # shellcheck disable=SC2034
@@ -50,18 +50,14 @@ export SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-$STATE_DIR/id_ed25519}"
 
 export PATH="$BIN_DIR:$PATH"
 
-# Juju names.
-export JUJU_CONTROLLER_NAME="${JUJU_CONTROLLER_NAME:-controller-manual-cloud}"
-export MANUAL_CLOUD_NAME="${MANUAL_CLOUD_NAME:-manual-cloud}"
-export JUJU_MODEL_NAME="${JUJU_MODEL_NAME:-canonicalk8s-gpu-net}"
-export JUJU_MODEL="$JUJU_CONTROLLER_NAME:$JUJU_MODEL_NAME"
+# Juju controller bootstrapped inside K8s, used by the tests.
 export VLLM_CONTROLLER_NAME="${VLLM_CONTROLLER_NAME:-vllm}"
 export VLLM_STORAGE_CLASS="${VLLM_STORAGE_CLASS:-csi-rawfile-default}"
 
-# Canonical K8s (k8s charm) settings for the tor lab.
-export K8S_CHANNEL="${K8S_CHANNEL:-1.34/stable}"
-export K8S_BASE="${K8S_BASE:-ubuntu@24.04}"
+# Canonical K8s (k8s snap) settings for the tor lab.
+export K8S_CHANNEL="${K8S_CHANNEL:-1.34-classic/stable}"
 export LB_CIDR="${LB_CIDR:-10.243.10.0/24}"
+# Registry mirrors written to containerd's hosts.d by scripts/node/prepare-node.sh.
 # JSON defaults live in their own variables: a "}" inside ${VAR:-...} ends the expansion.
 _default_registries='[{"url": "http://10.141.186.140:5000", "host": "docker.io"}, {"url": "http://10.141.186.145:5000", "host": "registry.k8s.io"}]'
 export K8S_REGISTRIES="${K8S_REGISTRIES:-$_default_registries}"
@@ -99,16 +95,12 @@ require_cluster_data() {
 }
 
 require_kubeconfig() {
-  [[ -s "$KUBECONFIG_PATH" ]] || die "No kubeconfig at $KUBECONFIG_PATH; run 03-deploy-k8s.sh first"
+  [[ -s "$KUBECONFIG_PATH" ]] || die "No kubeconfig at $KUBECONFIG_PATH; run 02-deploy-k8s.sh first"
 }
 
 # All reserved machines as user@ip, one per line.
 machine_addresses() {
   yq '.[] | select(has("IP")) | .username + "@" + .IP' "$JOB_DATA_PATH"
-}
-
-controller_address() {
-  yq '.controller[0].machine_address' "$CLUSTER_DATA_PATH"
 }
 
 # Worker addresses (user@ip) as a JSON array, in cluster-spec order.
@@ -133,7 +125,7 @@ start_tunnel() {
 }
 
 # Self-hosted runners DNAT every outbound TCP port (but 3128) to aproxy via
-# the 'ip aproxy' nftables table, and aproxy resets the Juju/K8s API
+# the 'ip aproxy' nftables table, and aproxy resets the K8s API and LB
 # connections. SSH to the lab only works through aproxy, so whole hosts cannot
 # be added to its exclude set (that breaks SSH to them). Instead, insert
 # port-scoped accept rules for the tunnelled subnet[:port] so that only that
@@ -152,25 +144,21 @@ aproxy_bypass() {
 }
 
 # The runner reaches the lab only through aproxy, which resets non-HTTP(S)
-# traffic but lets SSH through, so the
-# Juju API, the K8s API and the LB CIDR are tunnelled over SSH. Each tunnel
-# goes through a host that is not one of its destinations and is scoped to
-# ports, so SSH to every machine stays on aproxy (no tunnel loops); see
-# aproxy_bypass.
+# traffic but lets SSH through, so the K8s API (on worker[0], the bootstrap
+# node) and the LB CIDR are tunnelled over SSH. Each tunnel goes through a host
+# that is not one of its destinations and is scoped to ports, so SSH to every
+# machine stays on aproxy (no tunnel loops); see aproxy_bypass.
 start_lab_tunnels() {
-  local controller_ip workers worker_ip k8s_subnets=()
-  controller_ip="$(controller_address)"; controller_ip="${controller_ip#*@}"
+  local workers
   mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
-  for worker_ip in "${workers[@]}"; do
-    k8s_subnets+=("${worker_ip#*@}/32:6443")
-  done
+  (( ${#workers[@]} >= 2 )) || die "The tunnels need at least two workers"
   if sudo nft list table ip aproxy &>/dev/null; then
     group "aproxy nft rules"
     sudo nft list table ip aproxy
     endgroup
   fi
-  start_tunnel juju-lb "${workers[0]}" "$controller_ip/32:17070" "$LB_CIDR"
-  start_tunnel k8s-api "$(controller_address)" "${k8s_subnets[@]}"
+  start_tunnel lb "${workers[0]}" "$LB_CIDR"
+  start_tunnel k8s-api "${workers[1]}" "${workers[0]#*@}/32:6443"
 }
 
 kctl() { kubectl --kubeconfig "$KUBECONFIG_PATH" "$@"; }

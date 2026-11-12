@@ -1,11 +1,7 @@
-# Machines for validating the setup up to the GPU Operator (up-to: gpu-operator). The controller
-# only hosts the Juju controller.
+# Machines for validating the setup up to the GPU Operator (up-to: gpu-operator)
+# and running the GPU tests (no InfiniBand needed).
 worker-gpu:
   count: 2
   queues:
     - cortez
     - buzzsaw
-controller:
-  count: 1
-  queues:
-    - hidon
