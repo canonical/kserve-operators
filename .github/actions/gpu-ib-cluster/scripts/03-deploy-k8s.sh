@@ -18,18 +18,30 @@ if ! juju models -c "$JUJU_CONTROLLER_NAME" --format json | jq -e --arg m "$JUJU
   juju add-ssh-key -m "$JUJU_MODEL" "$(cat "$SSH_PRIVATE_KEY.pub")"
 fi
 
+# Juju machine ID with the given address, empty if none (yet).
+machine_id_for_ip() {
+  juju machines -m "$JUJU_MODEL" --format json \
+    | jq -r --arg ip "$1" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | sed -n 1p
+}
+
 mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
 machine_ids=()
 for addr in "${workers[@]}"; do
   ip="${addr#*@}"
-  id="$(juju machines -m "$JUJU_MODEL" --format json \
-    | jq -r --arg ip "$ip" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | sed -n 1p)"
+  id="$(machine_id_for_ip "$ip")"
   if [[ -z "$id" ]]; then
     log "Adding manual machine $addr"
-    juju add-machine -m "$JUJU_MODEL" "ssh:$addr" \
-      --private-key "$SSH_PRIVATE_KEY" --public-key "$SSH_PRIVATE_KEY.pub"
-    id="$(juju machines -m "$JUJU_MODEL" --format json \
-      | jq -r --arg ip "$ip" '.machines | to_entries[] | select(.value["dns-name"] == $ip or (.value["ip-addresses"] // [] | index($ip))) | .key' | sed -n 1p)"
+    out="$(juju add-machine -m "$JUJU_MODEL" "ssh:$addr" \
+      --private-key "$SSH_PRIVATE_KEY" --public-key "$SSH_PRIVATE_KEY.pub" 2>&1)" \
+      || die "juju add-machine $addr failed: $out"
+    echo "$out"
+    id="$(sed -n 's/^created machine \([0-9][0-9]*\)$/\1/p' <<<"$out" | sed -n 1p)"
+    # The address is only listed once the machine agent reports in.
+    for _ in $(seq 24); do
+      [[ -z "$id" ]] || break
+      sleep 5
+      id="$(machine_id_for_ip "$ip")"
+    done
     [[ -n "$id" ]] || die "Cannot find Juju machine for $addr"
   fi
   machine_ids+=("$id")
