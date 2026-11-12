@@ -1,4 +1,4 @@
-# Machines for validating the setup up to K8s (up-to: k8s). The controller
+# Machines for validating the setup up to the GPU Operator (up-to: gpu-operator). The controller
 # only hosts the Juju controller.
 worker-gpu:
   count: 2

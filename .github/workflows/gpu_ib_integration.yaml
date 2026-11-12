@@ -12,7 +12,8 @@ name: GPU + InfiniBand integration tests
 on:
   # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
   # main, so the first runs are triggered by pushes to the feature branch.
-  # Push runs only set up K8s on tor-k8s-smoke and release it (no charms, no tests).
+  # Push runs set up K8s and the GPU Operator on tor-k8s-smoke and keep the
+  # reservation (no charms, no tests).
   push:
     branches:
       - ci/gpu-ib-integration
@@ -159,7 +160,7 @@ jobs:
         with:
           ssh-import-ids: ${{ steps.ssh-ids.outputs.ids }}
           cluster: ${{ inputs.cluster || 'tor-k8s-smoke' }}
-          up-to: ${{ inputs.up-to || 'k8s' }}
+          up-to: ${{ inputs.up-to || 'gpu-operator' }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
           reservation-timeout-hours: ${{ inputs.reservation-timeout-hours || '6' }}

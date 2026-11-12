@@ -22,7 +22,7 @@ against it.
 
 [`tor-k8s-smoke`](testflinger/cluster-specs/tor-k8s-smoke.yaml) (controller
 hidon, workers cortez and buzzsaw) validates the setup with
-`up-to: k8s`. The `up-to` input (`k8s`, `gpu-operator`, `network-operator`,
+`up-to: gpu-operator`. The `up-to` input (`k8s`, `gpu-operator`, `network-operator`,
 `all`) stops the setup after that stage; the tests need `all`.
 
 ## Actions
