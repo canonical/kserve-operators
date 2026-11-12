@@ -12,8 +12,8 @@ name: GPU + InfiniBand integration tests
 on:
   # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
   # main, so the first runs are triggered by pushes to the feature branch.
-  # Push runs set up K8s and the GPU Operator on tor-k8s-smoke (no vllm
-  # controller, no tests) and keep the reservation.
+  # Push runs set up K8s, the GPU Operator and the vllm Juju controller on
+  # tor-k8s-smoke (no tests) and keep the reservation.
   push:
     branches:
       - ci/gpu-ib-integration
@@ -57,7 +57,7 @@ on:
         default: "6"
         type: string
       run-tests:
-        description: Bootstrap the vllm controller and run the GPU integration tests (tor-A100_x2_IB only; false = only build the infrastructure)
+        description: Run the GPU integration tests (tor-A100_x2_IB only; false = only build the infrastructure)
         required: false
         default: true
         type: boolean
@@ -167,7 +167,7 @@ jobs:
           k8s-channel: ${{ inputs.k8s-channel || '1.34-classic/stable' }}
           gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
-          vllm-controller: ${{ inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s' }}
+          vllm-controller: ${{ (inputs.up-to || 'gpu-operator') != 'k8s' }}
           vllm-controller-name: vllm
           tmate: ${{ github.event_name == 'push' || inputs.tmate }}
 
