@@ -33,6 +33,13 @@ for pidfile in "$STATE_DIR"/sshuttle-*.pid; do
   rm -f "$pidfile"
 done
 
+if [[ -s "$STATE_DIR/aproxy-excludes" ]]; then
+  log "Removing aproxy exclusions"
+  while IFS= read -r cidr; do
+    sudo nft delete element ip aproxy exclude "{ $cidr }" 2>/dev/null
+  done < "$STATE_DIR/aproxy-excludes"
+fi
+
 log "Removing ~/.ssh/config block"
 if [[ -f ~/.ssh/config ]]; then
   sed -i "\|^# BEGIN gpu-ib-cluster $STATE_DIR\$|,\|^# END gpu-ib-cluster $STATE_DIR\$|d" ~/.ssh/config

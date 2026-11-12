@@ -88,7 +88,9 @@ It never fails. With `release-machines: "false"`, the reservations are kept
 - Ubuntu with passwordless `sudo`, for snaps, apt and sshuttle.
 - Network reach to the Testflinger API and SSH (port 22) to the reserved machines
   (tor lab). Other ports are reset, so the Juju API (17070), the K8s API (6443)
-  and the LB CIDR go through sshuttle tunnels (`start_lab_tunnels` in `env.sh`).
+  and the LB CIDR go through sshuttle tunnels (`start_lab_tunnels` in `env.sh`),
+  and their destinations are removed from the aproxy redirect (`sudo nft` on the
+  `ip aproxy exclude` set).
 - The workers pull images through the lab mirrors (`K8S_REGISTRIES` in
   [`scripts/env.sh`](scripts/env.sh)).
 
