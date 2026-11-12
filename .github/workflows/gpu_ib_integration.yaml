@@ -225,12 +225,12 @@ jobs:
         if: always()
         uses: ./.github/actions/gpu-ib-cluster/release
         with:
-          release-machines: ${{ !inputs.keep-reservation }}
+          release-machines: ${{ !(github.event_name != 'workflow_dispatch' || inputs.keep-reservation) }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
 
       - name: Kept reservation
-        if: always() && inputs.keep-reservation
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.keep-reservation)
         env:
           SSH_IMPORT_IDS: ${{ steps.ssh-ids.outputs.ids }}
           HOURS: ${{ inputs.reservation-timeout-hours || '6' }}
