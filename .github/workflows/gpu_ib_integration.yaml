@@ -240,6 +240,6 @@ jobs:
             echo "### Reservation kept"
             echo
             echo "The machines in the table above stay reserved for up to ${HOURS}h; log in with \`${SSH_IMPORT_IDS}\`."
-            echo "The Juju client state of this run was removed from the runner. On a worker, \`sudo k8s config\` prints the kubeconfig."
+            echo "The runner state (kubeconfig, Juju client entries) is kept for the tmate session, if any; the runner is ephemeral. On a worker, \`sudo k8s config\` prints the kubeconfig."
             echo "Cancel early with \`testflinger-cli cancel <job-id>\`."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -4,8 +4,9 @@
 # Juju/K8s teardown is needed) and cleans the local state: sshuttle tunnels,
 # ~/.ssh/config block, Juju client entries, kubeconfig and the ephemeral key.
 # Best effort: never fails, so it is safe in `if: always()` steps.
-# RELEASE_MACHINES=false keeps the reservations (debugging) and only cleans
-# the local state of this host.
+# RELEASE_MACHINES=false keeps the reservations (debugging) and leaves the
+# local state untouched (state dir with kubeconfig, Juju client entries,
+# sshuttle tunnels), e.g. for a tmate session at the end of the job.
 #
 # Outputs:
 #   stdout: progress
@@ -15,8 +16,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 set +e
 
 if [[ "${RELEASE_MACHINES:-true}" != "true" ]]; then
-  log "RELEASE_MACHINES=${RELEASE_MACHINES}: keeping the Testflinger reservations"
-elif [[ -s "$JOB_DATA_PATH" ]]; then
+  log "RELEASE_MACHINES=${RELEASE_MACHINES}: keeping the Testflinger reservations and the local state in $STATE_DIR"
+  exit 0
+fi
+
+if [[ -s "$JOB_DATA_PATH" ]]; then
   log "Cancelling Testflinger jobs"
   while IFS= read -r job_id; do
     [[ -n "$job_id" && "$job_id" != "null" ]] || continue

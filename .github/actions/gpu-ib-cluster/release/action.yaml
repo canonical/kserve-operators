@@ -6,7 +6,7 @@ description: >-
 
 inputs:
   release-machines:
-    description: Cancel the Testflinger jobs. "false" keeps the machines (until the reservation timeout) and only cleans local state.
+    description: Cancel the Testflinger jobs. "false" keeps the machines (until the reservation timeout) and the local state (state dir, Juju client entries, tunnels).
     required: false
     default: "true"
   testflinger-client-id:

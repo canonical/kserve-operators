@@ -50,7 +50,9 @@ steps.
 Runs `scripts/99-release.sh`. It cancels the Testflinger jobs, stops sshuttle,
 removes the `~/.ssh/config` block, the Juju client entries and the state dir.
 It never fails. With `release-machines: "false"`, the reservations are kept
-(until `reservation-timeout-hours`) and only the runner state is cleaned.
+(until `reservation-timeout-hours`) and the runner state is left untouched
+(state dir with the kubeconfig, Juju client entries, sshuttle tunnels), so a
+detached tmate session can still use it while the job waits at the end.
 
 ### Diagnostics
 
