@@ -90,6 +90,7 @@ detached tmate session can still use it while the job waits at the end.
 |---|---|
 | `TESTFLINGER_CLIENT_ID`, `TESTFLINGER_SECRET_KEY` | Authenticating to Testflinger; `job_priority` overrides (setup input `job-priority-overrides`) only if the client is allowed to use them |
 | `HF_TOKEN` | The gated Hugging Face model in the GPU test |
+| `LLM_STORAGE_AWS_ACCESS_KEY_ID`, `LLM_STORAGE_AWS_SECRET_ACCESS_KEY` | The S3 bucket with the test model (`s3://` tests), as in `ci.yaml` |
 
 ## Requirements on the runner
 
