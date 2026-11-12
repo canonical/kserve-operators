@@ -49,7 +49,7 @@ on:
       keep-reservation:
         description: Keep the machines after the run (debugging); they are released at the reservation timeout
         required: false
-        default: false
+        default: true
         type: boolean
       reservation-timeout-hours:
         description: Testflinger reservation timeout in hours (upper bound of a kept reservation)
