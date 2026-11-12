@@ -13,7 +13,7 @@ on:
   # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
   # main, so the first runs are triggered by pushes to the feature branch.
   # Push runs set up the whole stack on tor-A100_x2_IB (K8s, GPU and Network
-  # Operators, vllm Juju controller), run the GPU tests and keep the reservation.
+  # Operators, vllm Juju controller), run the GPU tests and release the machines.
   push:
     branches:
       - ci/gpu-ib-integration
@@ -49,7 +49,7 @@ on:
       keep-reservation:
         description: Keep the machines after the run (debugging); they are released at the reservation timeout
         required: false
-        default: true
+        default: false
         type: boolean
       reservation-timeout-hours:
         description: Testflinger reservation timeout in hours (upper bound of a kept reservation)
@@ -226,12 +226,12 @@ jobs:
         if: always()
         uses: ./.github/actions/gpu-ib-cluster/release
         with:
-          release-machines: ${{ !(github.event_name != 'workflow_dispatch' || inputs.keep-reservation) }}
+          release-machines: ${{ !inputs.keep-reservation }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
 
       - name: Kept reservation
-        if: always() && (github.event_name != 'workflow_dispatch' || inputs.keep-reservation)
+        if: always() && inputs.keep-reservation
         env:
           SSH_IMPORT_IDS: ${{ steps.ssh-ids.outputs.ids }}
           HOURS: ${{ inputs.reservation-timeout-hours || '6' }}
