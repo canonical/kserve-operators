@@ -44,6 +44,7 @@ export CLUSTER_DATA_PATH="$STATE_DIR/testflinger-cluster-data.yaml"
 export KUBECONFIG_PATH="$STATE_DIR/kubeconfig"
 export VENV_DIR="$STATE_DIR/venv"
 # One pidfile per sshuttle tunnel: $STATE_DIR/sshuttle-<name>.pid
+export APROXY_RULE_COMMENT="gpu-ib-cluster ${GITHUB_RUN_ID:-local}${GITHUB_RUN_ATTEMPT:+-$GITHUB_RUN_ATTEMPT}"
 # Ephemeral keypair generated per run by 00-install-prereqs.sh.
 export SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-$STATE_DIR/id_ed25519}"
 
@@ -124,31 +125,35 @@ start_tunnel() {
   sshuttle -r "$remote" -e "ssh ${SSH_OPTS[*]}" --daemon --pidfile "$pidfile" "$@"
   local subnet
   for subnet in "$@"; do
-    aproxy_exclude "${subnet%%:*}"
+    aproxy_bypass "$subnet"
   done
 }
 
-# Self-hosted runners redirect outbound TCP to aproxy via nftables before
-# sshuttle's rules apply, and aproxy resets non-HTTP(S) connections. Excluding
-# the tunnelled CIDRs from aproxy lets sshuttle pick the traffic up (as the
-# terragrunt-deployment-pipelines juju_add_manual_machines module does).
-aproxy_exclude() {
-  local cidr="$1" out
-  sudo nft list set ip aproxy exclude &>/dev/null || return 0
-  if ! out="$(sudo nft add element ip aproxy exclude "{ $cidr }" 2>&1)"; then
-    grep -Fq "interval overlaps" <<<"$out" || die "Cannot exclude $cidr from aproxy: $out"
-    log "$cidr already excluded from aproxy"
-    return 0
+# Self-hosted runners DNAT every outbound TCP port (but 3128) to aproxy via
+# the 'ip aproxy' nftables table, and aproxy resets the Juju/K8s API
+# connections. SSH to the lab only works through aproxy, so whole hosts cannot
+# be added to its exclude set (that breaks SSH to them). Instead, insert
+# port-scoped accept rules for the tunnelled subnet[:port] so that only that
+# traffic skips aproxy and is picked up by sshuttle's own nat rules.
+# The rules are tagged with $APROXY_RULE_COMMENT and removed by 99-release.sh.
+aproxy_bypass() {
+  local net="${1%%:*}" port=""
+  [[ "$1" == *:* ]] && port="${1##*:}"
+  sudo nft list chain ip aproxy output &>/dev/null || return 0
+  if [[ -n "$port" ]]; then
+    sudo nft insert rule ip aproxy output ip daddr "$net" tcp dport "$port" accept comment "\"$APROXY_RULE_COMMENT\""
+  else
+    sudo nft insert rule ip aproxy output ip daddr "$net" accept comment "\"$APROXY_RULE_COMMENT\""
   fi
-  log "Excluded $cidr from aproxy"
-  echo "$cidr" >> "$STATE_DIR/aproxy-excludes"
+  log "aproxy bypass for $1"
 }
 
-# The runner can only reach the lab on port 22 (other ports get reset), so the
+# The runner reaches the lab only through aproxy, which resets non-HTTP(S)
+# traffic but lets SSH through, so the
 # Juju API, the K8s API and the LB CIDR are tunnelled over SSH. Each tunnel
 # goes through a host that is not one of its destinations and is scoped to
-# ports, so SSH to every machine stays direct (no tunnel loops). The
-# destinations are also excluded from aproxy (see aproxy_exclude).
+# ports, so SSH to every machine stays on aproxy (no tunnel loops); see
+# aproxy_bypass.
 start_lab_tunnels() {
   local controller_ip workers worker_ip k8s_subnets=()
   controller_ip="$(controller_address)"; controller_ip="${controller_ip#*@}"

@@ -68,7 +68,8 @@ It never fails. With `release-machines: "false"`, the reservations are kept
   `~/.ssh/config` block scopes the key to the reserved IPs, because
   `juju bootstrap` has no `--private-key` option. No SSH secret is needed.
 - **Humans:** the `ssh-import-ids` (`lp:`/`gh:`) are added to
-  `reserve_data.ssh_keys`. With `keep-reservation`, log in with
+  `reserve_data.ssh_keys`. The workflow also adds `gh:<user>` for the GitHub
+  user who triggered or re-ran it (except bots). With `keep-reservation`, log in with
   `ssh ubuntu@<ip>` (the IPs are in the job summary). On a worker,
   `sudo k8s config` prints the kubeconfig.
 - **Runner:** not reachable via inbound SSH (private endpoint), and the tmate
@@ -87,10 +88,13 @@ It never fails. With `release-machines: "false"`, the reservations are kept
 
 - Ubuntu with passwordless `sudo`, for snaps, apt and sshuttle.
 - Network reach to the Testflinger API and SSH (port 22) to the reserved machines
-  (tor lab). Other ports are reset, so the Juju API (17070), the K8s API (6443)
-  and the LB CIDR go through sshuttle tunnels (`start_lab_tunnels` in `env.sh`),
-  and their destinations are removed from the aproxy redirect (`sudo nft` on the
-  `ip aproxy exclude` set).
+  (tor lab). On the private-endpoint runners all lab traffic goes through aproxy,
+  which lets SSH through but resets other ports. So the Juju API (17070), the
+  K8s API (6443) and the LB CIDR go through sshuttle tunnels, and port-scoped
+  rules in the `ip aproxy` nft table make aproxy skip only that traffic
+  (`start_lab_tunnels` and `aproxy_bypass` in `env.sh`). The
+  terragrunt-deployment-pipelines runner (`solqa-ps7`) reaches 17070/6443
+  directly and only tunnels the LB CIDR.
 - The workers pull images through the lab mirrors (`K8S_REGISTRIES` in
   [`scripts/env.sh`](scripts/env.sh)).
 

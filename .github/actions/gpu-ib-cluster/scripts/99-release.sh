@@ -33,12 +33,11 @@ for pidfile in "$STATE_DIR"/sshuttle-*.pid; do
   rm -f "$pidfile"
 done
 
-if [[ -s "$STATE_DIR/aproxy-excludes" ]]; then
-  log "Removing aproxy exclusions"
-  while IFS= read -r cidr; do
-    sudo nft delete element ip aproxy exclude "{ $cidr }" 2>/dev/null
-  done < "$STATE_DIR/aproxy-excludes"
-fi
+log "Removing aproxy bypass rules"
+while read -r handle; do
+  sudo nft delete rule ip aproxy output handle "$handle"
+done < <(sudo nft -a list chain ip aproxy output 2>/dev/null \
+  | grep -F "comment \"$APROXY_RULE_COMMENT\"" | sed -n 's/.*# handle \([0-9]*\)$/\1/p')
 
 log "Removing ~/.ssh/config block"
 if [[ -f ~/.ssh/config ]]; then
