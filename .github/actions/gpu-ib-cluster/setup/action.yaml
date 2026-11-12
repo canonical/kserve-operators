@@ -135,6 +135,9 @@ runs:
         TESTFLINGER_SECRET_KEY: ${{ inputs.testflinger-secret-key }}
       run: ${{ github.action_path }}/../scripts/01-reserve-machines.sh
 
+    - name: Setup tmate session
+      uses: canonical/action-tmate@main
+
     - name: Bootstrap Juju manual controller
       shell: bash
       run: ${{ github.action_path }}/../scripts/02-bootstrap-juju.sh
