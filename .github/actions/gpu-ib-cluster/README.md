@@ -72,8 +72,13 @@ It never fails. With `release-machines: "false"`, the reservations are kept
   user who triggered or re-ran it (except bots). With `keep-reservation`, log in with
   `ssh ubuntu@<ip>` (the IPs are in the job summary). On a worker,
   `sudo k8s config` prints the kubeconfig.
-- **Runner:** not reachable via inbound SSH (private endpoint), and the tmate
-  relay is blocked too. To debug, set `keep-reservation` and work from the
+- **Runner:** with the `tmate` input, a detached
+  [`canonical/action-tmate`](https://github.com/canonical/action-tmate) session
+  (reachable from the Canonical VPN with a GitHub-registered SSH key) opens
+  before the Juju bootstrap; the connection command is in the step log and the
+  job waits at the end for the session to be closed (10 minutes if nobody
+  connects), after the machines are released. Without it, a blocking session
+  opens if the cluster setup fails, before releasing the machines. Otherwise set `keep-reservation` and work from the
   reserved machines (e.g. via the bastion); diagnostics are uploaded as an
   artifact.
 

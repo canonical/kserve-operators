@@ -41,6 +41,11 @@ on:
         required: true
         default: lp:dariofaccin
         type: string
+      tmate:
+        description: Open a detached tmate session on the runner before the Juju bootstrap
+        required: false
+        default: false
+        type: boolean
       keep-reservation:
         description: Keep the machines after the run (debugging); they are released at the reservation timeout
         required: false
@@ -163,6 +168,13 @@ jobs:
           gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
           vllm-controller-name: vllm
+          tmate: ${{ github.event_name == 'push' || inputs.tmate }}
+
+      # Debug access to the runner (Canonical VPN, GitHub SSH key) while the
+      # machines are still reserved, unless the detached session is already open.
+      - name: Setup tmate session
+        if: failure() && steps.setup.outcome == 'failure' && !(github.event_name == 'push' || inputs.tmate)
+        uses: canonical/action-tmate@main
 
       - name: Set up Python
         if: github.event_name == 'workflow_dispatch' && inputs.run-tests && inputs.up-to == 'all'

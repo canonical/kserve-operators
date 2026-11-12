@@ -58,6 +58,12 @@ inputs:
       (the Testflinger client must be allowed to use them)
     required: false
     default: "false"
+  tmate:
+    description: >-
+      Open a detached canonical/action-tmate session on the runner before the
+      Juju bootstrap ("true"/"false"); the job waits for it to be closed at the end
+    required: false
+    default: "false"
   vllm-controller-name:
     description: Name of the Juju controller bootstrapped inside the K8s cluster
     required: false
@@ -135,8 +141,11 @@ runs:
         TESTFLINGER_SECRET_KEY: ${{ inputs.testflinger-secret-key }}
       run: ${{ github.action_path }}/../scripts/01-reserve-machines.sh
 
-    - name: Setup tmate session
+    - name: Setup tmate session (detached)
+      if: inputs.tmate == 'true'
       uses: canonical/action-tmate@main
+      with:
+        detached: true
 
     - name: Bootstrap Juju manual controller
       shell: bash
