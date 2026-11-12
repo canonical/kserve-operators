@@ -62,7 +62,9 @@ export VLLM_STORAGE_CLASS="${VLLM_STORAGE_CLASS:-csi-rawfile-default}"
 export K8S_CHANNEL="${K8S_CHANNEL:-1.34/stable}"
 export K8S_BASE="${K8S_BASE:-ubuntu@24.04}"
 export LB_CIDR="${LB_CIDR:-10.243.10.0/24}"
-export K8S_REGISTRIES="${K8S_REGISTRIES:-[{ \"url\": \"http://10.141.186.140:5000\", \"host\": \"docker.io\" }, {\"url\": \"http://10.141.186.145:5000\", \"host\": \"registry.k8s.io\"}]}"
+# JSON defaults live in their own variables: a "}" inside ${VAR:-...} ends the expansion.
+_default_registries='[{"url": "http://10.141.186.140:5000", "host": "docker.io"}, {"url": "http://10.141.186.145:5000", "host": "registry.k8s.io"}]'
+export K8S_REGISTRIES="${K8S_REGISTRIES:-$_default_registries}"
 
 export NVIDIA_HELM_REPO="${NVIDIA_HELM_REPO:-https://helm.ngc.nvidia.com/nvidia}"
 export GPU_OPERATOR_VERSION="${GPU_OPERATOR_VERSION:-v26.7.2}"
@@ -74,7 +76,8 @@ export IB_IFNAMES_JSON="${IB_IFNAMES_JSON:-[\"ibp18s0\"]}"
 export DISABLE_ACS="${DISABLE_ACS:-true}"
 export RDMA_RESOURCE_NAME="${RDMA_RESOURCE_NAME:-rdma_shared_device_ib}"
 export RDMA_HCA_MAX="${RDMA_HCA_MAX:-63}"
-export IB_TEST_PAIRS_JSON="${IB_TEST_PAIRS_JSON:-[{\"server_node\":\"worker-1\",\"client_node\":\"worker-2\"}]}"
+_default_ib_test_pairs='[{"server_node": "worker-1", "client_node": "worker-2"}]'
+export IB_TEST_PAIRS_JSON="${IB_TEST_PAIRS_JSON:-$_default_ib_test_pairs}"
 export IB_MIN_BW_MB_PER_SEC="${IB_MIN_BW_MB_PER_SEC:-1000}"
 
 SSH_OPTS=(-i "$SSH_PRIVATE_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o BatchMode=yes)
