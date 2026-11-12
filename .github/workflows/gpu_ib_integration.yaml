@@ -171,12 +171,6 @@ jobs:
           vllm-controller-name: vllm
           tmate: ${{ github.event_name == 'push' || inputs.tmate }}
 
-      # Debug access to the runner (Canonical VPN, GitHub SSH key) while the
-      # machines are still reserved, unless the detached session is already open.
-      - name: Setup tmate session
-        if: failure() && steps.setup.outcome == 'failure' && !(github.event_name == 'push' || inputs.tmate)
-        uses: canonical/action-tmate@main
-
       - name: Set up Python
         if: inputs.cluster == 'tor-A100_x2_IB' && inputs.run-tests && inputs.up-to != 'k8s'
         uses: actions/setup-python@v5
