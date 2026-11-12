@@ -37,7 +37,7 @@ on:
           - network-operator
           - all
       ssh-import-ids:
-        description: "lp:/gh: identities (space separated) with SSH access to the machines"
+        description: "lp:/gh: identities (space separated) with SSH access to the machines; gh:<triggering user> is always added"
         required: true
         default: lp:dariofaccin
         type: string
@@ -135,11 +135,24 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
+      # The GitHub user who triggered (or re-ran) the workflow also gets SSH
+      # access to the machines, on top of the ssh-import-ids input.
+      - name: Collect SSH identities
+        id: ssh-ids
+        env:
+          IDS: ${{ inputs.ssh-import-ids || 'lp:dariofaccin' }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          if [[ -n "$ACTOR" && "$ACTOR" != *"[bot]" ]]; then
+            IDS="$IDS gh:$ACTOR"
+          fi
+          echo "ids=$IDS" >> "$GITHUB_OUTPUT"
+
       - name: Set up cluster
         id: setup
         uses: ./.github/actions/gpu-ib-cluster/setup
         with:
-          ssh-import-ids: ${{ inputs.ssh-import-ids || 'lp:dariofaccin' }}
+          ssh-import-ids: ${{ steps.ssh-ids.outputs.ids }}
           cluster: ${{ inputs.cluster || 'tor-k8s-smoke' }}
           up-to: ${{ inputs.up-to || 'k8s' }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
@@ -207,7 +220,7 @@ jobs:
       - name: Kept reservation
         if: always() && inputs.keep-reservation
         env:
-          SSH_IMPORT_IDS: ${{ inputs.ssh-import-ids || 'lp:dariofaccin' }}
+          SSH_IMPORT_IDS: ${{ steps.ssh-ids.outputs.ids }}
           HOURS: ${{ inputs.reservation-timeout-hours || '6' }}
         run: |
           {
