@@ -124,14 +124,13 @@ def get_agents(names: list[str]) -> list[Agent]:
 
     agents: list[Agent] = []
     for name in names:
-        agent = _cli(["agent-status", "--json", name], retry_transient=True)
+        agent = _cli_json(["agent-status", "--json", name])
 
         # The CLI renames some keys for whatever reason:
         #   "name" in API --> "agent" in CLI
         #   "state" in API --> "status" in CLI
         # For consistency within this module, we restore the "name" key,
         # and because we restore the "name" key, we restore the "state" key
-        agent = json.loads(agent)
         agent["name"] = agent.pop("agent")
         agent["state"] = agent.pop("status")
         agents.append(agent)
@@ -249,7 +248,7 @@ def get_queue_status(queue: str) -> list[dict[str, str]]:
     """
 
     # The standard output does not contain the necessary information, but the JSON output does
-    result = _cli(["queue-status", "--json", queue], retry_transient=True)
+    result = _cli_json(["queue-status", "--json", queue])
 
     # The output from the CLI has the following structure:
     # {
@@ -257,7 +256,7 @@ def get_queue_status(queue: str) -> list[dict[str, str]]:
     #   "agents": [{"name": <name>, "status": <status>}],
     #   "jobs_waiting": [],
     # }
-    return json.loads(result).get("agents", [])
+    return result.get("agents", [])
 
 
 def poll(job_id: str, oneshot: bool = True) -> str:
@@ -492,6 +491,30 @@ def write_job_data(
     """
     with open(filepath, "a" if append else "w") as file:
         yaml.dump(data, file)
+
+
+def _cli_json(args: list[str], attempts: int = 5, wait_seconds: int = 30) -> Any:
+    """
+    Run a read-only CLI command and parse its JSON output.
+    When the server is unreachable, `_cli` gives up and returns no usable output,
+    so retry the whole call instead of failing on a JSON decode error.
+    """
+    for attempt in range(1, attempts + 1):
+        output = _cli(args, retry_transient=True)
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            if attempt == attempts:
+                raise RuntimeError(
+                    f"testflinger-cli {' '.join(args)} returned no valid JSON "
+                    f"after {attempts} attempts: {output!r}"
+                ) from None
+            logger.warning(
+                "testflinger-cli %s returned no valid JSON (attempt %d/%d), "
+                "retrying in %ds",
+                " ".join(args), attempt, attempts, wait_seconds,
+            )
+            time.sleep(wait_seconds)
 
 
 def _cli(
