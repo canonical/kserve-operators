@@ -162,6 +162,7 @@ jobs:
           up-to: ${{ inputs.up-to || 'network-operator' }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          job-priority-overrides: true
           reservation-timeout-hours: ${{ inputs.reservation-timeout-hours || '6' }}
           juju-channel: ${{ inputs.juju-channel || '3.6/stable' }}
           k8s-channel: ${{ inputs.k8s-channel || '1.34-classic/stable' }}
