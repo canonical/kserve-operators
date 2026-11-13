@@ -31,7 +31,15 @@ done <<<"$ifnames"
 while IFS= read -r address; do
   [[ "$address" == *@* ]] || address="ubuntu@$address"
   echo "==> PCI ACS $mode on $address"
-  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o BatchMode=yes -o ConnectTimeout=10 -i "$private_key_file" \
-    "$address" "$remote_command" <"${script_dir}/remote-pci-acs.sh"
+  # Retry only SSH connection failures (exit 255); the remote script is idempotent.
+  for attempt in 1 2 3; do
+    rc=0
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o BatchMode=yes -o ConnectTimeout=30 -i "$private_key_file" \
+      "$address" "$remote_command" <"${script_dir}/remote-pci-acs.sh" || rc=$?
+    [ "$rc" -ne 255 ] && break
+    echo "WARNING: SSH to $address failed (attempt $attempt/3)" >&2
+    [ "$attempt" -lt 3 ] && sleep 15
+  done
+  [ "$rc" -eq 0 ] || exit "$rc"
 done <<<"$addresses"
