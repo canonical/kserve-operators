@@ -44,8 +44,6 @@ from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 from .helpers.s3_integrator import deploy_s3_integrator
 
 logger = logging.getLogger(__name__)
-# Quiet jubilant's very verbose per-poll wait logging during the long waits.
-logging.getLogger("jubilant.wait").setLevel("WARNING")
 
 # App names for the Charmhub dependencies (deploy coordinates live in
 # helpers/charms_dependencies.py). envoy-ingress-k8s creates the Gateway and

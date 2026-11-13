@@ -15,6 +15,19 @@ WAIT_TIMEOUT = 40 * 60
 logger = logging.getLogger(__name__)
 
 
+class _JubilantWaitFilter(logging.Filter):
+    """Keep only WARNING and above of the status diffs logged by ``Juju.wait``."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno >= logging.WARNING or not str(record.msg).startswith("wait:")
+
+
+# jubilant 0.4 logs the wait status diffs on the "jubilant" logger itself (newer
+# versions use "jubilant.wait"), so filter them there to keep the cli logs.
+logging.getLogger("jubilant").addFilter(_JubilantWaitFilter())
+logging.getLogger("jubilant.wait").setLevel(logging.WARNING)
+
+
 def _configure_juju_cli_path() -> None:
     """Prefer direct snap Juju binary to avoid snap launcher cgroup checks in tox."""
     juju_path = shutil.which("juju") or ""
