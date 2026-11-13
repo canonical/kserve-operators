@@ -19,16 +19,9 @@ which provides the RDMA shared device plugin (`rdma/rdma_shared_device_ib`). A
 Juju controller (`vllm`) is bootstrapped inside K8s; the tests run
 against it.
 
-[`tor-k8s-smoke`](testflinger/cluster-specs/tor-k8s-smoke.yaml) (workers
-cortez and buzzsaw, no InfiniBand link) validates the setup with
-`up-to: gpu-operator`. The workflow bootstraps the `vllm` controller on every
-cluster (unless `up-to: k8s`) and runs the tests only on `tor-A100_x2_IB`. The `up-to` input (`k8s`,
-`gpu-operator`, `network-operator`) stops the operator stages after that one;
-the tests need at least `gpu-operator`. With `network-operator` (the default)
-the workflow also passes `--run-multi-gpu-tests`, which runs the prefill/decode
-test with the pools on two nodes, moving the KV cache through NIXL over
-InfiniBand. The `vllm-controller` input then
-bootstraps the Juju controller in K8s.
+The workflow runs the GPU tests with `--run-multi-gpu-tests`, so it also runs
+the prefill/decode test with the pools on two nodes, moving the KV cache
+through NIXL over InfiniBand.
 
 ## Actions
 

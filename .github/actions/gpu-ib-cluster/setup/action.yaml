@@ -18,10 +18,6 @@ inputs:
     description: Testflinger secret key
     required: false
     default: ""
-  cluster:
-    description: Testflinger cluster spec name (testflinger/cluster-specs/<cluster>.yaml)
-    required: false
-    default: tor-A100_x2_IB
   reservation-timeout-hours:
     description: How long the machines stay reserved (upper bound, released earlier by the release action)
     required: false
@@ -46,16 +42,6 @@ inputs:
     description: NVIDIA Network Operator Helm chart version
     required: false
     default: 26.7.0
-  up-to:
-    description: "Last operator stage to set up: k8s, gpu-operator or network-operator"
-    required: false
-    default: network-operator
-  vllm-controller:
-    description: >-
-      Bootstrap the Juju controller inside K8s after the operator stages
-      ("true"/"false"); needed by the tests
-    required: false
-    default: "true"
   job-priority-overrides:
     description: >-
       Submit with the job_priority values of testflinger/job-configs/agent-job-overrides.yaml
@@ -94,7 +80,6 @@ runs:
       id: env
       shell: bash
       env:
-        IN_CLUSTER: ${{ inputs.cluster }}
         IN_SSH_IMPORT_IDS: ${{ inputs.ssh-import-ids }}
         IN_RESERVATION_HOURS: ${{ inputs.reservation-timeout-hours }}
         IN_ACQUIRE_HOURS: ${{ inputs.acquire-timeout-hours }}
@@ -104,19 +89,15 @@ runs:
         IN_NETWORK_OPERATOR_VERSION: ${{ inputs.network-operator-version }}
         IN_VLLM_CONTROLLER_NAME: ${{ inputs.vllm-controller-name }}
         IN_JOB_PRIORITY_OVERRIDES: ${{ inputs.job-priority-overrides }}
-        IN_UP_TO: ${{ inputs.up-to }}
       run: |
         set -euo pipefail
         for v in IN_RESERVATION_HOURS IN_ACQUIRE_HOURS; do
           [[ "${!v}" =~ ^[0-9]+$ ]] || { echo "::error::$v must be a whole number of hours"; exit 1; }
         done
-        [[ "$IN_UP_TO" =~ ^(k8s|gpu-operator|network-operator)$ ]] \
-          || { echo "::error::up-to must be one of k8s, gpu-operator, network-operator"; exit 1; }
         state_dir="$HOME/gpu-ib-cluster-state-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         {
           echo "STATE_DIR=$state_dir"
           echo "KUBECONFIG=$state_dir/kubeconfig"
-          echo "CLUSTER=$IN_CLUSTER"
           echo "SSH_IMPORT_IDS=$IN_SSH_IMPORT_IDS"
           echo "RESERVATION_TIMEOUT_SECONDS=$(( IN_RESERVATION_HOURS * 3600 ))"
           echo "ACQUIRE_TIMEOUT_SECONDS=$(( IN_ACQUIRE_HOURS * 3600 ))"
@@ -153,18 +134,15 @@ runs:
       run: ${{ github.action_path }}/../scripts/02-deploy-k8s.sh
 
     - name: Deploy NVIDIA GPU Operator
-      if: inputs.up-to != 'k8s'
       shell: bash
       run: ${{ github.action_path }}/../scripts/03-deploy-gpu-operator.sh
 
     - name: Deploy NVIDIA Network Operator and verify InfiniBand
-      if: inputs.up-to == 'network-operator'
       shell: bash
       run: ${{ github.action_path }}/../scripts/04-deploy-network-operator.sh
 
     - name: Bootstrap Juju controller in K8s
       id: vllm
-      if: inputs.vllm-controller == 'true'
       shell: bash
       run: ${{ github.action_path }}/../scripts/05-bootstrap-vllm-controller.sh
 
