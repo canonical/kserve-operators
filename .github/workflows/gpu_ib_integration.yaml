@@ -205,9 +205,12 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           CHARMS_PATH: ${{ steps.setup.outputs.state-dir }}/charms/
           PYTEST_ARGS: ${{ inputs.pytest-args }}
+          # The multi-GPU prefill/decode test needs the RDMA resource of the Network Operator.
+          RUN_MULTI_GPU: ${{ (inputs.up-to || 'network-operator') == 'network-operator' }}
         run: |
           juju switch "${{ steps.setup.outputs.vllm-controller }}"
           read -r -a extra_args <<<"$PYTEST_ARGS"
+          if [[ "$RUN_MULTI_GPU" == true ]]; then extra_args+=(--run-multi-gpu-tests); fi
           tox -e bundle-integration-gpu -- --keep-models --charms-path="$CHARMS_PATH" "${extra_args[@]}"
 
       - name: Collect diagnostics

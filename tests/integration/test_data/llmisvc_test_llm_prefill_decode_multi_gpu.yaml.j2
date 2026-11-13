@@ -1,0 +1,145 @@
+# Prefill/decode on two GPU nodes: the KV cache moves from the prefill pod to the
+# decode pod through NIXL (UCX RDMA over InfiniBand).
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: {{ name }}
+  namespace: default
+spec:
+  model:
+    uri: {{ model_uri }}
+    name: {{ model_name }}
+  storageInitializer:
+    enabled: false
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  # Decode pool. The charm decode preset listens on 8000, which clashes with the
+  # routing sidecar, so vLLM is moved to 8001.
+  template:
+    runtimeClassName: nvidia
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: {{ name }}
+                llm-d.ai/role: prefill
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+    initContainers:
+      - name: storage-initializer
+        image: {{ storage_initializer_image }}
+        args:
+          - {{ model_uri }}
+          - /mnt/models
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+    containers:
+      - name: main
+        image: {{ vllm_image }}
+        args:
+          - "--enforce-eager"
+          - "--kv-transfer-config"
+          - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          - "--port"
+          - "8001"
+        securityContext:
+          # root is needed for IPC_LOCK to lift the memlock limit for RDMA memory registration
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            add: ["IPC_LOCK"]
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+          - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: UCX_TLS
+            value: rc,sm,self,cuda_copy,cuda_ipc
+          - name: UCX_NET_DEVICES
+            value: "{{ ucx_net_devices }}"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+        resources:
+          requests:
+            cpu: "2"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"
+            {{ rdma_resource }}: "1"
+          limits:
+            cpu: "4"
+            memory: "32Gi"
+            nvidia.com/gpu: "1"
+            {{ rdma_resource }}: "1"
+  prefill:
+    replicas: 1
+    template:
+      runtimeClassName: nvidia
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ name }}
+                  llm-d.ai/role: decode
+      volumes:
+        - name: kserve-pvc-source
+          emptyDir: {}
+      initContainers:
+        - name: storage-initializer
+          image: {{ storage_initializer_image }}
+          args:
+            - {{ model_uri }}
+            - /mnt/models
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+      containers:
+        - name: main
+          image: {{ vllm_image }}
+          args:
+            - "--enforce-eager"
+            - "--kv-transfer-config"
+            - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          securityContext:
+            # root is needed for IPC_LOCK to lift the memlock limit for RDMA memory registration
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add: ["IPC_LOCK"]
+          env:
+            - name: VLLM_LOGGING_LEVEL
+              value: INFO
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: UCX_TLS
+              value: rc,sm,self,cuda_copy,cuda_ipc
+            - name: UCX_NET_DEVICES
+              value: "{{ ucx_net_devices }}"
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+              readOnly: true
+          resources:
+            requests:
+              cpu: "2"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+              {{ rdma_resource }}: "1"
+            limits:
+              cpu: "4"
+              memory: "32Gi"
+              nvidia.com/gpu: "1"
+              {{ rdma_resource }}: "1"

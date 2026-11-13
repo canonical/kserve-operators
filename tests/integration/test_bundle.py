@@ -12,7 +12,11 @@ import pytest
 from .helpers.assertions import (
     assert_llmisvc_metrics_endpoints,
     assert_llmisvc_serving,
+    assert_nixl_kv_transferred,
     assert_no_charm_resources_left,
+    assert_prediction,
+    assert_prefill_decode_on_different_nodes,
+    assert_prefill_decode_request_resources,
     assert_workload_requests_gpus,
 )
 from .helpers.charms_dependencies import (
@@ -26,9 +30,9 @@ from .helpers.charms_dependencies import (
 from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
 from .helpers.constants import LLM_INTEGRATOR_APP_NAME as LLM_INTEGRATOR_APP
 from .helpers.constants import LLMISVC_APP_NAME as LLMISVC_APP
-from .helpers.constants import LLMISVC_GPU_MODEL_NAME
+from .helpers.constants import LLMISVC_GPU_MODEL_NAME, NAMESPACE_DEFAULT
 from .helpers.deploy import deploy_serving_stack
-from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_IMAGE
+from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_GPU_IMAGE, VLLM_IMAGE
 from .helpers.llm_integrator_ops import (
     deploy_llm_integrator,
     relate_llm_integrator,
@@ -85,10 +89,12 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 
 # Fail fast (rather than skip) if the S3 credentials for the test model are missing.
-# GPU runs only deploy a public hf:// model, so they need no credentials.
+# GPU and multi-GPU runs only deploy public hf:// models, so they need no credentials.
 @pytest.fixture(scope="session", autouse=True)
 def require_aws_credentials(request: pytest.FixtureRequest):
-    if request.config.getoption("--run-gpu-tests"):
+    if request.config.getoption("--run-gpu-tests") or request.config.getoption(
+        "--run-multi-gpu-tests"
+    ):
         return
     if not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY):
         pytest.fail(
@@ -101,7 +107,9 @@ def require_aws_credentials(request: pytest.FixtureRequest):
 # Fail fast (rather than skip) if the HF token for the gated model is missing.
 @pytest.fixture(scope="session", autouse=True)
 def require_hf_token(request: pytest.FixtureRequest):
-    if request.config.getoption("--run-gpu-tests"):
+    if request.config.getoption("--run-gpu-tests") or request.config.getoption(
+        "--run-multi-gpu-tests"
+    ):
         return
     if not HF_TOKEN:
         pytest.fail(
@@ -124,6 +132,25 @@ LLMISVC_IMAGE_CONTEXT = {
 # single-worker serving; single-worker is covered through the charm tests.
 PREFILL_DECODE_EXAMPLE_NAME = "test-llm-prefill-decode"
 PREFILL_DECODE_EXAMPLE = TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode.yaml.j2"
+# Standalone prefill/decode LLMInferenceService with the pools on two GPU nodes, moving
+# the KV cache through NIXL over InfiniBand. The UCX device and the RDMA resource
+# default to the tor-A100_x2_IB cluster (Network Operator RDMA shared device plugin).
+PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME = "test-llm-prefill-decode-multi-gpu"
+PREFILL_DECODE_MULTI_GPU_EXAMPLE = (
+    TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode_multi_gpu.yaml.j2"
+)
+MULTI_GPU_RDMA_RESOURCE = os.environ.get("MULTI_GPU_RDMA_RESOURCE", "rdma/rdma_shared_device_ib")
+PREFILL_DECODE_MULTI_GPU_CONTEXT = {
+    "name": PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+    "model_uri": PUBLIC_HF_MODEL_URI,
+    "model_name": LLM_INTEGRATOR_MODEL_NAME,
+    "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
+    "vllm_image": VLLM_GPU_IMAGE,
+    "ucx_net_devices": os.environ.get("MULTI_GPU_UCX_NET_DEVICES", "mlx5_1:1"),
+    "rdma_resource": MULTI_GPU_RDMA_RESOURCE,
+}
+# Long enough to fill several KV cache blocks, so the prefill pool has blocks to hand over.
+NIXL_PROMPT = "The quick brown fox jumps over the lazy dog. " * 40
 
 
 @pytest.mark.abort_on_fail
@@ -284,6 +311,47 @@ def test_deploy_llm_via_charm_gpu(juju: jubilant.Juju, charms_path: str):
     assert_llmisvc_metrics_endpoints(namespace=juju.model)
 
     remove_llm_integrator(juju)
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.multi_gpu
+def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
+    logger.info("Applying a prefill/decode LLMInferenceService across two GPU nodes")
+    apply_llmisvc_example(
+        manifest_path=str(PREFILL_DECODE_MULTI_GPU_EXAMPLE),
+        context=PREFILL_DECODE_MULTI_GPU_CONTEXT,
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+    )
+
+    assert_llmisvc_serving(
+        gateway_namespace=juju.model,
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        model=LLM_INTEGRATOR_MODEL_NAME,
+    )
+    logger.info("Verifying the prefill and decode pools run on different nodes")
+    assert_prefill_decode_on_different_nodes(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME, namespace=NAMESPACE_DEFAULT
+    )
+    assert_prefill_decode_request_resources(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        namespace=NAMESPACE_DEFAULT,
+        resources={"nvidia.com/gpu": "1", MULTI_GPU_RDMA_RESOURCE: "1"},
+    )
+
+    logger.info("Verifying the KV cache moves from prefill to decode through NIXL")
+    assert_prediction(
+        gateway_name=ENVOY_INGRESS_APP,
+        gateway_namespace=juju.model,
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        model=LLM_INTEGRATOR_MODEL_NAME,
+        prompt=NIXL_PROMPT,
+    )
+    assert_nixl_kv_transferred(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME, namespace=NAMESPACE_DEFAULT
+    )
+
+    logger.info("Deleting the example after validation")
+    delete_llmisvc_example(name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME)
 
 
 def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):

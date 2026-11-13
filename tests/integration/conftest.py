@@ -39,8 +39,13 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
+        "multi_gpu: test requires GPUs on several nodes connected via InfiniBand; "
+        "skipped unless --run-multi-gpu-tests is passed",
+    )
+    config.addinivalue_line(
+        "markers",
         "cpu_only: CPU-only test (already covered by CPU CI or assumes no GPUs); "
-        "skipped when --run-gpu-tests is passed",
+        "skipped when --run-gpu-tests or --run-multi-gpu-tests is passed",
     )
     config.addinivalue_line(
         "markers",
@@ -54,17 +59,25 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--run-gpu-tests"):
-        marker = "cpu_only"
-        skip = pytest.mark.skip(reason="CPU-only test; skipped with --run-gpu-tests")
-    else:
-        marker = "gpu"
-        skip = pytest.mark.skip(
+    run_gpu = config.getoption("--run-gpu-tests")
+    run_multi_gpu = config.getoption("--run-multi-gpu-tests")
+    skips = {}
+    if not run_gpu:
+        skips["gpu"] = pytest.mark.skip(
             reason="GPU tests are skipped by default; pass --run-gpu-tests to enable"
         )
+    if not run_multi_gpu:
+        skips["multi_gpu"] = pytest.mark.skip(
+            reason="multi-GPU tests are skipped by default; pass --run-multi-gpu-tests to enable"
+        )
+    if run_gpu or run_multi_gpu:
+        skips["cpu_only"] = pytest.mark.skip(
+            reason="CPU-only test; skipped with --run-gpu-tests or --run-multi-gpu-tests"
+        )
     for item in items:
-        if marker in item.keywords:
-            item.add_marker(skip)
+        for marker, skip in skips.items():
+            if marker in item.keywords:
+                item.add_marker(skip)
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -128,4 +141,11 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="run tests marked 'gpu', which require GPU hardware",
+    )
+    parser.addoption(
+        "--run-multi-gpu-tests",
+        action="store_true",
+        default=False,
+        help="run tests marked 'multi_gpu', which require GPUs on several nodes "
+        "connected via InfiniBand",
     )

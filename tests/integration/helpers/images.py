@@ -17,3 +17,5 @@ def _default_images(charm_name: str) -> dict:
 STORAGE_INITIALIZER_IMAGE = _default_images("kserve-controller")["configmap__storageInitializer"]
 # Manual examples use llm-integrator's pinned vLLM image so nodes pull a single image.
 VLLM_IMAGE = _default_images("llm-integrator")["vllm"]
+# The default GPU image of llm-integrator, for the multi-GPU examples.
+VLLM_GPU_IMAGE = _default_images("llm-integrator")["vllm_gpu"]
