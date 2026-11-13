@@ -6,6 +6,7 @@
 
 import logging
 import time
+from dataclasses import dataclass
 
 import requests
 from lightkube import ApiError
@@ -53,7 +54,7 @@ from .k8s import (
     get_running_workload_pod,
     get_running_workload_pods_by_role,
 )
-from .kubectl import port_forward
+from .kubectl import port_forward, read_node_files
 from .retry import RETRY_FOR_TEN_MINUTES, RETRY_FOR_THREE_MINUTES
 
 logger = logging.getLogger(__name__)
@@ -273,31 +274,82 @@ def _read_pod_metrics(pod_name: str, namespace: str, port: int) -> str:
     raise AssertionError("unreachable")
 
 
-def assert_nixl_kv_transferred(name: str, namespace: str) -> None:
-    """Assert vLLM moved KV cache between the pools through NIXL without failures.
+@dataclass(frozen=True)
+class PrefillDecodeTraffic:
+    """Cumulative KV cache traffic counters of a prefill/decode LLMInferenceService."""
 
-    Reads the NIXL connector metrics of both vLLM servers: some bytes must have
-    been transferred and no transfer may have failed.
+    nixl_bytes: float  # bytes vLLM transferred through NIXL, both pools
+    nixl_failed: float  # failed NIXL transfers, both pools
+    prefill_ib_sent_bytes: int  # data sent by the IB port of the prefill node
+    decode_ib_received_bytes: int  # data received by the IB port of the decode node
+
+
+def _ib_port_data_bytes(node: str, ib_device: str, image: str) -> tuple[int, int]:
+    """Return the bytes sent and received by ``ib_device`` (``<hca>:<port>``) on ``node``."""
+    hca, _, port = ib_device.partition(":")
+    counters = f"/sys/class/infiniband/{hca}/ports/{port or 1}/counters"
+    sent, received = read_node_files(
+        node, image, f"{counters}/port_xmit_data", f"{counters}/port_rcv_data"
+    )
+    # The port data counters count 4-byte words.
+    return int(sent) * 4, int(received) * 4
+
+
+def get_prefill_decode_traffic(
+    name: str, namespace: str, ib_device: str, image: str
+) -> PrefillDecodeTraffic:
+    """Read the NIXL metrics of both vLLM servers and the IB counters of their nodes.
+
+    ``image`` runs the pods reading the IB counters; it should already be on the nodes.
     """
+    pods = _prefill_decode_pods(name, namespace)
     ports = {"prefill": VLLM_PREFILL_PORT, "decode": VLLM_DECODE_PORT}
+    nixl_bytes, nixl_failed = 0.0, 0.0
+    for role, pod in pods.items():
+        metrics = _read_pod_metrics(pod.metadata.name, namespace, ports[role])
+        nixl_bytes += _sum_metric(metrics, "vllm:nixl_bytes_transferred_sum") or 0.0
+        nixl_failed += _sum_metric(metrics, "vllm:nixl_num_failed_transfers_total") or 0.0
+    prefill_sent, _ = _ib_port_data_bytes(pods["prefill"].spec.nodeName, ib_device, image)
+    _, decode_received = _ib_port_data_bytes(pods["decode"].spec.nodeName, ib_device, image)
+    traffic = PrefillDecodeTraffic(nixl_bytes, nixl_failed, prefill_sent, decode_received)
+    logger.info("Prefill/decode traffic: %s", traffic)
+    return traffic
+
+
+def assert_kv_transferred_over_ib(
+    name: str, namespace: str, ib_device: str, image: str, before: PrefillDecodeTraffic
+) -> None:
+    """Assert the KV cache moved from prefill to decode through NIXL over IB since ``before``.
+
+    NIXL must report newly transferred bytes and no failed transfer. The decode pool
+    reads the KV cache from the prefill GPU memory with RDMA, so the IB port of the
+    prefill node must have sent, and the one of the decode node received, at least
+    as many bytes.
+    """
     for attempt in RETRY_FOR_THREE_MINUTES:
         with attempt:
-            transferred, failed = 0.0, 0.0
-            for role, pod in _prefill_decode_pods(name, namespace).items():
-                metrics = _read_pod_metrics(pod.metadata.name, namespace, ports[role])
-                role_bytes = _sum_metric(metrics, "vllm:nixl_bytes_transferred_sum")
-                role_failed = _sum_metric(metrics, "vllm:nixl_num_failed_transfers_total")
-                logger.info(
-                    "%s NIXL metrics: bytes transferred=%s, failed transfers=%s",
-                    role,
-                    role_bytes,
-                    role_failed,
-                )
-                transferred += role_bytes or 0.0
-                failed += role_failed or 0.0
-            assert failed == 0, f"NIXL reported {failed:.0f} failed KV transfers"
-            assert transferred > 0, "no KV cache bytes transferred through NIXL yet"
-    logger.info("NIXL transferred %.0f bytes of KV cache between the pools", transferred)
+            after = get_prefill_decode_traffic(name, namespace, ib_device, image)
+            nixl = after.nixl_bytes - before.nixl_bytes
+            sent = after.prefill_ib_sent_bytes - before.prefill_ib_sent_bytes
+            received = after.decode_ib_received_bytes - before.decode_ib_received_bytes
+            assert after.nixl_failed == 0, f"NIXL reported {after.nixl_failed:.0f} failed transfers"
+            assert nixl > 0, "no new KV cache bytes transferred through NIXL yet"
+            assert sent >= nixl, (
+                f"the prefill node sent {sent} B over {ib_device}, "
+                f"less than the {nixl:.0f} B transferred by NIXL"
+            )
+            assert received >= nixl, (
+                f"the decode node received {received} B over {ib_device}, "
+                f"less than the {nixl:.0f} B transferred by NIXL"
+            )
+    logger.info(
+        "NIXL transferred %.0f B of KV cache; over %s the prefill node sent %d B "
+        "and the decode node received %d B",
+        nixl,
+        ib_device,
+        sent,
+        received,
+    )
 
 
 def assert_llmisvc_metrics_endpoints(namespace: str, app_name: str = LLMISVC_APP_NAME) -> None:

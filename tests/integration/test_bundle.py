@@ -10,14 +10,15 @@ import jubilant
 import pytest
 
 from .helpers.assertions import (
+    assert_kv_transferred_over_ib,
     assert_llmisvc_metrics_endpoints,
     assert_llmisvc_serving,
-    assert_nixl_kv_transferred,
     assert_no_charm_resources_left,
     assert_prediction,
     assert_prefill_decode_on_different_nodes,
     assert_prefill_decode_request_resources,
     assert_workload_requests_gpus,
+    get_prefill_decode_traffic,
 )
 from .helpers.charms_dependencies import (
     ENVOY_AI_CONTROLLER,
@@ -138,13 +139,14 @@ PREFILL_DECODE_MULTI_GPU_EXAMPLE = (
     TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode_multi_gpu.yaml.j2"
 )
 MULTI_GPU_RDMA_RESOURCE = os.environ.get("MULTI_GPU_RDMA_RESOURCE", "rdma/rdma_shared_device_ib")
+MULTI_GPU_UCX_NET_DEVICES = os.environ.get("MULTI_GPU_UCX_NET_DEVICES", "mlx5_1:1")
 PREFILL_DECODE_MULTI_GPU_CONTEXT = {
     "name": PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
     "model_uri": PUBLIC_HF_MODEL_URI,
     "model_name": LLM_INTEGRATOR_MODEL_NAME,
     "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
     "vllm_image": VLLM_GPU_IMAGE,
-    "ucx_net_devices": os.environ.get("MULTI_GPU_UCX_NET_DEVICES", "mlx5_1:1"),
+    "ucx_net_devices": MULTI_GPU_UCX_NET_DEVICES,
     "rdma_resource": MULTI_GPU_RDMA_RESOURCE,
 }
 # Long enough to fill several KV cache blocks, so the prefill pool has blocks to hand over.
@@ -336,7 +338,14 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
         resources={"nvidia.com/gpu": "1", MULTI_GPU_RDMA_RESOURCE: "1"},
     )
 
-    logger.info("Verifying the KV cache moves from prefill to decode through NIXL")
+    logger.info("Verifying the KV cache moves from prefill to decode through NIXL over IB")
+    # The IB counters are read with pods running the vLLM image, already on the nodes.
+    traffic_before = get_prefill_decode_traffic(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        namespace=NAMESPACE_DEFAULT,
+        ib_device=MULTI_GPU_UCX_NET_DEVICES,
+        image=VLLM_GPU_IMAGE,
+    )
     assert_prediction(
         gateway_name=ENVOY_INGRESS_APP,
         gateway_namespace=juju.model,
@@ -344,8 +353,12 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
         model=LLM_INTEGRATOR_MODEL_NAME,
         prompt=NIXL_PROMPT,
     )
-    assert_nixl_kv_transferred(
-        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME, namespace=NAMESPACE_DEFAULT
+    assert_kv_transferred_over_ib(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        namespace=NAMESPACE_DEFAULT,
+        ib_device=MULTI_GPU_UCX_NET_DEVICES,
+        image=VLLM_GPU_IMAGE,
+        before=traffic_before,
     )
 
     logger.info("Deleting the example after validation")

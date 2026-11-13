@@ -1,7 +1,0 @@
-# Machines for validating the setup up to the GPU Operator (up-to: gpu-operator)
-# and running the GPU tests (no InfiniBand needed).
-worker-gpu:
-  count: 2
-  queues:
-    - cortez
-    - buzzsaw
