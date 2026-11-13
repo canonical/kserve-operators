@@ -65,10 +65,9 @@ on:
         default: 26.7.0
         type: string
 
-# One run at a time: runs queue instead of competing for the same agents.
 concurrency:
   group: gpu-ib-tor-A100_x2_IB
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
