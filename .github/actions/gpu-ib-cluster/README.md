@@ -3,7 +3,7 @@
 Composite actions that bring up, and tear down, a real GPU cluster connected
 via InfiniBand on [Testflinger](https://testflinger.canonical.com), used by
 [`gpu_ib_integration.yaml`](../../workflows/gpu_ib_integration.yaml) to run the
-GPU bundle integration tests (`tox -e bundle-integration-gpu`).
+multi-GPU bundle integration tests (`tox -e bundle-integration-multi-gpu`).
 
 ## Topology
 
@@ -121,7 +121,7 @@ export TESTFLINGER_CLIENT_ID=... TESTFLINGER_SECRET_KEY=...   # optional
 s=.github/actions/gpu-ib-cluster/scripts
 for i in 00 01 02 03 04 05; do "$s"/$i-*.sh || break; done
 export KUBECONFIG=~/gpu-ib-cluster-state-local/kubeconfig
-tox -e bundle-integration-gpu -- --charms-path=<dir with packed charms>
+tox -e bundle-integration-multi-gpu -- --charms-path=<dir with packed charms>
 "$s"/99-release.sh
 ```
 
