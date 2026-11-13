@@ -361,11 +361,15 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
         before=traffic_before,
     )
 
-    logger.info("Deleting the example after validation")
-    delete_llmisvc_example(name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME)
+    # Keep the example (and the charms) running to inspect the deployment afterwards.
+    logger.info("Keeping '%s' deployed", PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME)
 
 
-def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
+def test_remove_charms_leaves_no_charm_resources(
+    juju: jubilant.Juju, request: pytest.FixtureRequest
+):
+    if request.config.getoption("--run-multi-gpu-tests"):
+        pytest.skip("the multi-GPU run keeps the charms and its LLMInferenceService deployed")
     logger.info("Starting bundle cleanup test")
     logger.info("Removing charm applications from Juju model")
     juju.remove_application(LLMISVC_APP)
