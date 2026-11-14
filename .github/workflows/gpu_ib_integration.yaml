@@ -139,7 +139,7 @@ jobs:
           gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
           vllm-controller-name: vllm
-          tmate: ${{ github.event_name == 'push' || inputs.tmate }}
+          tmate: ${{ inputs.tmate || false }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
