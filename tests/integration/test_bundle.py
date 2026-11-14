@@ -149,8 +149,8 @@ PREFILL_DECODE_MULTI_GPU_CONTEXT = {
     "ucx_net_devices": MULTI_GPU_UCX_NET_DEVICES,
     "rdma_resource": MULTI_GPU_RDMA_RESOURCE,
 }
-# Long enough to fill several KV cache blocks, so the prefill pool has blocks to hand over.
-NIXL_PROMPT = "The quick brown fox jumps over the lazy dog. " * 40
+# A few hundred tokens long, to fill several KV cache blocks the prefill pool hands over.
+NIXL_PROMPT = (TEST_DATA_DIR / "nixl_prompt.txt").read_text()
 
 
 @pytest.mark.abort_on_fail
