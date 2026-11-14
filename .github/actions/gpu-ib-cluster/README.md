@@ -85,10 +85,11 @@ detached tmate session can still use it while the job waits at the end.
   (reachable from the Canonical VPN with a GitHub-registered SSH key) opens
   before the K8s deployment; the connection command is in the step log and the
   job waits at the end for the session to be closed (10 minutes if nobody
-  connects), after the machines are released. Without it, a blocking session
-  opens if the cluster setup fails, before releasing the machines. Otherwise set `keep-reservation` and work from the
-  reserved machines (e.g. via the bastion); diagnostics are uploaded as an
-  artifact.
+  connects), after the machines are released. With
+  `keep-reservation`, a blocking tmate session opens at the end of the job
+  (unless cancelled), with the runner state still pointing at the reserved
+  machines; you can also work from the machines directly (e.g. via the
+  bastion). Diagnostics are uploaded as an artifact.
 
 ## Secrets
 
