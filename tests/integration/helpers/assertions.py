@@ -312,7 +312,15 @@ def get_prefill_decode_traffic(
     prefill_sent, _ = _ib_port_data_bytes(pods["prefill"].spec.nodeName, ib_device, image)
     _, decode_received = _ib_port_data_bytes(pods["decode"].spec.nodeName, ib_device, image)
     traffic = PrefillDecodeTraffic(nixl_bytes, nixl_failed, prefill_sent, decode_received)
-    logger.info("Prefill/decode traffic: %s", traffic)
+    logger.info(
+        "Prefill/decode traffic: NIXL %.0f B (%.0f failed transfers), "
+        "prefill node sent %d B and decode node received %d B over %s",
+        nixl_bytes,
+        nixl_failed,
+        prefill_sent,
+        decode_received,
+        ib_device,
+    )
     return traffic
 
 
