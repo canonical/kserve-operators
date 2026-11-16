@@ -67,10 +67,6 @@ on:
         default: 26.7.0
         type: string
 
-concurrency:
-  group: gpu-ib-tor-A100_x2_IB
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
