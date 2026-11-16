@@ -168,6 +168,68 @@ def test_broken_container_fails_workload(container, expected):
     assert state.message == f"pod llm-integrator-kserve-abc: {expected}"
 
 
+@pytest.mark.parametrize(
+    "pods, expected",
+    [
+        pytest.param(
+            [make_pod(name="decode", role="decode", ready=True)],
+            "waiting for the prefill worker pods to be created",
+            id="prefill-pods-never-created",
+        ),
+        pytest.param(
+            [make_pod(name="prefill", role="prefill", ready=True)],
+            "waiting for the decode worker pods to be created",
+            id="decode-pods-never-created",
+        ),
+        pytest.param(
+            [
+                make_pod(name="decode-1", role="decode", ready=True),
+                make_pod(
+                    name="decode-2",
+                    role="decode",
+                    containers=[container_status("main", running=True)],
+                ),
+            ],
+            "waiting for the prefill worker pods to be created",
+            id="decode-scaling-up-without-prefill",
+        ),
+        pytest.param(
+            [
+                make_pod(name="decode-1", role="decode", ready=True),
+                make_pod(
+                    name="decode-2",
+                    role="decode",
+                    containers=[container_status("main", running=True)],
+                ),
+                make_pod(
+                    name="prefill",
+                    role="prefill",
+                    init_containers=[container_status("storage-initializer", running=True)],
+                ),
+            ],
+            "downloading the model",
+            id="progress-of-the-missing-role",
+        ),
+    ],
+)
+def test_prefill_decode_needs_a_ready_pod_per_role(pods, expected):
+    """With prefill/decode, a role whose pods were never created keeps the workload starting."""
+    state = diagnose_workload(pods, prefill_decode=True)
+    assert not state.serving
+    assert not state.failed
+    assert state.message == expected
+
+
+def test_prefill_decode_with_every_role_ready_serves():
+    pods = [
+        make_pod(name="decode", role="decode", ready=True),
+        make_pod(name="prefill", role="prefill", ready=True),
+    ]
+    state = diagnose_workload(pods, prefill_decode=True)
+    assert state.serving
+    assert state.message == "2/2 workers ready"
+
+
 def test_clean_restart_is_not_a_failure():
     container = container_status("main", running=True, restarts=1, last_exit_code=0)
     assert not diagnose_workload([make_pod(containers=[container])]).failed
