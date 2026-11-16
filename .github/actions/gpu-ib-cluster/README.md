@@ -61,6 +61,11 @@ It never fails. With `release-machines: "false"`, the reservations are kept
 (state dir with the kubeconfig, Juju client entries, sshuttle tunnels), so a
 detached tmate session can still use it while the job waits at the end.
 
+### `pause`
+
+Sleeps on the runner after `step` if it equals `sleep-after`, for up to
+`hours`. See [Pausing](#ssh-access).
+
 ### Diagnostics
 
 `scripts/collect-diagnostics.sh <dir>` dumps the following:
@@ -77,19 +82,23 @@ detached tmate session can still use it while the job waits at the end.
   secret is needed.
 - **Humans:** the `ssh-import-ids` (`lp:`/`gh:`) are added to
   `reserve_data.ssh_keys`. The workflow also adds `gh:<user>` for the GitHub
-  user who triggered or re-ran it (except bots). With `keep-reservation`, log in with
-  `ssh ubuntu@<ip>` (the IPs are in the job summary). On a worker,
+  user who triggered or re-ran it (except bots). While the job runs (e.g.
+  during a `sleep-after` pause), log in with `ssh ubuntu@<ip>` (the IPs are in
+  the job summary). On a worker,
   `sudo k8s config` prints the kubeconfig.
 - **Runner:** with the `tmate` input, a detached
   [`canonical/action-tmate`](https://github.com/canonical/action-tmate) session
   (reachable from the Canonical VPN with a GitHub-registered SSH key) opens
   before the K8s deployment; the connection command is in the step log and the
   job waits at the end for the session to be closed (10 minutes if nobody
-  connects), after the machines are released. With
-  `keep-reservation`, a blocking tmate session opens at the end of the job
-  (unless cancelled), with the runner state still pointing at the reserved
-  machines; you can also work from the machines directly (e.g. via the
-  bastion). Diagnostics are uploaded as an artifact.
+  connects), after the machines are released. Diagnostics are uploaded as an
+  artifact.
+- **Pausing:** the `sleep-after` input (as `sleep_after` in the terragrunt
+  deployment pipelines) makes the [`pause`](pause/action.yaml) action sleep on
+  the runner after the chosen step (even if it failed), for up to
+  `reservation-timeout-hours`, before the machines are released. It implies
+  `tmate`; the runner name and IP are in the job summary. Cancel the run to
+  stop sleeping: the `if: always()` release step still releases the machines.
 
 ## Secrets
 

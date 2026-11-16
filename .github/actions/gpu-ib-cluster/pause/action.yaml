@@ -1,0 +1,42 @@
+name: Pause
+description: >-
+  Sleeps on the runner after `step` if it is the requested `sleep-after` step, to
+  debug the cluster before it is released; cancel the run to resume (the
+  `release` action in an `if: always()` step still releases the machines).
+
+inputs:
+  step:
+    description: Name of the step just completed
+    required: true
+  sleep-after:
+    description: Step to sleep after ("None" to never sleep)
+    required: false
+    default: None
+  hours:
+    description: How long to sleep at most (the machines are released at the reservation timeout anyway)
+    required: false
+    default: "6"
+
+runs:
+  using: composite
+  steps:
+    - name: Maybe sleep
+      shell: bash
+      continue-on-error: true
+      env:
+        CURRENT_STEP: ${{ inputs.step }}
+        TARGET_STEP: ${{ inputs.sleep-after }}
+        HOURS: ${{ inputs.hours }}
+      run: |
+        echo "CURRENT STEP: ${CURRENT_STEP}"
+        echo "TARGET STEP: ${TARGET_STEP}"
+        if [[ "${CURRENT_STEP}" == "${TARGET_STEP}" ]]; then
+          runner_ip="$(hostname -I | awk '{print $1}')"
+          {
+            echo "### Sleeping after: ${CURRENT_STEP}"
+            echo
+            echo "Runner \`${RUNNER_NAME}\` at \`${runner_ip}\`, for up to ${HOURS}h; cancel the run to release the machines."
+            echo "On the runner: \`export KUBECONFIG=${KUBECONFIG:-<state dir>/kubeconfig}\`. On a worker, \`sudo k8s config\` prints the kubeconfig."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          sleep "$((HOURS * 3600))" || echo "cancelled"
+        fi

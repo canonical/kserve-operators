@@ -25,17 +25,21 @@ on:
         default: lp:dariofaccin
         type: string
       tmate:
-        description: Open a detached tmate session on the runner before the K8s deployment
+        description: Open a detached tmate session on the runner before the K8s deployment (implied by sleep-after)
         required: false
         default: false
         type: boolean
-      keep-reservation:
-        description: Keep the machines after the run and open a tmate session on the runner at the end (debugging); the machines are released at the reservation timeout
+      sleep-after:
+        description: (Debug only) Sleep on the runner after <step>, before releasing the machines; cancel the run to release them
         required: false
-        default: false
-        type: boolean
+        default: None
+        type: choice
+        options:
+          - None
+          - Set up cluster
+          - Run multi-GPU bundle integration tests
       reservation-timeout-hours:
-        description: Testflinger reservation timeout in hours (upper bound of a kept reservation)
+        description: Testflinger reservation timeout in hours (upper bound of the sleep)
         required: false
         default: "6"
         type: string
@@ -139,7 +143,15 @@ jobs:
           gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
           vllm-controller-name: vllm
-          tmate: ${{ inputs.tmate || false }}
+          tmate: ${{ inputs.tmate || (inputs.sleep-after != '' && inputs.sleep-after != 'None') }}
+
+      - name: Pause?
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/gpu-ib-cluster/pause
+        with:
+          step: Set up cluster
+          sleep-after: ${{ inputs.sleep-after || 'None' }}
+          hours: ${{ inputs.reservation-timeout-hours || '6' }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -170,6 +182,14 @@ jobs:
           tox -e bundle-integration-multi-gpu -- --keep-models --charms-path="$CHARMS_PATH" \
             "${extra_args[@]}"
 
+      - name: Pause?
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/gpu-ib-cluster/pause
+        with:
+          step: Run multi-GPU bundle integration tests
+          sleep-after: ${{ inputs.sleep-after || 'None' }}
+          hours: ${{ inputs.reservation-timeout-hours || '6' }}
+
       - name: Collect diagnostics
         if: always() && steps.setup.outputs.state-dir != ''
         id: diagnostics
@@ -187,26 +207,5 @@ jobs:
         if: always()
         uses: ./.github/actions/gpu-ib-cluster/release
         with:
-          release-machines: ${{ !inputs.keep-reservation }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
-
-      - name: Kept reservation
-        if: always() && inputs.keep-reservation
-        env:
-          SSH_IMPORT_IDS: ${{ steps.ssh-ids.outputs.ids }}
-          HOURS: ${{ inputs.reservation-timeout-hours || '6' }}
-        run: |
-          {
-            echo "### Reservation kept"
-            echo
-            echo "The machines in the table above stay reserved for up to ${HOURS}h; log in with \`${SSH_IMPORT_IDS}\`."
-            echo "The runner state (kubeconfig, Juju client entries) is kept for the tmate session, if any; the runner is ephemeral. On a worker, \`sudo k8s config\` prints the kubeconfig."
-            echo "Cancel early with \`testflinger-cli cancel <job-id>\`."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Blocks the job until the session is closed (10 minutes if nobody
-      # connects), with the runner state kept for the reserved machines.
-      - name: Setup tmate session
-        if: ${{ !cancelled() && inputs.keep-reservation }}
-        uses: canonical/action-tmate@main
