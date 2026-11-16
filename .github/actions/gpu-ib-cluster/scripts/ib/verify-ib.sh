@@ -25,8 +25,8 @@ network_operator_namespace="$8"    # namespace the RDMA shared device plugin dae
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Expand a leading "~" ourselves - this runs via a terragrunt after_hook,
-# not an interactive login shell, so KUBECONFIG=~/.kube/config would
+# Expand a leading "~" ourselves - this does not run in an interactive
+# login shell, so KUBECONFIG=~/.kube/config would
 # otherwise be taken literally.
 kubeconfig_path="${kubeconfig_path/#\~/$HOME}"
 export KUBECONFIG="$kubeconfig_path"

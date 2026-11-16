@@ -93,8 +93,7 @@ Sleeps on the runner after `step` if it equals `sleep-after`, for up to
   job waits at the end for the session to be closed (10 minutes if nobody
   connects), after the machines are released. Diagnostics are uploaded as an
   artifact.
-- **Pausing:** the `sleep-after` input (as `sleep_after` in the terragrunt
-  deployment pipelines) makes the [`pause`](pause/action.yaml) action sleep on
+- **Pausing:** the `sleep-after` input makes the [`pause`](pause/action.yaml) action sleep on
   the runner after the chosen step (even if it failed), for up to
   `reservation-timeout-hours`, before the machines are released. It implies
   `tmate`; the runner name and IP are in the job summary. Cancel the run to
@@ -134,12 +133,3 @@ export KUBECONFIG=~/gpu-ib-cluster-state-local/kubeconfig
 tox -e bundle-integration-multi-gpu -- --charms-path=<dir with packed charms>
 "$s"/99-release.sh
 ```
-
-## Provenance
-
-The scripts were adapted from `scripts/local-gpu-ib-cluster/` of the internal
-`canonical/terragrunt-deployment-pipelines` repository. The Testflinger wrapper
-(`testflinger/*.py`) and `scripts/ib/` are copies of
-`sqa_tools/sqa_common/sqa_common/` and
-`catalogue/units/nic_cluster_policy/scripts/` at commit `3dc548a4`, including
-the not-yet-merged transient-retry fixes. Keep them in sync when updating.
