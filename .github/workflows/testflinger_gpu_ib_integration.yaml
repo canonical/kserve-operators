@@ -1,0 +1,19 @@
+name: Testflinger GPU + InfiniBand integration tests
+
+# Placeholder: workflow_dispatch only works for workflows that exist on the
+# default branch. This stub lets the real workflow, still in development on
+# ci/gpu-ib-integration, be dispatched from that branch:
+#   gh workflow run testflinger_gpu_ib_integration.yaml --ref ci/gpu-ib-integration
+# It is replaced by the real workflow when that branch is merged.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  placeholder:
+    name: Placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Placeholder; dispatch this workflow from the ci/gpu-ib-integration branch."
