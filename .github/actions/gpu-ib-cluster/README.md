@@ -2,7 +2,7 @@
 
 Composite actions that bring up, and tear down, a real GPU cluster connected
 via InfiniBand on [Testflinger](https://testflinger.canonical.com), used by
-[`gpu_ib_integration.yaml`](../../workflows/gpu_ib_integration.yaml) to run the
+[`testflinger_gpu_ib_integration.yaml`](../../workflows/testflinger_gpu_ib_integration.yaml) to run the
 multi-GPU bundle integration tests (`tox -e bundle-integration-multi-gpu`).
 
 ## Topology
