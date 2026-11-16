@@ -1,6 +1,7 @@
-"""Acquire a Testflinger cluster with an optional two-wave reservation barrier.
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
 
-Copyright 2026 Canonical Ltd. All rights reserved.
+"""Acquire a Testflinger cluster with an optional two-wave reservation barrier.
 
 Each tag requests a count of distinct agents from its candidate queues. Agents
 are selected in tag order, including busy agents, before any jobs are submitted.

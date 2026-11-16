@@ -1,7 +1,7 @@
-"""
-A module to help with Testflinger deployments.
-Copyright 2025 Canonical Ltd. All rights reserved.
-"""
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+"""A module to help with Testflinger deployments."""
 
 import json
 import logging
