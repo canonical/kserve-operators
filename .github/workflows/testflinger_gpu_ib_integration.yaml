@@ -26,12 +26,12 @@ on:
         default: lp:dariofaccin
         type: string
       tmate:
-        description: Open a detached tmate session on the runner before the K8s deployment (implied by sleep-after)
+        description: Open a detached tmate session on the runner before the K8s deployment (killed at the end of the job)
         required: false
         default: false
         type: boolean
       sleep-after:
-        description: (Debug only) Sleep on the runner after <step>, before releasing the machines; cancel the run to release them
+        description: (Debug only) Pause in a tmate session after <step>, before releasing the machines
         required: false
         default: None
         type: choice
@@ -39,8 +39,13 @@ on:
           - None
           - Set up cluster
           - Run multi-GPU bundle integration tests
+      pause-hours:
+        description: Maximum length of the sleep-after pause, in whole hours
+        required: false
+        default: "1"
+        type: string
       reservation-timeout-hours:
-        description: Testflinger reservation timeout in hours (upper bound of the sleep)
+        description: Testflinger reservation timeout in hours
         required: false
         default: "6"
         type: string
@@ -144,7 +149,7 @@ jobs:
           gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
           vllm-controller-name: vllm
-          tmate: ${{ inputs.tmate || (inputs.sleep-after || 'None') != 'None' }}
+          tmate: ${{ inputs.tmate || false }}
 
       - name: Pause?
         if: ${{ !cancelled() }}
@@ -152,7 +157,7 @@ jobs:
         with:
           step: Set up cluster
           sleep-after: ${{ inputs.sleep-after || 'None' }}
-          hours: ${{ inputs.reservation-timeout-hours || '6' }}
+          hours: ${{ inputs.pause-hours || '1' }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -189,7 +194,7 @@ jobs:
         with:
           step: Run multi-GPU bundle integration tests
           sleep-after: ${{ inputs.sleep-after || 'None' }}
-          hours: ${{ inputs.reservation-timeout-hours || '6' }}
+          hours: ${{ inputs.pause-hours || '1' }}
 
       - name: Collect diagnostics
         if: always() && steps.setup.outputs.state-dir != ''
@@ -210,3 +215,12 @@ jobs:
         with:
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+
+      # Never leave a tmate session open: action-tmate's post step would
+      # otherwise wait for connected clients to leave.
+      - name: Close tmate session
+        if: always()
+        run: |
+          if [[ -S /tmp/tmate.sock ]]; then
+            tmate -S /tmp/tmate.sock kill-server || true
+          fi

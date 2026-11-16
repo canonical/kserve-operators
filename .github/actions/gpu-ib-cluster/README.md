@@ -58,13 +58,12 @@ Runs `scripts/99-release.sh`. It cancels the Testflinger jobs, stops sshuttle,
 removes the aproxy bypass rules, the `vllm` Juju client entries and the state dir.
 It never fails. With `release-machines: "false"`, the reservations are kept
 (until `reservation-timeout-hours`) and the runner state is left untouched
-(state dir with the kubeconfig, Juju client entries, sshuttle tunnels), so a
-detached tmate session can still use it while the job waits at the end.
+(state dir with the kubeconfig, Juju client entries, sshuttle tunnels).
 
 ### `pause`
 
-Sleeps on the runner after `step` if it equals `sleep-after`, for up to
-`hours`. See [Pausing](#ssh-access).
+If `step` equals `sleep-after`, holds the job in a detached tmate session for
+up to `hours`. See [Pausing](#ssh-access).
 
 ### Diagnostics
 
@@ -89,15 +88,15 @@ Sleeps on the runner after `step` if it equals `sleep-after`, for up to
 - **Runner:** with the `tmate` input, a detached
   [`canonical/action-tmate`](https://github.com/canonical/action-tmate) session
   (reachable from the Canonical VPN with a GitHub-registered SSH key) opens
-  before the K8s deployment; the connection command is in the step log and the
-  job waits at the end for the session to be closed (10 minutes if nobody
-  connects), after the machines are released. Diagnostics are uploaded as an
-  artifact.
-- **Pausing:** the `sleep-after` input makes the [`pause`](pause/action.yaml) action sleep on
-  the runner after the chosen step (even if it failed), for up to
-  `reservation-timeout-hours`, before the machines are released. It implies
-  `tmate`; the runner name and IP are in the job summary. Cancel the run to
-  stop sleeping: the `if: always()` release step still releases the machines.
+  before the K8s deployment; the connection command is in the step log. The
+  last step of the job kills any tmate session still open, so the job never
+  waits for it. Diagnostics are uploaded as an artifact.
+- **Pausing:** with the `sleep-after` input, the [`pause`](pause/action.yaml)
+  action holds the job after the chosen step (even if it failed), before the
+  machines are released. It opens a detached tmate session (or reuses the one
+  from the `tmate` input) and resumes when the session ends (exit the tmate
+  shell), on `touch $GITHUB_WORKSPACE/continue`, or after `pause-hours`
+  (default 1), killing the session.
 
 ## Secrets
 
