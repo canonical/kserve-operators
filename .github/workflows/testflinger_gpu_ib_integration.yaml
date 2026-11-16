@@ -10,6 +10,13 @@ name: Testflinger GPU + InfiniBand integration tests
 # must never run on (fork) pull requests.
 
 on:
+  # TEMPORARY (revert before merge): workflow_dispatch needs the workflow on
+  # main, so the first runs are triggered by pushes to the feature branch.
+  # Push runs set up the whole stack on tor-A100_x2_IB (K8s, GPU and Network
+  # Operators, vllm Juju controller), run the multi-GPU tests and release the machines.
+  push:
+    branches:
+      - feat/KF-9208-gpu-ib-integration
   workflow_dispatch:
     inputs:
       ssh-import-ids:
@@ -142,8 +149,8 @@ jobs:
         if: ${{ !cancelled() }}
         uses: ./.github/actions/gpu-ib-cluster/pause
         with:
-          step: Set up cluster
-          sleep-after: ${{ inputs.sleep-after }}
+          step: Check out repo
+          sleep-after: "Check out repo"
           hours: ${{ inputs.reservation-timeout-hours }}
 
       - name: Set up Python
