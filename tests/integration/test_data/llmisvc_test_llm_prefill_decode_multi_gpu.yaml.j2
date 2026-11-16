@@ -1,7 +1,4 @@
-# Prefill/decode on two GPU nodes: the KV cache moves from the prefill pod to the
-# decode pod through NIXL (UCX RDMA over InfiniBand).
 {%- if hf_token %}
-# The storage-initializers authenticate to Hugging Face with this token.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -27,8 +24,7 @@ spec:
   router:
     scheduler: {}
     route: {}
-  # Decode pool. The charm decode preset listens on 8000, which clashes with the
-  # routing sidecar, so vLLM is moved to 8001.
+  # vLLM on 8001: 8000 is the routing sidecar's.
   template:
     runtimeClassName: nvidia
     affinity:

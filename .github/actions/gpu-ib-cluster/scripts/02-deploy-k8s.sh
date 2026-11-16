@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
 
-# Forms the Canonical K8s cluster from the prepared workers (k8s snap installed
-# by node/prepare-node.sh in the Testflinger test phase): bootstraps worker[0]
-# (network, DNS, load balancer on $LB_CIDR, gateway, local storage), joins the
-# other workers to it and exports the kubeconfig. Idempotent.
-#
-# Outputs:
-#   $KUBECONFIG_PATH: admin kubeconfig of the cluster (API on worker[0])
-#   sshuttle tunnels to the K8s API and $LB_CIDR (see start_lab_tunnels)
-#   Exit code: 0 on success, non-zero on failure
-
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_cluster_data
 
@@ -17,7 +7,6 @@ mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
 bootstrap_node="${workers[0]}"
 bootstrap_ip="${bootstrap_node#*@}"
 
-# The arguments are plain words (no quoting needed on the remote side).
 # shellcheck disable=SC2029
 on() { local addr="$1"; shift; ssh "${SSH_OPTS[@]}" "$addr" "$@"; }
 
@@ -60,7 +49,6 @@ group "Waiting for the cluster to be ready"
 on "$bootstrap_node" sudo k8s status --wait-ready --timeout 15m </dev/null
 endgroup
 
-# The API is reached through the k8s-api tunnel (see start_lab_tunnels).
 start_lab_tunnels
 
 on "$bootstrap_node" sudo k8s config </dev/null \

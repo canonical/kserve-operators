@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
 
-# Shared configuration for the gpu-ib-cluster scripts. Sourced by every script
-# in this directory; override any value via env vars (the composite actions
-# map their inputs onto these).
-#
-# Topology (Testflinger cluster spec tor-A100_x2_IB):
-#   worker-gpu[0..1] (cortez/blanka) -> Canonical K8s snap nodes (GPUs + InfiniBand);
-#                                       worker-gpu[0] bootstraps, the others join
-#   this host (GH runner)            -> orchestrator: juju/kubectl/helm client,
-#                                       sshuttle to the K8s API and the LB CIDR, tests
-
-# SSH_OPTS is consumed by the scripts that source this file.
 # shellcheck disable=SC2034
 
 set -euo pipefail
@@ -28,37 +17,27 @@ export KUBECTL_CHANNEL="${KUBECTL_CHANNEL:-latest/stable}"
 export HELM_CHANNEL="${HELM_CHANNEL:-latest/stable}"
 export YQ_VERSION="${YQ_VERSION:-v4.44.3}"
 
-# Human access: space/comma separated ssh-import-id identities (lp:, gh:)
-# added to the reservation, on top of the per-run ephemeral key.
 export SSH_IMPORT_IDS="${SSH_IMPORT_IDS:-}"
 export RESERVATION_TIMEOUT_SECONDS="${RESERVATION_TIMEOUT_SECONDS:-21600}"
-# Max time to wait for the agents to become free and reach "reserve".
 export ACQUIRE_TIMEOUT_SECONDS="${ACQUIRE_TIMEOUT_SECONDS:-154800}"
 
-# Local state. It must live under $HOME and not in a hidden dir: the strictly
-# confined juju snap can only read non-hidden files in $HOME.
+# Under $HOME and not hidden: the strictly confined juju snap can't read elsewhere.
 export STATE_DIR="${STATE_DIR:-$HOME/gpu-ib-cluster-state-${GITHUB_RUN_ID:-local}${GITHUB_RUN_ATTEMPT:+-$GITHUB_RUN_ATTEMPT}}"
 export BIN_DIR="$STATE_DIR/bin"
 export JOB_DATA_PATH="$STATE_DIR/testflinger-job-data.yaml"
 export CLUSTER_DATA_PATH="$STATE_DIR/testflinger-cluster-data.yaml"
 export KUBECONFIG_PATH="$STATE_DIR/kubeconfig"
 export VENV_DIR="$STATE_DIR/venv"
-# One pidfile per sshuttle tunnel: $STATE_DIR/sshuttle-<name>.pid
 export APROXY_RULE_COMMENT="gpu-ib-cluster ${GITHUB_RUN_ID:-local}${GITHUB_RUN_ATTEMPT:+-$GITHUB_RUN_ATTEMPT}"
-# Ephemeral keypair generated per run by 00-install-prereqs.sh.
 export SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-$STATE_DIR/id_ed25519}"
 
 export PATH="$BIN_DIR:$PATH"
 
-# Juju controller bootstrapped inside K8s, used by the tests.
 export VLLM_CONTROLLER_NAME="${VLLM_CONTROLLER_NAME:-vllm}"
 export VLLM_STORAGE_CLASS="${VLLM_STORAGE_CLASS:-csi-rawfile-default}"
 
-# Canonical K8s (k8s snap) settings for the tor lab.
 export K8S_CHANNEL="${K8S_CHANNEL:-1.34-classic/stable}"
 export LB_CIDR="${LB_CIDR:-10.243.10.0/24}"
-# Registry mirrors written to containerd's hosts.d by scripts/node/prepare-node.sh.
-# JSON defaults live in their own variables: a "}" inside ${VAR:-...} ends the expansion.
 _default_registries='[{"url": "http://10.141.186.140:5000", "host": "docker.io"}, {"url": "http://10.141.186.145:5000", "host": "registry.k8s.io"}]'
 export K8S_REGISTRIES="${K8S_REGISTRIES:-$_default_registries}"
 
@@ -98,18 +77,14 @@ require_kubeconfig() {
   [[ -s "$KUBECONFIG_PATH" ]] || die "No kubeconfig at $KUBECONFIG_PATH; run 02-deploy-k8s.sh first"
 }
 
-# All reserved machines as user@ip, one per line.
 machine_addresses() {
   yq '.[] | select(has("IP")) | .username + "@" + .IP' "$JOB_DATA_PATH"
 }
 
-# Worker addresses (user@ip) as a JSON array, in cluster-spec order.
 worker_addresses_json() {
   yq -o json -I0 '[.["worker-gpu"][].machine_address]' "$CLUSTER_DATA_PATH"
 }
 
-# Starts (idempotently) a daemonized sshuttle tunnel named $1 through $2
-# (user@ip) for the remaining subnet[:port] arguments.
 start_tunnel() {
   local name="$1" remote="$2"; shift 2
   local pidfile="$STATE_DIR/sshuttle-$name.pid"
@@ -124,13 +99,8 @@ start_tunnel() {
   done
 }
 
-# Self-hosted runners DNAT every outbound TCP port (but 3128) to aproxy via
-# the 'ip aproxy' nftables table, and aproxy resets the K8s API and LB
-# connections. SSH to the lab only works through aproxy, so whole hosts cannot
-# be added to its exclude set (that breaks SSH to them). Instead, insert
-# port-scoped accept rules for the tunnelled subnet[:port] so that only that
-# traffic skips aproxy and is picked up by sshuttle's own nat rules.
-# The rules are tagged with $APROXY_RULE_COMMENT and removed by 99-release.sh.
+# Runners DNAT outbound TCP to aproxy, which resets K8s API/LB traffic but
+# carries SSH to the lab, so only the tunnelled subnet[:port] bypasses it.
 aproxy_bypass() {
   local net="${1%%:*}" port=""
   [[ "$1" == *:* ]] && port="${1##*:}"
@@ -143,11 +113,7 @@ aproxy_bypass() {
   log "aproxy bypass for $1"
 }
 
-# The runner reaches the lab only through aproxy, which resets non-HTTP(S)
-# traffic but lets SSH through, so the K8s API (on worker[0], the bootstrap
-# node) and the LB CIDR are tunnelled over SSH. Each tunnel goes through a host
-# that is not one of its destinations and is scoped to ports, so SSH to every
-# machine stays on aproxy (no tunnel loops); see aproxy_bypass.
+# Each tunnel goes via a host that isn't its destination, so SSH stays on aproxy.
 start_lab_tunnels() {
   local workers
   mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
@@ -163,7 +129,6 @@ start_lab_tunnels() {
 
 kctl() { kubectl --kubeconfig "$KUBECONFIG_PATH" "$@"; }
 
-# Appends key=value to $GITHUB_OUTPUT when running in CI.
 gh_output() {
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "$1=$2" >> "$GITHUB_OUTPUT"

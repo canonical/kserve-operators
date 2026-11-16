@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
 
-# Registers the Canonical K8s cluster as a Juju k8s cloud and bootstraps the
-# $VLLM_CONTROLLER_NAME controller inside it (the controller the charm
-# integration tests run against), then makes it the current controller.
-# Idempotent: an existing controller with that name is reused.
-#
-# Outputs:
-#   Juju controller $VLLM_CONTROLLER_NAME (current) in the local Juju client
-#   GITHUB_OUTPUT (if set): vllm_controller
-#   Exit code: 0 on success, non-zero on failure
-
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_kubeconfig
 

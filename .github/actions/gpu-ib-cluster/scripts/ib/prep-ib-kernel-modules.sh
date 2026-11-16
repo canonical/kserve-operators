@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# Prepares each worker machine's host for RDMA/InfiniBand use. NONE of this
-# is handled by Terraform, the network operator, or its upstream module by
-# design - the operator only manages in-cluster resources; these are
-# host-level kernel modules that the RDMA shared device plugin's daemonset
-# expects to already be loaded when it starts probing for devices.
-#
-# Idempotent: safe to re-run (modprobe/`ip link set up` are both no-ops if
-# already applied). Does NOT persist across a host reboot - that is a known,
-# accepted gap for this session (see README.md).
+# Not persisted across reboots.
 set -euo pipefail
 
 private_key_file="$1"
-worker_machine_addresses_json="$2" # JSON array of SSH addresses, e.g. ["ubuntu@10.0.0.1"]
-active_ifnames_json="$3"           # JSON array, e.g. ["ibp18s0"]
-disable_acs="${4:-false}"          # Explicit bare-metal environment opt-in.
+worker_machine_addresses_json="$2"
+active_ifnames_json="$3"
+disable_acs="${4:-false}"
 
 case "$disable_acs" in
   true|false) ;;

@@ -13,14 +13,12 @@ from typing import Any
 
 import yaml
 
-# Think of agents and jobs as JSON objects
 Agent = dict[str, Any]
 Job = dict[str, Any]
 FlexibleQueuesJob = dict[str, Any]
 
 logger = logging.getLogger(__name__)
 
-# Returned by get_job_status when the server cannot report the job state.
 UNKNOWN_JOB_STATE = "unknown"
 # Printed (with exit code 0) by `testflinger-cli status` for an "unknown" state.
 _UNKNOWN_STATE_MESSAGE = "Unable to retrieve job state from the server"
@@ -104,7 +102,6 @@ def create_flexible_queues_job(
     """
     job = create_job(job_config_path, series=series)
     if (default_queue := job.get("job_queue")) is None and not queues:
-        # let's raise early instead of while submitting jobs, but that one will raise too
         raise ValueError(
             f"no queues defined either in base_config '{job_config_path}' or provided"
         )
@@ -126,11 +123,7 @@ def get_agents(names: list[str]) -> list[Agent]:
     for name in names:
         agent = _cli_json(["agent-status", "--json", name])
 
-        # The CLI renames some keys for whatever reason:
-        #   "name" in API --> "agent" in CLI
-        #   "state" in API --> "status" in CLI
-        # For consistency within this module, we restore the "name" key,
-        # and because we restore the "name" key, we restore the "state" key
+        # The CLI renames name -> agent and state -> status; restore the API keys.
         agent["name"] = agent.pop("agent")
         agent["state"] = agent.pop("status")
         agents.append(agent)
@@ -182,16 +175,13 @@ def get_deployed_job_data(
             username = rmatch.group("username")
             ip_address = rmatch.group("ip_address")
 
-        # There may be a delay between the job reaching the reserve phase
-        # and the SSH info becoming available via the poll command.
-        # In that case, we wait here until the info is available or we time out.
+        # The SSH info can lag behind the reserve phase.
         if wait_for_ssh and rmatch is None:
             logger.info(
                 f"Waiting up to {wait_timeout_seconds} seconds for SSH info for job {job_id}"
             )
             time_start = time.time()
 
-            # We do an initial wait first, since we have already polled once above
             time.sleep(wait_period_seconds)
             while True:
                 if time.time() - time_start > wait_timeout_seconds:
@@ -250,12 +240,6 @@ def get_queue_status(queue: str) -> list[dict[str, str]]:
     # The standard output does not contain the necessary information, but the JSON output does
     result = _cli_json(["queue-status", "--json", queue])
 
-    # The output from the CLI has the following structure:
-    # {
-    #   "queue": <queue>,
-    #   "agents": [{"name": <name>, "status": <status>}],
-    #   "jobs_waiting": [],
-    # }
     return result.get("agents", [])
 
 
@@ -293,23 +277,16 @@ def prioritize_agents(agents: list[Agent]) -> list[Agent]:
     failed: list[Agent] = []
 
     for agent in agents:
-        # Testflinger agents usually have a "provision_streak_type" of "pass" or "fail",
         if agent.get("provision_streak_type") == "pass":
             passed.append(agent)
         else:
-            # includes agents without streak data
             failed.append(agent)
 
-    # Testflinger agents usually have a "provision_streak_count",
-    # which is how many times in a row the provisioning has resulted
-    # in the same "provision_streak_type".
-    # Thus, after sorting, the first entry has the fewest failures
-    # If they don't have streak data, treat them as having an infinite failure streak
+    # Fewest consecutive failures first; no streak data sorts last.
     failed = sorted(
         failed, key=lambda agent: agent.get("provision_streak_count", float("inf"))
     )
 
-    # Shuffle passing agents to more evenly distribute jobs across them
     random.shuffle(passed)
 
     return passed + failed
@@ -360,13 +337,11 @@ def submit_jobs_custom_priority(
     for attempt in range(attempts):
         logger.info(f"Attempt {attempt + 1} of {attempts} to submit jobs to {queues=}")
 
-        # We want to re-query Testflinger on each attempt to get updated statuses
         agents: list[Agent] = []
         for queue in queues:
             agents.extend(get_queue_status(queue))
 
-        # Agents are available to deploy if their status is "waiting"
-        #   But we may have duplication across queues, so only take latest status
+        # Agents can appear in several queues; keep the latest status.
         status = {agent["name"]: agent["status"] for agent in agents}
         names = [name for name in status if status[name] == "waiting"]
         agents = get_agents(names)
@@ -376,16 +351,9 @@ def submit_jobs_custom_priority(
         if not agents:
             logger.warning("No agents available on this attempt")
 
-        # Select the agents we will use, based on priority
-        # It's fine if len(agents) < num_agents
         agents = agents[0:num_to_deploy]
         for agent in agents:
-            # Because we do our custom agent prioritization,
-            # we use the agent queues to make sure we get the agents we want,
-            # rather than using the queue directly and having Testflinger choose agents for us.
-            # Because all agents use the same job provisioning,
-            # we can simply change the queue for each agent,
-            # and otherwise re-use the same job data
+            # Target the agent's own queue so our prioritization picks the agent.
             job["job_queue"] = agent["name"]
             job_id = submit_job(job)
             if job_id is None:
@@ -394,19 +362,16 @@ def submit_jobs_custom_priority(
             logger.info(f"Submitted job {job_id} to {agent['name']}")
             job_ids.append(job_id)
 
-        # We write results here in case the
-        # GitHub workflow that calls this gets cancelled.
-        # That way, the later cleanup step has a record of what to clean up.
+        # Written now so cleanup can cancel the jobs if the workflow is cancelled.
         if job_data_filepath is not None:
             write_job_data(
                 [{"job_id": job_id} for job_id in job_ids],
                 job_data_filepath,
-                append=True,  # we might be getting called multiple times
+                append=True,
             )
 
         logger.debug(f"Reserved {len(job_ids)} of {num_agents} machine(s).")
 
-        # No need to wait on the last attempt
         if len(job_ids) == num_agents or attempt + 1 == attempts:
             break
         num_to_deploy = num_agents - len(job_ids)
@@ -434,8 +399,6 @@ def submit_job(job: Job) -> str | None:
     # Queue behind busy agents instead of failing when the CLI cannot see an
     # online agent (busy, briefly offline, or a failed agent lookup).
     result = _cli(["submit", "--wait-for-available-agents"], input=json.dumps(job))
-    # The output should look like
-    # "Job submitted successfully!\njob_id: <uuid>\n"
     if rmatch := re.search(f"job_id: (?P<job_id>{UUID_REGEX})", result):
         job_id = rmatch.group("job_id")
 
@@ -549,7 +512,6 @@ def _cli(
     output = ""
     command = ["testflinger-cli"] + command
     if input:
-        # The `-` tells the CLI to read from stdin
         command += ["-"]
 
     attempts = max(retries, 0) + 1  # at least one attempt

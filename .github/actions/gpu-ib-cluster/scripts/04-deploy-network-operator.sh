@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
 
-# Installs the NVIDIA Network Operator with Helm, prepares the IB kernel
-# modules and PCI ACS on the workers, applies the NicClusterPolicy (RDMA shared
-# device plugin) and runs an ib_send_bw test between the two workers (what the
-# nvidia_network_operator and nic_cluster_policy units run).
-#
-# Outputs:
-#   stdout: progress and ib_send_bw results
-#   Exit code: 0 on success, non-zero on failure
-
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_cluster_data
 require_kubeconfig
 
 workers_json="$(worker_addresses_json)"
 
-# NFD is provided by the GPU operator; its CRDs must exist before this chart.
+# NFD comes with the GPU operator; its CRDs must exist before this chart.
 log "Installing network-operator $NETWORK_OPERATOR_VERSION"
 helm upgrade --install network-operator network-operator \
   --kubeconfig "$KUBECONFIG_PATH" \

@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 
-# Collects cluster diagnostics into $1 (default $STATE_DIR/diagnostics):
-# Juju status/logs of the vllm controller, Kubernetes objects and events, GPU
-# and NIC operator state, and per-worker k8s status / nvidia-smi / InfiniBand
-# port counters.
-# Best effort: never fails.
-#
-# Outputs:
-#   Files under the output directory
-#   GITHUB_OUTPUT (if set): path
-#   Exit code: 0
+# Best effort, never fails.
 
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 set +e

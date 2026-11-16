@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs on a worker via pci-acs.sh. Only PLX/PEX880 GPU/NIC ancestors are eligible.
+# Only PLX/PEX880 GPU/NIC ancestors are eligible.
 set -euo pipefail
 shopt -s nullglob
 

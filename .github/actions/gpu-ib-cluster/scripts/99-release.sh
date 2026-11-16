@@ -1,17 +1,7 @@
 #!/usr/bin/env bash
 
-# Releases the Testflinger reservations (machines are reprovisioned, so no
-# Juju/K8s teardown is needed) and cleans the local state: sshuttle tunnels,
-# aproxy bypass rules, the vllm Juju client entries, kubeconfig and the
-# ephemeral key.
-# Best effort: never fails, so it is safe in `if: always()` steps.
-# RELEASE_MACHINES=false keeps the reservations (debugging) and leaves the
-# local state untouched (state dir with kubeconfig, Juju client entries,
-# sshuttle tunnels), e.g. for a tmate session at the end of the job.
-#
-# Outputs:
-#   stdout: progress
-#   Exit code: 0
+# Best effort, never fails. RELEASE_MACHINES=false keeps the reservations and
+# the local state for debugging.
 
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 set +e

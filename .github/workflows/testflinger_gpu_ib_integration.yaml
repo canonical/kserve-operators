@@ -1,13 +1,6 @@
 name: Testflinger GPU + InfiniBand integration tests
 
-# Reserves real GPU machines connected via InfiniBand on Testflinger, builds a
-# Canonical K8s cluster with the NVIDIA GPU and Network Operators on them,
-# bootstraps a Juju controller in it and runs the GPU bundle integration tests
-# against the charms packed from the dispatched ref.
-# See .github/actions/gpu-ib-cluster/README.md.
-#
-# workflow_dispatch only: it uses a self-hosted runner and lab hardware, so it
-# must never run on (fork) pull requests.
+# Dispatch only: self-hosted runner and lab hardware must not run on fork PRs.
 
 on:
   workflow_dispatch:
@@ -110,8 +103,7 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
-      # The GitHub user who triggered (or re-ran) the workflow also gets SSH
-      # access to the machines, on top of the ssh-import-ids input.
+      # The triggering user also gets SSH access to the machines.
       - name: Collect SSH identities
         id: ssh-ids
         env:
@@ -152,12 +144,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The tox envs install the test dependencies with poetry.
       - name: Install tox and poetry
         run: python -m pip install --quiet tox poetry
 
-      # Under $HOME (state dir): the strictly confined juju snap cannot read
-      # charm files outside it.
+      # Under $HOME: the strictly confined juju snap can't read charms elsewhere.
       - name: Download packed charm(s)
         timeout-minutes: 5
         uses: actions/download-artifact@v4
@@ -205,8 +195,7 @@ jobs:
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
 
-      # Never leave a tmate session open: action-tmate's post step would
-      # otherwise wait for connected clients to leave.
+      # Otherwise action-tmate's post step waits for connected clients to leave.
       - name: Close tmate session
         if: always()
         run: |

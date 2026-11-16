@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 
-# Installs the NVIDIA GPU Operator (which builds and loads the NVIDIA driver
-# on the workers) with Helm and waits for the GPUs to be advertised (what the
-# nvidia_gpu_operator unit runs).
-#
-# Outputs:
-#   stdout: GPU nodes with product and count
-#   Exit code: 0 on success, non-zero on failure
-
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_kubeconfig
 

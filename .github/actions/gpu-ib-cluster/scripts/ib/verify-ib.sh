@@ -1,48 +1,28 @@
 #!/usr/bin/env bash
-# Runs a real ib_send_bw test between one pod per node, for every pair named
-# in the unit's test_pairs. This is what turns "the operator/CR reports
-# ready" into "we actually measured RDMA throughput between these specific
-# nodes" - adapted from (not vendored from) the run-ib-verify.sh in
-# nvidia-network-operator-tf's usage/with-nic-cluster-policy example; expect
-# this to evolve once run against real hardware.
-#
-# Unlike the upstream example, test_pairs here names nodes by POSITION in
-# worker_machine_addresses ("worker-1" = index 0, "worker-2" = index 1, ...),
-# not by hostname literal - this script resolves each role to a real k8s
-# node name itself (via `hostname` over SSH to that machine), so no
-# hardware-specific hostnames ever need to appear in catalogue units or
-# composites.
+# ib_send_bw between pods on each test_pairs node pair ("worker-N" = Nth worker address).
 set -euo pipefail
 
 kubeconfig_path="$1"
 private_key_file="$2"
-worker_machine_addresses_json="$3" # JSON array of SSH addresses, ordered
-rdma_resource_name="$4"            # e.g. rdma_shared_device_ib (WITHOUT the rdma/ prefix)
-test_pairs_json="$5"               # JSON array of {"server_node":"worker-1","client_node":"worker-2"}
-min_bw_mb_per_sec="$6"             # ib_send_bw's own unit (MB/sec); 0 = skip the threshold check
-keep_pods="$7"                     # "true" or "false"
-network_operator_namespace="$8"    # namespace the RDMA shared device plugin daemonset runs in
+worker_machine_addresses_json="$3"
+rdma_resource_name="$4" # without the rdma/ prefix
+test_pairs_json="$5"
+min_bw_mb_per_sec="$6" # MB/sec; 0 = no threshold
+keep_pods="$7"
+network_operator_namespace="$8"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Expand a leading "~" ourselves - this does not run in an interactive
-# login shell, so KUBECONFIG=~/.kube/config would
-# otherwise be taken literally.
+# "~" is not expanded in a non-login shell.
 kubeconfig_path="${kubeconfig_path/#\~/$HOME}"
 export KUBECONFIG="$kubeconfig_path"
 
 ssh_opts=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$private_key_file")
 
-# Resolves a "worker-N" (1-indexed) role name to the real k8s node name, by
-# SSHing to the Nth address in worker_machine_addresses and asking its
-# hostname. Assumes canonical-k8s registers each node under its OS hostname
-# (true for the manual-machine setup this composite uses) - flagged as an
-# assumption to confirm on real hardware, same as the active_ifnames guess.
+# Assumes K8s node names are the OS hostnames.
 resolve_node_name() {
   local role="$1" idx addr
-  # Reject anything that isn't a positive-integer "worker-N" - without
-  # this, e.g. "worker-0" would silently become jq index -1 (the LAST
-  # array entry) instead of failing, verifying the wrong node.
+  # worker-0 would become jq index -1 (the last entry).
   if [[ ! "$role" =~ ^worker-[1-9][0-9]*$ ]]; then
     echo "FAIL: '$role' is not a valid 'worker-N' (1-indexed, N>=1) role name" >&2
     exit 1
@@ -58,12 +38,7 @@ resolve_node_name() {
   ssh "${ssh_opts[@]}" "$ssh_target" hostname
 }
 
-# test_pairs is a generic unit input - a future caller isn't guaranteed to
-# follow the "worker-N" (dash) convention this leaf's own config uses, so a
-# role name isn't guaranteed to already be a valid DNS-1123 pod-name segment.
-# Warns (rather than silently sanitizing outright) so a mismatched
-# convention is still visible in the logs, then sanitizes so the
-# verification itself doesn't fail on an otherwise-cosmetic naming issue.
+# Role names may not be valid DNS-1123: warn, then sanitize.
 sanitize_dns1123_segment() {
   local raw="$1" sanitized
   sanitized=$(echo "$raw" | tr '[:upper:]_' '[:lower:]-' | sed -E 's/[^a-z0-9-]/-/g; s/^-+//; s/-+$//')
@@ -73,10 +48,7 @@ sanitize_dns1123_segment() {
   echo "$sanitized"
 }
 
-# Checked before the daemonset wait below: with no test_pairs configured,
-# there is nothing to verify, and the daemonset may not even exist yet
-# (e.g. network_operator_config unset) - waiting on it first would make
-# this skip path unreachable.
+# Before the daemonset wait: with no pairs the daemonset may not exist.
 pair_count=$(echo "$test_pairs_json" | jq 'length')
 if [ "$pair_count" -eq 0 ]; then
   echo "==> No test_pairs configured - skipping the ib_send_bw verification step."
@@ -84,9 +56,7 @@ if [ "$pair_count" -eq 0 ]; then
 fi
 
 echo "==> Waiting for the RDMA shared device plugin daemonset to be created..."
-# The operator reconciles the just-applied NicClusterPolicy CR
-# asynchronously, so the daemonset may not exist yet - "rollout status"
-# below fails immediately with NotFound in that case, rather than waiting.
+# The daemonset may not exist yet and rollout status fails fast on NotFound.
 daemonset_found=false
 for _ in $(seq 1 60); do
   if kubectl get daemonset/rdma-shared-dp-ds -n "$network_operator_namespace" >/dev/null 2>&1; then
@@ -103,11 +73,7 @@ fi
 echo "==> Waiting for the RDMA shared device plugin daemonset to roll out..."
 kubectl rollout status daemonset/rdma-shared-dp-ds -n "$network_operator_namespace" --timeout=180s
 
-# Runs in a subshell (the outer parens) so an EXIT trap - unlike RETURN -
-# fires on every termination path, including an unguarded command failing
-# under `set -e` (RETURN only fires on an actual function `return`, not on
-# `set -e` killing the process). Each call gets its own fresh subshell, so
-# there's no trap/state to reset between pairs either.
+# Subshell so the EXIT trap also fires on set -e failures.
 run_pair() (
   set -euo pipefail
   local server_role="$1" client_role="$2"
@@ -178,8 +144,7 @@ run_pair() (
   }
   echo "$client_out"
 
-  # Last "#bytes ... BW average[MB/sec] ..." data row, 4th field. The row is
-  # indented with leading whitespace, so match on that rather than "^[0-9]".
+  # Last data row, 4th field; rows are indented.
   local avg_bw
   avg_bw=$(echo "$client_out" | awk '/^[[:space:]]*[0-9]+[[:space:]]/{line=$0} END{split(line,a," "); print a[4]}')
   if [[ -z "$avg_bw" ]]; then
@@ -188,8 +153,7 @@ run_pair() (
   fi
 
   echo "==> Measured average bandwidth: ${avg_bw} MB/sec (threshold: ${min_bw_mb_per_sec} MB/sec)"
-  # awk (already required above for parsing), not bc, for the float
-  # comparison - bc isn't provisioned on the deployment runner.
+  # awk, not bc: bc isn't on the runner.
   if awk -v bw="$avg_bw" -v thr="$min_bw_mb_per_sec" 'BEGIN { exit !(thr > 0 && bw < thr) }'; then
     echo "FAIL: measured bandwidth ${avg_bw} MB/sec is below the ${min_bw_mb_per_sec} MB/sec threshold." >&2
     return 1

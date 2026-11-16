@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 
-# Installs the CLI tools the orchestration needs on this host (juju, kubectl,
-# helm, yq, testflinger-cli, jq, sshuttle), the Python venv for the Testflinger
-# wrapper, and generates the per-run ephemeral SSH keypair.
-#
-# Outputs:
-#   $STATE_DIR with venv, bin/yq and the ephemeral keypair
-#   Exit code: 0 on success, non-zero on failure
-
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 mkdir -p "$STATE_DIR" "$BIN_DIR"
@@ -34,8 +26,7 @@ sudo apt-get update -q
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q jq sshuttle python3-venv openssh-client
 endgroup
 
-# Plain binary rather than the strict snap, which cannot read files outside
-# $HOME (e.g. the checked-out workspace on some runners).
+# Not the strict snap: it can't read the workspace outside $HOME.
 if ! "$BIN_DIR/yq" --version 2>/dev/null | grep -q "$YQ_VERSION"; then
   log "Installing yq $YQ_VERSION into $BIN_DIR"
   curl -fsSL -o "$BIN_DIR/yq" \

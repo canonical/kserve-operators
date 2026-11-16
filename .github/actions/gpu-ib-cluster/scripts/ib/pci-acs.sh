@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Discovers, applies or checks scoped PCI ACS mitigation on bare-metal workers.
 # Args: SSH key, JSON worker addresses, JSON active NIC names, preview|apply|check.
 set -euo pipefail
 

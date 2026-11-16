@@ -24,8 +24,7 @@ LLMISVC_AGGREGATED_METRICS_PORT = 15090
 LOCAL_CONTROLLER_METRICS_PORT = 28080
 LOCAL_AGGREGATED_METRICS_PORT = 25090
 
-# vLLM ports of the prefill/decode pools (decode moves vLLM to 8001 for the routing
-# sidecar) and the local port used to read their metrics.
+# Decode moves vLLM to 8001 for the routing sidecar.
 VLLM_PREFILL_PORT = 8000
 VLLM_DECODE_PORT = 8001
 LOCAL_VLLM_METRICS_PORT = 28001

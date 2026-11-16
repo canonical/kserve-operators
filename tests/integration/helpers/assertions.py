@@ -278,10 +278,10 @@ def _read_pod_metrics(pod_name: str, namespace: str, port: int) -> str:
 class PrefillDecodeTraffic:
     """Cumulative KV cache traffic counters of a prefill/decode LLMInferenceService."""
 
-    nixl_bytes: float  # bytes vLLM transferred through NIXL, both pools
-    nixl_failed: float  # failed NIXL transfers, both pools
-    prefill_ib_sent_bytes: int  # data sent by the IB port of the prefill node
-    decode_ib_received_bytes: int  # data received by the IB port of the decode node
+    nixl_bytes: float
+    nixl_failed: float
+    prefill_ib_sent_bytes: int
+    decode_ib_received_bytes: int
 
 
 def _ib_port_data_bytes(node: str, ib_device: str, image: str) -> tuple[int, int]:

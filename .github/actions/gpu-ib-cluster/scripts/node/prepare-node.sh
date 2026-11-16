@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
 
-# Node-local preparation, run ON each reserved machine as root by the
-# Testflinger job's test phase (embedded into test_data.test_cmds by
-# 01-reserve-machines.sh, which also prepends the inputs below). So the
-# machines reach the runner already prepared; the cross-node steps
-# (bootstrap/join) are done by 02-deploy-k8s.sh.
-#
-# Inputs (env):
-#   K8S_CHANNEL:    k8s snap channel, e.g. 1.34-classic/stable
-#   K8S_REGISTRIES: JSON list of {"url": ..., "host": ...} containerd mirrors
-#
-# Outputs:
-#   /var/lib/gpu-ib-cluster/prepared: marker checked by 01-reserve-machines.sh
-#   Exit code: 0 on success, non-zero on failure
+# Runs as root on each machine in the Testflinger test phase; 01-reserve-machines.sh prepends the inputs.
 
 set -euo pipefail
 
@@ -31,8 +19,7 @@ for mod in ib_umad rdma_cm rdma_ucm ib_ipoib; do
   modprobe "$mod" || echo "WARNING: cannot load $mod"
 done
 
-# Written before bootstrap/join, as in the k8s-snap air-gapped guide (default
-# containerd base dir /etc/containerd).
+# Before bootstrap/join, as in the k8s-snap air-gapped guide.
 echo ">> $(hostname): writing the containerd registry mirrors"
 python3 - <<'EOF'
 import json, os

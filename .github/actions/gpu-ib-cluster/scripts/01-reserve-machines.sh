@@ -1,24 +1,7 @@
 #!/usr/bin/env bash
 
-# Reserves the $CLUSTER machines on Testflinger (GPU workers). The job's test
-# phase runs before reserve, on the agent host that can already reach the
-# device ($DEVICE_IP), and:
-#   - injects the per-run ephemeral public key;
-#   - runs node/prepare-node.sh on the device (inotify limits, RDMA modules,
-#     containerd mirrors, k8s snap).
-# Humans get access through SSH_IMPORT_IDS, via reserve_data.ssh_keys.
-# Blocks until all reservations are ready (can take hours if agents are busy),
-# then checks SSH access and that every machine was prepared.
-#
-# Requires TESTFLINGER_CLIENT_ID / TESTFLINGER_SECRET_KEY in CI (job_priority
-# overrides); without them jobs are submitted at default priority.
-#
-# Outputs:
-#   $JOB_DATA_PATH: every accepted job (written as soon as jobs are submitted,
-#                   so 99-release.sh can cancel them even if this script fails)
-#   $CLUSTER_DATA_PATH: machine addresses per role
-#   GITHUB_OUTPUT (if set): workers
-#   Exit code: 0 on success, non-zero on failure
+# Nodes are prepared in the Testflinger test phase (before reserve), which runs
+# on the agent host. Job data is written early so 99-release.sh can cancel.
 
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
@@ -31,14 +14,12 @@ read -r -a import_ids <<<"${SSH_IMPORT_IDS//,/ }"
 [[ ${#import_ids[@]} -gt 0 ]] || die "SSH_IMPORT_IDS is empty: Testflinger reservations need at least one lp:/gh: identity"
 import_ids_json="$(printf '%s\n' "${import_ids[@]}" | jq -R . | jq -cs .)"
 
-# The node script with its inputs prepended.
 node_script="$(
   printf 'export K8S_CHANNEL=%q\nexport K8S_REGISTRIES=%q\n' "$K8S_CHANNEL" "$K8S_REGISTRIES"
   cat "$SCRIPTS_DIR/node/prepare-node.sh"
 )"
 grep -qx PREPARE_NODE_EOF <<<"$node_script" && die "node/prepare-node.sh must not contain a PREPARE_NODE_EOF line"
 
-# The test phase runs on the agent host, which reaches the device as ubuntu.
 test_cmds="$(cat <<EOF
 set -e
 ssh_device() { ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@\$DEVICE_IP "\$@"; }
