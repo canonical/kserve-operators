@@ -14,6 +14,7 @@ on:
   # main, so the first runs are triggered by pushes to the feature branch.
   # Push runs set up the whole stack on tor-A100_x2_IB (K8s, GPU and Network
   # Operators, vllm Juju controller), run the multi-GPU tests and release the machines.
+  # Push runs have no inputs, hence the `|| default` fallbacks (also temporary).
   push:
     branches:
       - feat/KF-9208-gpu-ib-integration
@@ -116,12 +117,20 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
+      - name: Pause?
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/gpu-ib-cluster/pause
+        with:
+          step: Check out repo
+          sleep-after: "Check out repo"
+          hours: ${{ inputs.reservation-timeout-hours || '6' }}
+
       # The GitHub user who triggered (or re-ran) the workflow also gets SSH
       # access to the machines, on top of the ssh-import-ids input.
       - name: Collect SSH identities
         id: ssh-ids
         env:
-          IDS: ${{ inputs.ssh-import-ids }}
+          IDS: ${{ inputs.ssh-import-ids || 'lp:dariofaccin' }}
           ACTOR: ${{ github.triggering_actor }}
         run: |
           if [[ -n "$ACTOR" && "$ACTOR" != *"[bot]" ]]; then
@@ -137,21 +146,13 @@ jobs:
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
           job-priority-overrides: true
-          reservation-timeout-hours: ${{ inputs.reservation-timeout-hours }}
-          juju-channel: ${{ inputs.juju-channel }}
-          k8s-channel: ${{ inputs.k8s-channel }}
-          gpu-operator-version: ${{ inputs.gpu-operator-version }}
-          network-operator-version: ${{ inputs.network-operator-version }}
+          reservation-timeout-hours: ${{ inputs.reservation-timeout-hours || '6' }}
+          juju-channel: ${{ inputs.juju-channel || '3.6/stable' }}
+          k8s-channel: ${{ inputs.k8s-channel || '1.34-classic/stable' }}
+          gpu-operator-version: ${{ inputs.gpu-operator-version || 'v26.7.2' }}
+          network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
           vllm-controller-name: vllm
-          tmate: ${{ inputs.tmate || inputs.sleep-after != 'None' }}
-
-      - name: Pause?
-        if: ${{ !cancelled() }}
-        uses: ./.github/actions/gpu-ib-cluster/pause
-        with:
-          step: Check out repo
-          sleep-after: "Check out repo"
-          hours: ${{ inputs.reservation-timeout-hours }}
+          tmate: ${{ inputs.tmate || (inputs.sleep-after || 'None') != 'None' }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -187,8 +188,8 @@ jobs:
         uses: ./.github/actions/gpu-ib-cluster/pause
         with:
           step: Run multi-GPU bundle integration tests
-          sleep-after: ${{ inputs.sleep-after }}
-          hours: ${{ inputs.reservation-timeout-hours }}
+          sleep-after: ${{ inputs.sleep-after || 'None' }}
+          hours: ${{ inputs.reservation-timeout-hours || '6' }}
 
       - name: Collect diagnostics
         if: always() && steps.setup.outputs.state-dir != ''
