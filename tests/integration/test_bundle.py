@@ -142,8 +142,9 @@ MULTI_GPU_RDMA_RESOURCE = os.environ.get("MULTI_GPU_RDMA_RESOURCE", "rdma/rdma_s
 MULTI_GPU_UCX_NET_DEVICES = os.environ.get("MULTI_GPU_UCX_NET_DEVICES", "mlx5_1:1")
 PREFILL_DECODE_MULTI_GPU_CONTEXT = {
     "name": PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
-    "model_uri": PUBLIC_HF_MODEL_URI,
-    "model_name": LLM_INTEGRATOR_MODEL_NAME,
+    "model_uri": f"hf://{LLMISVC_GPU_MODEL_NAME}",
+    "model_name": LLMISVC_GPU_MODEL_NAME,
+    "hf_token": HF_TOKEN,
     "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
     "vllm_image": VLLM_GPU_IMAGE,
     "ucx_net_devices": MULTI_GPU_UCX_NET_DEVICES,
@@ -326,7 +327,7 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
     assert_llmisvc_serving(
         gateway_namespace=juju.model,
         name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
-        model=LLM_INTEGRATOR_MODEL_NAME,
+        model=LLMISVC_GPU_MODEL_NAME,
     )
     logger.info("Verifying the prefill and decode pools run on different nodes")
     assert_prefill_decode_on_different_nodes(
@@ -350,7 +351,7 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
         gateway_name=ENVOY_INGRESS_APP,
         gateway_namespace=juju.model,
         name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
-        model=LLM_INTEGRATOR_MODEL_NAME,
+        model=LLMISVC_GPU_MODEL_NAME,
         prompt=NIXL_PROMPT,
     )
     assert_kv_transferred_over_ib(
