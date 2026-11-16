@@ -117,14 +117,6 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
-      - name: Pause?
-        if: ${{ !cancelled() }}
-        uses: ./.github/actions/gpu-ib-cluster/pause
-        with:
-          step: Check out repo
-          sleep-after: "Check out repo"
-          hours: ${{ inputs.reservation-timeout-hours || '6' }}
-
       # The GitHub user who triggered (or re-ran) the workflow also gets SSH
       # access to the machines, on top of the ssh-import-ids input.
       - name: Collect SSH identities
@@ -153,6 +145,14 @@ jobs:
           network-operator-version: ${{ inputs.network-operator-version || '26.7.0' }}
           vllm-controller-name: vllm
           tmate: ${{ inputs.tmate || (inputs.sleep-after || 'None') != 'None' }}
+
+      - name: Pause?
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/gpu-ib-cluster/pause
+        with:
+          step: Set up cluster
+          sleep-after: ${{ inputs.sleep-after || 'None' }}
+          hours: ${{ inputs.reservation-timeout-hours || '6' }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
