@@ -314,7 +314,12 @@ def test_deploy_llm_via_charm_gpu(juju: jubilant.Juju, charms_path: str):
 
 @pytest.mark.abort_on_fail
 @pytest.mark.multi_gpu
-def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
+def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju, request: pytest.FixtureRequest):
+    # Delete it while the controller can still clear its finalizer.
+    if not request.config.getoption("--keep-models"):
+        request.addfinalizer(
+            lambda: delete_llmisvc_example(name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME)
+        )
     logger.info("Applying a prefill/decode LLMInferenceService across two GPU nodes")
     apply_llmisvc_example(
         manifest_path=str(PREFILL_DECODE_MULTI_GPU_EXAMPLE),
@@ -360,15 +365,14 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju):
         before=traffic_before,
     )
 
-    # Keep the example (and the charms) running to inspect the deployment afterwards.
-    logger.info("Keeping '%s' deployed", PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME)
-
 
 def test_remove_charms_leaves_no_charm_resources(
     juju: jubilant.Juju, request: pytest.FixtureRequest
 ):
-    if request.config.getoption("--run-multi-gpu-tests"):
-        pytest.skip("the multi-GPU run keeps the charms and its LLMInferenceService deployed")
+    if request.config.getoption("--run-multi-gpu-tests") and request.config.getoption(
+        "--keep-models"
+    ):
+        pytest.skip("the multi-GPU run with --keep-models keeps everything deployed")
     logger.info("Starting bundle cleanup test")
     logger.info("Removing charm applications from Juju model")
     juju.remove_application(LLMISVC_APP)
