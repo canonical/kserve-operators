@@ -11,11 +11,17 @@ if [[ "${RELEASE_MACHINES:-true}" != "true" ]]; then
   exit 0
 fi
 
+uncancelled=0
 if [[ -s "$JOB_DATA_PATH" ]]; then
   log "Cancelling Testflinger jobs"
   while IFS= read -r job_id; do
     [[ -n "$job_id" && "$job_id" != "null" ]] || continue
-    testflinger-cli cancel "$job_id" || echo "Cannot cancel $job_id (already finished?)"
+    testflinger-cli cancel "$job_id" && continue
+    state="$(testflinger-cli status "$job_id" 2>/dev/null)"
+    case "$state" in
+      cancelled|complete|completed|cleanup) echo "$job_id already $state" ;;
+      *) echo "::warning::Cannot cancel $job_id (state: ${state:-unknown})"; uncancelled=1 ;;
+    esac
   done < <(yq '.[].job_id' "$JOB_DATA_PATH")
 else
   log "No job data at $JOB_DATA_PATH: nothing to cancel"
@@ -38,7 +44,9 @@ log "Removing Juju client entries"
 juju unregister -y "$VLLM_CONTROLLER_NAME" 2>/dev/null
 juju remove-cloud --client "$VLLM_CONTROLLER_NAME" 2>/dev/null
 
-if [[ -d "$STATE_DIR" ]]; then
+if (( uncancelled )); then
+  log "Keeping $STATE_DIR: re-run 99-release.sh to retry the cancellations"
+elif [[ -d "$STATE_DIR" ]]; then
   while IFS= read -r addr; do
     ssh-keygen -R "${addr#*@}" &>/dev/null
   done < <([[ -s "$JOB_DATA_PATH" ]] && machine_addresses)
