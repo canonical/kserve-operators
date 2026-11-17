@@ -105,7 +105,7 @@ def create_flexible_queues_job(
         raise ValueError(
             f"no queues defined either in base_config '{job_config_path}' or provided"
         )
-    job["job_queue"] = queues + [] if default_queue is None else [default_queue]
+    job["job_queue"] = queues + ([] if default_queue is None else [default_queue])
     return job
 
 
