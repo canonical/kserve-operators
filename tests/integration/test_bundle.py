@@ -131,7 +131,10 @@ LLMISVC_IMAGE_CONTEXT = {
 # single-worker serving; single-worker is covered through the charm tests.
 PREFILL_DECODE_EXAMPLE_NAME = "test-llm-prefill-decode"
 PREFILL_DECODE_EXAMPLE = TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode.yaml.j2"
-# The UCX device and RDMA resource defaults match the tor-A100_x2_IB cluster.
+# The UCX device and RDMA resource defaults match the tor-A100_x2_IB cluster: the resource
+# is RDMA_RESOURCE_NAME of the NicClusterPolicy (.github/actions/gpu-ib-cluster/scripts/env.sh),
+# the device is the HCA:port behind ibp18s0 (/sys/class/net/ibp18s0/device/infiniband/).
+# https://openucx.readthedocs.io/en/master/faq.html#which-network-devices-does-ucx-use
 PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME = "test-llm-prefill-decode-multi-gpu"
 PREFILL_DECODE_MULTI_GPU_EXAMPLE = (
     TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode_multi_gpu.yaml.j2"

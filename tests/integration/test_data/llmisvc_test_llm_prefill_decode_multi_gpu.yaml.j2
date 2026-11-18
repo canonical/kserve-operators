@@ -27,6 +27,7 @@ spec:
   # vLLM on 8001: 8000 is the routing sidecar's.
   template:
     runtimeClassName: nvidia
+    # Prefill and decode on different nodes, so the KV cache goes over InfiniBand.
     affinity:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -60,12 +61,15 @@ spec:
         image: {{ vllm_image }}
         args:
           - "--enforce-eager"
+          # https://docs.vllm.ai/en/stable/features/nixl_connector_usage/
           - "--kv-transfer-config"
           - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
           - "--port"
           - "8001"
         securityContext:
-          # root is needed for IPC_LOCK to lift the memlock limit for RDMA memory registration
+          # RDMA pins memory beyond the memlock limit: IPC_LOCK lifts it, and only root can use
+          # it in the vLLM image. See capabilities(7), CAP_IPC_LOCK, and
+          # https://github.com/Mellanox/k8s-rdma-shared-dev-plugin/blob/master/example/test-hca-pod.yaml
           runAsNonRoot: false
           runAsUser: 0
           capabilities:
@@ -85,6 +89,8 @@ spec:
           - name: kserve-pvc-source
             mountPath: /mnt/models
             readOnly: true
+        # Host-side sizing for a 4B bf16 model (~8 GiB of weights); vLLM sizes GPU memory
+        # itself (--gpu-memory-utilization). Revisit for larger models.
         resources:
           requests:
             cpu: "2"
@@ -136,7 +142,9 @@ spec:
             - "--kv-transfer-config"
             - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
           securityContext:
-            # root is needed for IPC_LOCK to lift the memlock limit for RDMA memory registration
+            # RDMA pins memory beyond the memlock limit: IPC_LOCK lifts it, and only root can use
+            # it in the vLLM image. See capabilities(7), CAP_IPC_LOCK, and
+            # https://github.com/Mellanox/k8s-rdma-shared-dev-plugin/blob/master/example/test-hca-pod.yaml
             runAsNonRoot: false
             runAsUser: 0
             capabilities:
@@ -156,6 +164,8 @@ spec:
             - name: kserve-pvc-source
               mountPath: /mnt/models
               readOnly: true
+          # Host-side sizing for a 4B bf16 model (~8 GiB of weights); vLLM sizes GPU memory
+          # itself (--gpu-memory-utilization). Revisit for larger models.
           resources:
             requests:
               cpu: "2"
