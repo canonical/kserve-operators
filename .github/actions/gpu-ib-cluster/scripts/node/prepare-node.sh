@@ -8,7 +8,7 @@ set -euo pipefail
 marker_dir=/var/lib/gpu-ib-cluster
 
 echo ">> $(hostname): raising inotify limits"
-cat > /etc/sysctl.d/99-increase-inotify-limits.conf <<EOF
+cat >/etc/sysctl.d/99-increase-inotify-limits.conf <<EOF
 fs.inotify.max_user_instances=1024
 fs.inotify.max_user_watches=524288
 EOF
@@ -37,12 +37,12 @@ else
   echo ">> $(hostname): installing the k8s snap ($K8S_CHANNEL)"
   for attempt in 1 2 3; do
     snap install k8s --classic --channel "$K8S_CHANNEL" && break
-    (( attempt < 3 )) || exit 1
+    ((attempt < 3)) || exit 1
     sleep 30
   done
 fi
 snap list k8s
 
 mkdir -p "$marker_dir"
-date -u +%FT%TZ > "$marker_dir/prepared"
+date -u +%FT%TZ >"$marker_dir/prepared"
 echo ">> $(hostname): prepared"

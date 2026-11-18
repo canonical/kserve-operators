@@ -19,8 +19,11 @@ if [[ -s "$JOB_DATA_PATH" ]]; then
     testflinger-cli cancel "$job_id" && continue
     state="$(testflinger-cli status "$job_id" 2>/dev/null)"
     case "$state" in
-      cancelled|complete|completed|cleanup) echo "$job_id already $state" ;;
-      *) echo "::warning::Cannot cancel $job_id (state: ${state:-unknown})"; uncancelled=1 ;;
+      cancelled | complete | completed | cleanup) echo "$job_id already $state" ;;
+      *)
+        echo "::warning::Cannot cancel $job_id (state: ${state:-unknown})"
+        uncancelled=1
+        ;;
     esac
   done < <(yq '.[].job_id' "$JOB_DATA_PATH")
 else
@@ -44,7 +47,7 @@ log "Removing Juju client entries"
 juju unregister -y "$VLLM_CONTROLLER_NAME" 2>/dev/null
 juju remove-cloud --client "$VLLM_CONTROLLER_NAME" 2>/dev/null
 
-if (( uncancelled )); then
+if ((uncancelled)); then
   log "Keeping $STATE_DIR: re-run 99-release.sh to retry the cancellations"
 elif [[ -d "$STATE_DIR" ]]; then
   while IFS= read -r addr; do

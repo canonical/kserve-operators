@@ -3,11 +3,14 @@
 set -euo pipefail
 shopt -s nullglob
 
-fail() { echo "FAIL: $*" >&2; exit 1; }
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
 mode="${1:?preview, apply or check required}"
 shift
 case "$mode" in
-  preview|apply|check) ;;
+  preview | apply | check) ;;
   *) fail "invalid ACS mode: $mode" ;;
 esac
 [ "$#" -gt 0 ] || fail "at least one active NIC is required"

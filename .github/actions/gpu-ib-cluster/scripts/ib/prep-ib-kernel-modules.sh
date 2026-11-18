@@ -8,8 +8,11 @@ active_ifnames_json="$3"
 disable_acs="${4:-false}"
 
 case "$disable_acs" in
-  true|false) ;;
-  *) echo "FAIL: disable_acs must be true or false" >&2; exit 1 ;;
+  true | false) ;;
+  *)
+    echo "FAIL: disable_acs must be true or false" >&2
+    exit 1
+    ;;
 esac
 
 ssh_opts=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$private_key_file")
@@ -25,8 +28,8 @@ while IFS= read -r addr; do
   ssh_target="$addr"
   [[ "$ssh_target" == *@* ]] || ssh_target="ubuntu@${ssh_target}"
   # shellcheck disable=SC2029
-  echo "$active_ifnames_json" | jq -r '.[]' | \
-    ssh "${ssh_opts[@]}" "$ssh_target" "$(cat "$remote_script")"
+  echo "$active_ifnames_json" | jq -r '.[]' \
+    | ssh "${ssh_opts[@]}" "$ssh_target" "$(cat "$remote_script")"
 done < <(echo "$worker_machine_addresses_json" | jq -r '.[]')
 
 if [ "$disable_acs" = true ]; then

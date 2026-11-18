@@ -8,8 +8,11 @@ ifnames_json="${3:?active NIC names required}"
 mode="${4:?preview, apply or check required}"
 
 case "$mode" in
-  preview|apply|check) ;;
-  *) echo "FAIL: invalid ACS mode: $mode" >&2; exit 1 ;;
+  preview | apply | check) ;;
+  *)
+    echo "FAIL: invalid ACS mode: $mode" >&2
+    exit 1
+    ;;
 esac
 
 addresses=$(jq -er '

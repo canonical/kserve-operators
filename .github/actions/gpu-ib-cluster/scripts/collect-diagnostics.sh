@@ -9,9 +9,10 @@ out="${1:-$STATE_DIR/diagnostics}"
 mkdir -p "$out/nodes"
 
 run() {
-  local file="$1"; shift
-  echo "\$ $*" > "$out/$file"
-  timeout 300 "$@" >> "$out/$file" 2>&1
+  local file="$1"
+  shift
+  echo "\$ $*" >"$out/$file"
+  timeout 300 "$@" >>"$out/$file" 2>&1
 }
 
 controller="$VLLM_CONTROLLER_NAME"
@@ -52,7 +53,7 @@ if [[ -s "$CLUSTER_DATA_PATH" ]]; then
         echo "$p state=$(cat "$p/state") rate=$(cat "$p/rate") xmit=$(cat "$p/counters/port_xmit_data") rcv=$(cat "$p/counters/port_rcv_data")"
       done 2>/dev/null
       echo; sudo dmesg -T | tail -200
-    ' </dev/null > "$out/nodes/${addr#*@}.txt" 2>&1
+    ' </dev/null >"$out/nodes/${addr#*@}.txt" 2>&1
   done < <(yq '.["worker-gpu"][].machine_address' "$CLUSTER_DATA_PATH")
 fi
 

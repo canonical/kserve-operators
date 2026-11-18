@@ -8,7 +8,11 @@ bootstrap_node="${workers[0]}"
 bootstrap_ip="${bootstrap_node#*@}"
 
 # shellcheck disable=SC2029
-on() { local addr="$1"; shift; ssh "${SSH_OPTS[@]}" "$addr" "$@"; }
+on() {
+  local addr="$1"
+  shift
+  ssh "${SSH_OPTS[@]}" "$addr" "$@"
+}
 
 if on "$bootstrap_node" sudo k8s status </dev/null &>/dev/null; then
   log "$bootstrap_node is already bootstrapped"
@@ -52,7 +56,7 @@ endgroup
 start_lab_tunnels
 
 on "$bootstrap_node" sudo k8s config </dev/null \
-  | SERVER="https://$bootstrap_ip:6443" yq '.clusters[].cluster.server = strenv(SERVER)' > "$KUBECONFIG_PATH"
+  | SERVER="https://$bootstrap_ip:6443" yq '.clusters[].cluster.server = strenv(SERVER)' >"$KUBECONFIG_PATH"
 chmod 600 "$KUBECONFIG_PATH"
 kctl wait nodes --all --for=condition=Ready --timeout=15m
 kctl get nodes -o wide

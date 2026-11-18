@@ -59,12 +59,18 @@ SSH_OPTS=(-i "$SSH_PRIVATE_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTi
 
 if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
   log() { echo ">> $*"; }
-  die() { echo "::error::$*" >&2; exit 1; }
+  die() {
+    echo "::error::$*" >&2
+    exit 1
+  }
   group() { echo "::group::$*"; }
   endgroup() { echo "::endgroup::"; }
 else
   log() { echo -e "\033[1;34m>> $*\033[0m"; }
-  die() { echo -e "\033[1;31mERROR: $*\033[0m" >&2; exit 1; }
+  die() {
+    echo -e "\033[1;31mERROR: $*\033[0m" >&2
+    exit 1
+  }
   group() { log "$*"; }
   endgroup() { :; }
 fi
@@ -86,7 +92,8 @@ worker_addresses_json() {
 }
 
 start_tunnel() {
-  local name="$1" remote="$2"; shift 2
+  local name="$1" remote="$2"
+  shift 2
   local pidfile="$STATE_DIR/sshuttle-$name.pid"
   if [[ -s "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
     return 0
@@ -117,7 +124,7 @@ aproxy_bypass() {
 start_lab_tunnels() {
   local workers
   mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
-  (( ${#workers[@]} >= 2 )) || die "The tunnels need at least two workers"
+  ((${#workers[@]} >= 2)) || die "The tunnels need at least two workers"
   if sudo nft list table ip aproxy &>/dev/null; then
     group "aproxy nft rules"
     sudo nft list table ip aproxy
@@ -131,6 +138,6 @@ kctl() { kubectl --kubeconfig "$KUBECONFIG_PATH" "$@"; }
 
 gh_output() {
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    echo "$1=$2" >> "$GITHUB_OUTPUT"
+    echo "$1=$2" >>"$GITHUB_OUTPUT"
   fi
 }

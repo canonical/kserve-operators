@@ -6,7 +6,8 @@ mkdir -p "$STATE_DIR" "$BIN_DIR"
 chmod 700 "$STATE_DIR"
 
 snap_install() {
-  local name="$1"; shift
+  local name="$1"
+  shift
   if snap list "$name" &>/dev/null; then
     sudo snap refresh "$name" "$@"
   else

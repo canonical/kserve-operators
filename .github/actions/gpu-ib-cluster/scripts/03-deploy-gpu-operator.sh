@@ -4,7 +4,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_kubeconfig
 
 values="$STATE_DIR/gpu-operator-values.yaml"
-cat > "$values" <<YAML
+cat >"$values" <<YAML
 operator:
   defaultRuntime: containerd
 driver:
