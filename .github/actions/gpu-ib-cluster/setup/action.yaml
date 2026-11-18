@@ -9,7 +9,8 @@ description: >-
 inputs:
   ssh-import-ids:
     description: "Space/comma separated lp:/gh: identities with SSH access to the reserved machines"
-    required: true
+    required: false
+    default: ""
   testflinger-client-id:
     description: Testflinger client ID
     required: false
@@ -159,5 +160,7 @@ runs:
           echo "|---|---|---|"
           yq -r '.[] | "| " + (.agent // "?") + " | [" + .job_id + "](https://testflinger.canonical.com/jobs/" + .job_id + ") | " + ((.username // "") + "@" + (.IP // "pending")) + " |"' "$JOB_DATA_PATH"
           echo
-          echo "SSH access: \`${SSH_IMPORT_IDS}\` (e.g. \`ssh ubuntu@<address>\`)."
+          if [[ -n "${SSH_IMPORT_IDS// /}" ]]; then
+            echo "SSH access: \`${SSH_IMPORT_IDS}\` (e.g. \`ssh ubuntu@<address>\`)."
+          fi
         } >> "$GITHUB_STEP_SUMMARY"

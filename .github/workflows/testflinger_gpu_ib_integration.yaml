@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       ssh-import-ids:
-        description: "lp:/gh: identities (space separated) with SSH access to the machines; gh:<triggering user> is always added"
-        required: true
-        default: lp:dariofaccin
+        description: "Extra lp:/gh: identities (space separated) with SSH access to the machines; gh:<triggering user> is always added"
+        required: false
+        default: ""
         type: string
       tmate:
         description: Open a detached tmate session on the runner before the K8s deployment (killed at the end of the job)
@@ -29,6 +29,11 @@ on:
         required: false
         default: "1"
         type: string
+      job-priority-overrides:
+        description: Submit with the job_priority values of agent-job-overrides.yaml (the Testflinger client must be allowed to use them)
+        required: false
+        default: false
+        type: boolean
       reservation-timeout-hours:
         description: Testflinger reservation timeout in hours
         required: false
@@ -122,7 +127,7 @@ jobs:
           ssh-import-ids: ${{ steps.ssh-ids.outputs.ids }}
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
-          job-priority-overrides: true
+          job-priority-overrides: ${{ inputs.job-priority-overrides }}
           reservation-timeout-hours: ${{ inputs.reservation-timeout-hours }}
           juju-channel: ${{ inputs.juju-channel }}
           k8s-channel: ${{ inputs.k8s-channel }}

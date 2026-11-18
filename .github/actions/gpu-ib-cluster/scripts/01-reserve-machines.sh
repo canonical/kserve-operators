@@ -11,8 +11,7 @@ fi
 [[ -f "$SSH_PRIVATE_KEY.pub" ]] || die "Missing $SSH_PRIVATE_KEY.pub; run 00-install-prereqs.sh first"
 
 read -r -a import_ids <<<"${SSH_IMPORT_IDS//,/ }"
-[[ ${#import_ids[@]} -gt 0 ]] || die "SSH_IMPORT_IDS is empty: Testflinger reservations need at least one lp:/gh: identity"
-import_ids_json="$(printf '%s\n' "${import_ids[@]}" | jq -R . | jq -cs .)"
+import_ids_json="$(printf '%s\n' ${import_ids[@]+"${import_ids[@]}"} | jq -R 'select(length > 0)' | jq -cs .)"
 
 node_script="$(
   printf 'export K8S_CHANNEL=%q\nexport K8S_REGISTRIES=%q\n' "$K8S_CHANNEL" "$K8S_REGISTRIES"

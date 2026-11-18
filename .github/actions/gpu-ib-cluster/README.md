@@ -79,7 +79,7 @@ up to `hours`. See [Pausing](#ssh-access).
   phase runs before `reserve` on the agent host and appends the public key to
   `ubuntu@$DEVICE_IP:~/.ssh/authorized_keys` (`test_data.test_cmds`). No SSH
   secret is needed.
-- **Humans:** the `ssh-import-ids` (`lp:`/`gh:`) are added to
+- **Humans:** the optional `ssh-import-ids` (`lp:`/`gh:`) are added to
   `reserve_data.ssh_keys`. The workflow also adds `gh:<user>` for the GitHub
   user who triggered or re-ran it (except bots). While the job runs (e.g.
   during a `sleep-after` pause), log in with `ssh ubuntu@<ip>` (the IPs are in
@@ -124,7 +124,7 @@ up to `hours`. See [Pausing](#ssh-access).
 Every setting is an env var with a default in [`scripts/env.sh`](scripts/env.sh):
 
 ```bash
-export SSH_IMPORT_IDS=lp:<you>
+export SSH_IMPORT_IDS=lp:<you>                                # optional, for manual SSH
 export TESTFLINGER_CLIENT_ID=... TESTFLINGER_SECRET_KEY=...   # optional
 s=.github/actions/gpu-ib-cluster/scripts
 for i in 00 01 02 03 04 05; do "$s"/$i-*.sh || break; done
