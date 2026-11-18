@@ -141,6 +141,8 @@ PREFILL_DECODE_MULTI_GPU_EXAMPLE = (
 )
 MULTI_GPU_RDMA_RESOURCE = os.environ.get("MULTI_GPU_RDMA_RESOURCE", "rdma/rdma_shared_device_ib")
 MULTI_GPU_UCX_NET_DEVICES = os.environ.get("MULTI_GPU_UCX_NET_DEVICES", "mlx5_1:1")
+# Tensor parallel over all 8 A100s of each node; Qwen3-4B has 8 KV heads.
+MULTI_GPU_TENSOR_PARALLEL_SIZE = int(os.environ.get("MULTI_GPU_TENSOR_PARALLEL_SIZE", "8"))
 PREFILL_DECODE_MULTI_GPU_CONTEXT = {
     "name": PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
     "model_uri": f"hf://{LLMISVC_GPU_MODEL_NAME}",
@@ -150,6 +152,7 @@ PREFILL_DECODE_MULTI_GPU_CONTEXT = {
     "vllm_image": VLLM_GPU_IMAGE,
     "ucx_net_devices": MULTI_GPU_UCX_NET_DEVICES,
     "rdma_resource": MULTI_GPU_RDMA_RESOURCE,
+    "tensor_parallel_size": MULTI_GPU_TENSOR_PARALLEL_SIZE,
 }
 # A few hundred tokens long, to fill several KV cache blocks the prefill pool hands over.
 NIXL_PROMPT = (TEST_DATA_DIR / "nixl_prompt.txt").read_text()
@@ -342,7 +345,10 @@ def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju, request: pytest.Fixtu
     assert_prefill_decode_request_resources(
         name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
         namespace=NAMESPACE_DEFAULT,
-        resources={"nvidia.com/gpu": "1", MULTI_GPU_RDMA_RESOURCE: "1"},
+        resources={
+            "nvidia.com/gpu": str(MULTI_GPU_TENSOR_PARALLEL_SIZE),
+            MULTI_GPU_RDMA_RESOURCE: "1",
+        },
     )
 
     logger.info("Verifying the KV cache moves from prefill to decode through NIXL over IB")

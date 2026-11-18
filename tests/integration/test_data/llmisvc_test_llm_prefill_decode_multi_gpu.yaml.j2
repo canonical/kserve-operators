@@ -39,6 +39,11 @@ spec:
     volumes:
       - name: kserve-pvc-source
         emptyDir: {}
+      # NCCL between the tensor-parallel workers needs more than the default 64 MiB.
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
     initContainers:
       - name: storage-initializer
         image: {{ storage_initializer_image }}
@@ -64,6 +69,8 @@ spec:
           # https://docs.vllm.ai/en/stable/features/nixl_connector_usage/
           - "--kv-transfer-config"
           - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          - "--tensor-parallel-size"
+          - "{{ tensor_parallel_size }}"
           - "--port"
           - "8001"
         securityContext:
@@ -89,18 +96,20 @@ spec:
           - name: kserve-pvc-source
             mountPath: /mnt/models
             readOnly: true
-        # Host-side sizing for a 4B bf16 model (~8 GiB of weights); vLLM sizes GPU memory
+          - name: dshm
+            mountPath: /dev/shm
+        # Host-side sizing for a 4B bf16 model (~8 GiB of weights), CPU per GPU worker; vLLM sizes GPU memory
         # itself (--gpu-memory-utilization). Revisit for larger models.
         resources:
           requests:
-            cpu: "2"
+            cpu: "{{ 2 * tensor_parallel_size }}"
             memory: "16Gi"
-            nvidia.com/gpu: "1"
+            nvidia.com/gpu: "{{ tensor_parallel_size }}"
             {{ rdma_resource }}: "1"
           limits:
-            cpu: "4"
-            memory: "32Gi"
-            nvidia.com/gpu: "1"
+            cpu: "{{ 4 * tensor_parallel_size }}"
+            memory: "64Gi"
+            nvidia.com/gpu: "{{ tensor_parallel_size }}"
             {{ rdma_resource }}: "1"
   prefill:
     replicas: 1
@@ -117,6 +126,11 @@ spec:
       volumes:
         - name: kserve-pvc-source
           emptyDir: {}
+        # NCCL between the tensor-parallel workers needs more than the default 64 MiB.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
       initContainers:
         - name: storage-initializer
           image: {{ storage_initializer_image }}
@@ -141,6 +155,8 @@ spec:
             - "--enforce-eager"
             - "--kv-transfer-config"
             - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            - "--tensor-parallel-size"
+            - "{{ tensor_parallel_size }}"
           securityContext:
             # RDMA pins memory beyond the memlock limit: IPC_LOCK lifts it, and only root can use
             # it in the vLLM image. See capabilities(7), CAP_IPC_LOCK, and
@@ -164,16 +180,18 @@ spec:
             - name: kserve-pvc-source
               mountPath: /mnt/models
               readOnly: true
-          # Host-side sizing for a 4B bf16 model (~8 GiB of weights); vLLM sizes GPU memory
+            - name: dshm
+              mountPath: /dev/shm
+          # Host-side sizing for a 4B bf16 model (~8 GiB of weights), CPU per GPU worker; vLLM sizes GPU memory
           # itself (--gpu-memory-utilization). Revisit for larger models.
           resources:
             requests:
-              cpu: "2"
+              cpu: "{{ 2 * tensor_parallel_size }}"
               memory: "16Gi"
-              nvidia.com/gpu: "1"
+              nvidia.com/gpu: "{{ tensor_parallel_size }}"
               {{ rdma_resource }}: "1"
             limits:
-              cpu: "4"
-              memory: "32Gi"
-              nvidia.com/gpu: "1"
+              cpu: "{{ 4 * tensor_parallel_size }}"
+              memory: "64Gi"
+              nvidia.com/gpu: "{{ tensor_parallel_size }}"
               {{ rdma_resource }}: "1"
