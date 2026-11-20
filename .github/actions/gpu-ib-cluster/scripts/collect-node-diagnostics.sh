@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Collects Juju, Kubernetes, and node logs and state into a directory (default
-# $STATE_DIR/diagnostics) for the workflow artifact.
+# Collects what the shared log actions miss, the GPU and NIC cluster policies and
+# the node state of every worker, into a directory (default $STATE_DIR/diagnostics).
 #
 # Best effort, never fails.
 
@@ -18,30 +18,10 @@ run() {
   timeout 300 "$@" >>"$out/$file" 2>&1
 }
 
-controller="$VLLM_CONTROLLER_NAME"
-if juju show-controller "$controller" &>/dev/null; then
-  while IFS= read -r model; do
-    [[ -n "$model" ]] || continue
-    safe="${controller}_${model//\//_}"
-    run "juju-status_${safe}.txt" juju status -m "$controller:$model" --relations --storage
-    run "juju-debug-log_${safe}.txt" juju debug-log -m "$controller:$model" --replay --no-tail --limit 20000
-  done < <(juju models -c "$controller" --format json | jq -r '.models[]."short-name"')
-fi
-
 if [[ -s "$KUBECONFIG_PATH" ]]; then
   export KUBECONFIG="$KUBECONFIG_PATH"
-  run kubectl-nodes.txt kubectl get nodes -o wide --show-labels
-  run kubectl-describe-nodes.txt kubectl describe nodes
-  run kubectl-get-all.txt kubectl get all -A -o wide
-  run kubectl-events.txt kubectl get events -A --sort-by=.lastTimestamp
-  run kubectl-pods-not-running.txt kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o wide
-  run kubectl-describe-deployments.txt kubectl describe deployments -A
-  run kubectl-describe-replicasets.txt kubectl describe replicasets -A
-  run kubectl-pvc.txt kubectl get pvc -A
   run gpu-clusterpolicy.yaml kubectl get clusterpolicy -o yaml
   run nic-cluster-policy.yaml kubectl get nicclusterpolicy -o yaml
-  run llminferenceservices.yaml kubectl get llminferenceservices -A -o yaml
-  run gateways.yaml kubectl get gatewayclass,gateway,httproute -A -o yaml
 fi
 
 if [[ -s "$CLUSTER_DATA_PATH" ]]; then

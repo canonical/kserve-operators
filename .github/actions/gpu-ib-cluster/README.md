@@ -67,11 +67,18 @@ up to `hours`. See [Pausing](#ssh-access).
 
 ### Diagnostics
 
-`scripts/collect-diagnostics.sh <dir>` dumps the following:
+The workflow uploads three artifacts:
 
-- Juju status and debug-log for the `vllm` controller;
-- Kubernetes objects and events, the ClusterPolicy and NicClusterPolicy;
-- `k8s status`, `nvidia-smi` and InfiniBand port counters for every worker.
+- `k8s-logs-*`, from
+  [`collect-k8s-logs`](https://github.com/canonical/charmed-kubeflow-solutions/tree/main/.github/actions/collect-k8s-logs):
+  pod logs, descriptions and events of every namespace, the nodes, and the
+  LLMInferenceServices, Gateways and HTTPRoutes;
+- `*-juju-kubernetes-charmcraft-logs`, from
+  [`dump-charm-debug-artifacts`](https://github.com/canonical/kubeflow-ci/tree/main/actions/dump-charm-debug-artifacts):
+  juju-crashdump and status logs of every model;
+- `diagnostics-*`, from `scripts/collect-node-diagnostics.sh <dir>`: the
+  ClusterPolicy and NicClusterPolicy, and `k8s status`, `nvidia-smi`,
+  InfiniBand port counters and `dmesg` for every worker.
 
 ## SSH access
 
@@ -94,7 +101,7 @@ up to `hours`. See [Pausing](#ssh-access).
   ends (exit the tmate shell), on `touch $GITHUB_WORKSPACE/continue`, or after
   `pause-hours` (default 1), killing the session. The last step of the job
   kills any tmate session still open, so the job never waits for it.
-  Diagnostics are uploaded as an artifact.
+  Diagnostics are uploaded as artifacts.
 
 ## Secrets
 

@@ -174,12 +174,33 @@ jobs:
           sleep-after: ${{ inputs.sleep-after }}
           hours: ${{ inputs.pause-hours }}
 
-      - name: Collect diagnostics
+      - name: Collect Kubernetes logs
+        if: always() && steps.setup.outputs.state-dir != ''
+        continue-on-error: true
+        uses: canonical/charmed-kubeflow-solutions/.github/actions/collect-k8s-logs@main
+        with:
+          name: k8s-logs-gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
+          namespace-pattern: '.*'
+          resources: llminferenceservices gateways httproutes
+
+      - name: Install charmcraft
+        if: always() && steps.setup.outputs.state-dir != ''
+        continue-on-error: true
+        run: sudo snap install charmcraft --classic
+
+      - name: Collect charm debug artifacts
+        if: always() && steps.setup.outputs.state-dir != ''
+        continue-on-error: true
+        uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
+        with:
+          artifact-prefix: gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Collect node diagnostics
         if: always() && steps.setup.outputs.state-dir != ''
         id: diagnostics
-        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/collect-diagnostics.sh "${{ runner.temp }}/diagnostics"
+        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/collect-node-diagnostics.sh "${{ runner.temp }}/diagnostics"
 
-      - name: Upload diagnostics
+      - name: Upload node diagnostics
         if: always() && steps.diagnostics.outputs.path != ''
         uses: actions/upload-artifact@v4
         with:
