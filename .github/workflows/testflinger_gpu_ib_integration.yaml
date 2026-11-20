@@ -195,18 +195,9 @@ jobs:
         with:
           artifact-prefix: gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Collect node diagnostics
+      - name: Print IB counters
         if: always() && steps.setup.outputs.state-dir != ''
-        id: diagnostics
-        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/collect-node-diagnostics.sh "${{ runner.temp }}/diagnostics"
-
-      - name: Upload node diagnostics
-        if: always() && steps.diagnostics.outputs.path != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostics-gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.diagnostics.outputs.path }}
-          if-no-files-found: ignore
+        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/collect-ib-counters.sh
 
       - name: Release cluster
         if: always()

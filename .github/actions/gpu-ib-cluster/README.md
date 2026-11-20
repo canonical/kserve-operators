@@ -67,7 +67,7 @@ up to `hours`. See [Pausing](#ssh-access).
 
 ### Diagnostics
 
-The workflow uploads three artifacts:
+The workflow uploads two artifacts:
 
 - `k8s-logs-*`, from
   [`collect-k8s-logs`](https://github.com/canonical/charmed-kubeflow-solutions/tree/main/.github/actions/collect-k8s-logs):
@@ -75,10 +75,10 @@ The workflow uploads three artifacts:
   LLMInferenceServices, Gateways and HTTPRoutes;
 - `*-juju-kubernetes-charmcraft-logs`, from
   [`dump-charm-debug-artifacts`](https://github.com/canonical/kubeflow-ci/tree/main/actions/dump-charm-debug-artifacts):
-  juju-crashdump and status logs of every model;
-- `diagnostics-*`, from `scripts/collect-node-diagnostics.sh <dir>`: the
-  ClusterPolicy and NicClusterPolicy, and `k8s status`, `nvidia-smi`,
-  InfiniBand port counters and `dmesg` for every worker.
+  juju-crashdump and status logs of every model.
+
+`scripts/collect-ib-counters.sh` prints the InfiniBand port state and data
+counters of every worker in the job log.
 
 ## SSH access
 
