@@ -13,8 +13,8 @@ from .constants import LLMISVC_NAME, NAMESPACE_DEFAULT
 from .k8s import LLMInferenceService, apply_yaml, get_client
 from .retry import (
     RETRY_FOR_TEN_MINUTES,
-    RETRY_FOR_THREE_MINUTES,
     RETRY_FOR_THIRTY_MINUTES,
+    RETRY_FOR_THREE_MINUTES,
 )
 
 logger = logging.getLogger(__name__)
