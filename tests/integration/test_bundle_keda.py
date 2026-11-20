@@ -140,7 +140,7 @@ def test_setup(juju: jubilant.Juju, charms_path: str):
     juju.integrate(f"{LLM_INTEGRATOR_APP}:s3-credentials", f"{S3_INTEGRATOR_APP}:s3-credentials")
     relate_llm_integrator(juju)
     juju.wait(
-        lambda status: jubilant.all_active(status, [KEDA_APP, PROMETHEUS_APP, S3_INTEGRATOR_APP])
+        lambda status: jubilant.all_active(status, KEDA_APP, PROMETHEUS_APP, S3_INTEGRATOR_APP)
     )
     assert_external_metrics_apiservice_available()
 
