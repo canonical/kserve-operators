@@ -19,5 +19,8 @@ spec:
         requests:
           ${resource_name_prefixed}: 1
       securityContext:
+        # ib_send_bw pins its buffers beyond the default memlock limit; IPC_LOCK lifts it.
+        # See capabilities(7), CAP_IPC_LOCK, and
+        # https://github.com/Mellanox/k8s-rdma-shared-dev-plugin/blob/master/example/test-hca-pod.yaml
         capabilities:
           add: ["IPC_LOCK"]
