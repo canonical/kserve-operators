@@ -136,7 +136,7 @@ jobs:
           vllm-controller-name: vllm
           tmate: ${{ inputs.tmate }}
 
-      - name: Pause?
+      - name: Pause after cluster setup
         if: ${{ !cancelled() }}
         uses: ./.github/actions/gpu-ib-cluster/pause
         with:
@@ -172,7 +172,7 @@ jobs:
           tox -e bundle-integration-multi-gpu -- --keep-models --charms-path="$CHARMS_PATH" \
             "${extra_args[@]}"
 
-      - name: Pause?
+      - name: Pause after tests
         if: ${{ !cancelled() }}
         uses: ./.github/actions/gpu-ib-cluster/pause
         with:
