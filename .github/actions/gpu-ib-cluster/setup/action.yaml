@@ -49,12 +49,6 @@ inputs:
       (the Testflinger client must be allowed to use them)
     required: false
     default: "false"
-  tmate:
-    description: >-
-      Open a detached canonical/action-tmate session on the runner before the
-      K8s deployment ("true"/"false"); the job waits for it to be closed at the end
-    required: false
-    default: "false"
   vllm-controller-name:
     description: Name of the Juju controller bootstrapped inside the K8s cluster
     required: false
@@ -123,12 +117,6 @@ runs:
         TESTFLINGER_CLIENT_ID: ${{ inputs.testflinger-client-id }}
         TESTFLINGER_SECRET_KEY: ${{ inputs.testflinger-secret-key }}
       run: ${{ github.action_path }}/../scripts/01-reserve-machines.sh
-
-    - name: Setup tmate session (detached)
-      if: inputs.tmate == 'true'
-      uses: canonical/action-tmate@main
-      with:
-        detached: true
 
     - name: Deploy Canonical K8s
       shell: bash

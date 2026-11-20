@@ -85,18 +85,16 @@ up to `hours`. See [Pausing](#ssh-access).
   during a `sleep-after` pause), log in with `ssh ubuntu@<ip>` (the IPs are in
   the job summary). On a worker,
   `sudo k8s config` prints the kubeconfig.
-- **Runner:** with the `tmate` input, a detached
-  [`canonical/action-tmate`](https://github.com/canonical/action-tmate) session
-  (reachable from the Canonical VPN with a GitHub-registered SSH key) opens
-  before the K8s deployment; the connection command is in the step log. The
-  last step of the job kills any tmate session still open, so the job never
-  waits for it. Diagnostics are uploaded as an artifact.
 - **Pausing:** with the `sleep-after` input, the [`pause`](pause/action.yaml)
   action holds the job after the chosen step (even if it failed), before the
-  machines are released. It opens a detached tmate session (or reuses the one
-  from the `tmate` input) and resumes when the session ends (exit the tmate
-  shell), on `touch $GITHUB_WORKSPACE/continue`, or after `pause-hours`
-  (default 1), killing the session.
+  machines are released. It opens a detached
+  [`canonical/action-tmate`](https://github.com/canonical/action-tmate) session
+  on the runner (reachable from the Canonical VPN with a GitHub-registered SSH
+  key; the connection command is in the step log) and resumes when the session
+  ends (exit the tmate shell), on `touch $GITHUB_WORKSPACE/continue`, or after
+  `pause-hours` (default 1), killing the session. The last step of the job
+  kills any tmate session still open, so the job never waits for it.
+  Diagnostics are uploaded as an artifact.
 
 ## Secrets
 

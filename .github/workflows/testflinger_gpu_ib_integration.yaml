@@ -10,11 +10,6 @@ on:
         required: false
         default: ""
         type: string
-      tmate:
-        description: Open a detached tmate session on the runner before the K8s deployment (killed at the end of the job)
-        required: false
-        default: false
-        type: boolean
       sleep-after:
         description: (Debug only) Pause in a tmate session after <step>, before releasing the machines
         required: false
@@ -134,7 +129,6 @@ jobs:
           gpu-operator-version: ${{ inputs.gpu-operator-version }}
           network-operator-version: ${{ inputs.network-operator-version }}
           vllm-controller-name: vllm
-          tmate: ${{ inputs.tmate }}
 
       - name: Pause after cluster setup
         if: ${{ !cancelled() }}
@@ -200,7 +194,8 @@ jobs:
           testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
 
-      # Otherwise action-tmate's post step waits for connected clients to leave.
+      # A pause resumed with the continue file leaves its session open, and action-tmate's
+      # post step would wait for connected clients to leave.
       - name: Close tmate session
         if: always()
         run: |

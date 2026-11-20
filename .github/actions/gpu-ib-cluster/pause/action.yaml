@@ -1,7 +1,7 @@
 name: Pause
 description: >-
   If `step` is the requested `sleep-after` step, holds the job in a detached
-  canonical/action-tmate session (reusing an open one) to debug the cluster
+  canonical/action-tmate session to debug the cluster
   before it is released. The job resumes when the tmate session ends, when a
   `continue` file is created in the workspace, or after `hours` (the session
   is then killed).
@@ -34,15 +34,9 @@ runs:
         pause=false
         [[ "${CURRENT_STEP}" == "${TARGET_STEP}" ]] && pause=true
         echo "pause=$pause" >> "$GITHUB_OUTPUT"
-        # A session opened earlier (setup action's tmate input) is reused.
-        if [[ -S /tmp/tmate.sock ]]; then
-          echo "open-tmate=false" >> "$GITHUB_OUTPUT"
-        else
-          echo "open-tmate=$pause" >> "$GITHUB_OUTPUT"
-        fi
 
     - name: Setup tmate session (detached)
-      if: steps.check.outputs.open-tmate == 'true'
+      if: steps.check.outputs.pause == 'true'
       continue-on-error: true
       uses: canonical/action-tmate@main
       with:
