@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Submits the Testflinger multi-device job that reserves the GPU workers, injects the
+# ephemeral SSH key, and prepares each node (node/prepare-node.sh), then checks SSH access.
+#
 # Nodes are prepared in the Testflinger test phase (before reserve), which runs
 # on the agent host. Job data is written early so 99-release.sh can cancel.
 

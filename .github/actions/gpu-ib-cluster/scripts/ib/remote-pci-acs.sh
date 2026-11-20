@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Runs on a worker over SSH (from pci-acs.sh): disables PCI ACS on the PCIe switch ports between
+# the GPUs and the active IB NICs, so GPUDirect RDMA traffic goes peer-to-peer instead of
+# through the root complex. Modes: preview (print), apply (write and verify), check (verify).
+# https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/gpu_troubleshooting.html#pci-access-control-services-acs
 # Only PLX/PEX880 GPU/NIC ancestors are eligible.
 set -euo pipefail
 shopt -s nullglob

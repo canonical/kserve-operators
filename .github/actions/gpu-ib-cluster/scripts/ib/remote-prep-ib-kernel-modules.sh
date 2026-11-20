@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Runs on a worker over SSH (from prep-ib-kernel-modules.sh): loads the RDMA kernel modules and
+# brings up the IPoIB interfaces read from stdin, one name per line.
 set -euo pipefail
 
 for mod in ib_umad rdma_cm rdma_ucm ib_ipoib; do

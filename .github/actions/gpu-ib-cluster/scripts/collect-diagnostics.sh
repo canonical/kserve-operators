@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Collects Juju, Kubernetes, and node logs and state into a directory (default
+# $STATE_DIR/diagnostics) for the workflow artifact.
+#
 # Best effort, never fails.
 
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"

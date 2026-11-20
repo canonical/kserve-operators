@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Sourced by the other scripts: settings (env vars with defaults), state paths under
+# $STATE_DIR, and shared helpers (logging, SSH options, tunnels, aproxy bypass).
+
 # shellcheck disable=SC2034
 
 set -euo pipefail

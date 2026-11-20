@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Installs the runner tools (juju, kubectl, helm, testflinger-cli, jq, sshuttle, yq),
+# the Testflinger wrapper venv, and the ephemeral SSH keypair, under $STATE_DIR.
+
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 mkdir -p "$STATE_DIR" "$BIN_DIR"

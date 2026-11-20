@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Installs the NVIDIA GPU Operator with Helm and waits for the GPU nodes to be labelled.
+
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_kubeconfig
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Installs the NVIDIA Network Operator, prepares the IB kernel modules and PCI ACS on the
+# workers, applies the NicClusterPolicy (RDMA shared device plugin), and checks the IB
+# bandwidth between the workers with ib_send_bw.
+
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_cluster_data
 require_kubeconfig

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Bootstraps Canonical K8s on the first worker, joins the others, starts the sshuttle
+# tunnels to the K8s API and the load balancer CIDR, and writes the kubeconfig.
+
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_cluster_data
 

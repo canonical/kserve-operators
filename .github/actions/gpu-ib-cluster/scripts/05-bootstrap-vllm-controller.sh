@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Adds the cluster as a Juju k8s cloud and bootstraps the vLLM controller on it.
+
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 require_kubeconfig
 

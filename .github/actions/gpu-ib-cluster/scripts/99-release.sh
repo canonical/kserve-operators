@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Cancels the Testflinger jobs, stops the sshuttle tunnels, removes the aproxy bypass
+# rules and the Juju client entries, and deletes the local state.
+#
 # Best effort, never fails. RELEASE_MACHINES=false keeps the reservations and
 # the local state for debugging.
 
