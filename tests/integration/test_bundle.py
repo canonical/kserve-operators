@@ -10,10 +10,15 @@ import jubilant
 import pytest
 
 from .helpers.assertions import (
+    assert_kv_transferred_over_ib,
     assert_llmisvc_metrics_endpoints,
     assert_llmisvc_serving,
     assert_no_charm_resources_left,
+    assert_prediction,
+    assert_prefill_decode_on_different_nodes,
+    assert_prefill_decode_request_resources,
     assert_workload_requests_gpus,
+    get_prefill_decode_traffic,
 )
 from .helpers.charms_dependencies import (
     ENVOY_AI_CONTROLLER,
@@ -26,9 +31,9 @@ from .helpers.charms_dependencies import (
 from .helpers.constants import CONTROLLER_APP_NAME as CONTROLLER_APP
 from .helpers.constants import LLM_INTEGRATOR_APP_NAME as LLM_INTEGRATOR_APP
 from .helpers.constants import LLMISVC_APP_NAME as LLMISVC_APP
-from .helpers.constants import LLMISVC_GPU_MODEL_NAME
+from .helpers.constants import LLMISVC_GPU_MODEL_NAME, NAMESPACE_DEFAULT
 from .helpers.deploy import deploy_serving_stack
-from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_IMAGE
+from .helpers.images import STORAGE_INITIALIZER_IMAGE, VLLM_GPU_IMAGE, VLLM_IMAGE
 from .helpers.llm_integrator_ops import (
     deploy_llm_integrator,
     relate_llm_integrator,
@@ -40,8 +45,6 @@ from .helpers.llmisvc_ops import apply_llmisvc_example, delete_llmisvc_example
 from .helpers.s3_integrator import deploy_s3_integrator
 
 logger = logging.getLogger(__name__)
-# Quiet jubilant's very verbose per-poll wait logging during the long waits.
-logging.getLogger("jubilant.wait").setLevel("WARNING")
 
 # App names for the Charmhub dependencies (deploy coordinates live in
 # helpers/charms_dependencies.py). envoy-ingress-k8s creates the Gateway and
@@ -85,10 +88,12 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 
 # Fail fast (rather than skip) if the S3 credentials for the test model are missing.
-# GPU runs only deploy a public hf:// model, so they need no credentials.
+# GPU and multi-GPU runs only deploy public hf:// models, so they need no credentials.
 @pytest.fixture(scope="session", autouse=True)
 def require_aws_credentials(request: pytest.FixtureRequest):
-    if request.config.getoption("--run-gpu-tests"):
+    if request.config.getoption("--run-gpu-tests") or request.config.getoption(
+        "--run-multi-gpu-tests"
+    ):
         return
     if not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY):
         pytest.fail(
@@ -101,7 +106,9 @@ def require_aws_credentials(request: pytest.FixtureRequest):
 # Fail fast (rather than skip) if the HF token for the gated model is missing.
 @pytest.fixture(scope="session", autouse=True)
 def require_hf_token(request: pytest.FixtureRequest):
-    if request.config.getoption("--run-gpu-tests"):
+    if request.config.getoption("--run-gpu-tests") or request.config.getoption(
+        "--run-multi-gpu-tests"
+    ):
         return
     if not HF_TOKEN:
         pytest.fail(
@@ -124,6 +131,31 @@ LLMISVC_IMAGE_CONTEXT = {
 # single-worker serving; single-worker is covered through the charm tests.
 PREFILL_DECODE_EXAMPLE_NAME = "test-llm-prefill-decode"
 PREFILL_DECODE_EXAMPLE = TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode.yaml.j2"
+# The UCX device and RDMA resource defaults match the tor-A100_x2_IB cluster: the resource
+# is RDMA_RESOURCE_NAME of the NicClusterPolicy (.github/actions/gpu-ib-cluster/scripts/env.sh),
+# the device is the HCA:port behind ibp18s0 (/sys/class/net/ibp18s0/device/infiniband/).
+# https://openucx.readthedocs.io/en/master/faq.html#which-network-devices-does-ucx-use
+PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME = "test-llm-prefill-decode-multi-gpu"
+PREFILL_DECODE_MULTI_GPU_EXAMPLE = (
+    TEST_DATA_DIR / "llmisvc_test_llm_prefill_decode_multi_gpu.yaml.j2"
+)
+MULTI_GPU_RDMA_RESOURCE = os.environ.get("MULTI_GPU_RDMA_RESOURCE", "rdma/rdma_shared_device_ib")
+MULTI_GPU_UCX_NET_DEVICES = os.environ.get("MULTI_GPU_UCX_NET_DEVICES", "mlx5_1:1")
+# Tensor parallel over all 8 A100s of each node; Qwen3-4B has 8 KV heads.
+MULTI_GPU_TENSOR_PARALLEL_SIZE = int(os.environ.get("MULTI_GPU_TENSOR_PARALLEL_SIZE", "8"))
+PREFILL_DECODE_MULTI_GPU_CONTEXT = {
+    "name": PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+    "model_uri": f"hf://{LLMISVC_GPU_MODEL_NAME}",
+    "model_name": LLMISVC_GPU_MODEL_NAME,
+    "hf_token": HF_TOKEN,
+    "storage_initializer_image": STORAGE_INITIALIZER_IMAGE,
+    "vllm_image": VLLM_GPU_IMAGE,
+    "ucx_net_devices": MULTI_GPU_UCX_NET_DEVICES,
+    "rdma_resource": MULTI_GPU_RDMA_RESOURCE,
+    "tensor_parallel_size": MULTI_GPU_TENSOR_PARALLEL_SIZE,
+}
+# A few hundred tokens long, to fill several KV cache blocks the prefill pool hands over.
+NIXL_PROMPT = (TEST_DATA_DIR / "nixl_prompt.txt").read_text()
 
 
 @pytest.mark.abort_on_fail
@@ -286,7 +318,70 @@ def test_deploy_llm_via_charm_gpu(juju: jubilant.Juju, charms_path: str):
     remove_llm_integrator(juju)
 
 
-def test_remove_charms_leaves_no_charm_resources(juju: jubilant.Juju):
+@pytest.mark.abort_on_fail
+@pytest.mark.multi_gpu
+def test_run_prefill_decode_multi_gpu(juju: jubilant.Juju, request: pytest.FixtureRequest):
+    # Delete it while the controller can still clear its finalizer.
+    if not request.config.getoption("--keep-models"):
+        request.addfinalizer(
+            lambda: delete_llmisvc_example(name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME)
+        )
+    logger.info("Applying a prefill/decode LLMInferenceService across two GPU nodes")
+    apply_llmisvc_example(
+        manifest_path=str(PREFILL_DECODE_MULTI_GPU_EXAMPLE),
+        context=PREFILL_DECODE_MULTI_GPU_CONTEXT,
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+    )
+
+    assert_llmisvc_serving(
+        gateway_namespace=juju.model,
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        model=LLMISVC_GPU_MODEL_NAME,
+    )
+    logger.info("Verifying the prefill and decode pools run on different nodes")
+    assert_prefill_decode_on_different_nodes(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME, namespace=NAMESPACE_DEFAULT
+    )
+    assert_prefill_decode_request_resources(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        namespace=NAMESPACE_DEFAULT,
+        resources={
+            "nvidia.com/gpu": str(MULTI_GPU_TENSOR_PARALLEL_SIZE),
+            MULTI_GPU_RDMA_RESOURCE: "1",
+        },
+    )
+
+    logger.info("Verifying the KV cache moves from prefill to decode through NIXL over IB")
+    # The IB counters are read with pods running the vLLM image, already on the nodes.
+    traffic_before = get_prefill_decode_traffic(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        namespace=NAMESPACE_DEFAULT,
+        ib_device=MULTI_GPU_UCX_NET_DEVICES,
+        image=VLLM_GPU_IMAGE,
+    )
+    assert_prediction(
+        gateway_name=ENVOY_INGRESS_APP,
+        gateway_namespace=juju.model,
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        model=LLMISVC_GPU_MODEL_NAME,
+        prompt=NIXL_PROMPT,
+    )
+    assert_kv_transferred_over_ib(
+        name=PREFILL_DECODE_MULTI_GPU_EXAMPLE_NAME,
+        namespace=NAMESPACE_DEFAULT,
+        ib_device=MULTI_GPU_UCX_NET_DEVICES,
+        image=VLLM_GPU_IMAGE,
+        before=traffic_before,
+    )
+
+
+def test_remove_charms_leaves_no_charm_resources(
+    juju: jubilant.Juju, request: pytest.FixtureRequest
+):
+    if request.config.getoption("--run-multi-gpu-tests") and request.config.getoption(
+        "--keep-models"
+    ):
+        pytest.skip("the multi-GPU run with --keep-models keeps everything deployed")
     logger.info("Starting bundle cleanup test")
     logger.info("Removing charm applications from Juju model")
     juju.remove_application(LLMISVC_APP)

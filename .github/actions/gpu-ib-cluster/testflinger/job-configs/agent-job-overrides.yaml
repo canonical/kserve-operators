@@ -1,0 +1,4 @@
+cortez:
+   job_priority: 10  # we have up to 15, nvidia has 10
+blanka:
+   job_priority: 10  # we have up to 15, nvidia has 10

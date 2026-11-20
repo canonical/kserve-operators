@@ -1,0 +1,83 @@
+name: Pause
+description: >-
+  If `step` is the requested `sleep-after` step, holds the job in a detached
+  canonical/action-tmate session to debug the cluster
+  before it is released. The job resumes when the tmate session ends, when a
+  `continue` file is created in the workspace, or after `hours` (the session
+  is then killed).
+
+inputs:
+  step:
+    description: Name of the step just completed
+    required: true
+  sleep-after:
+    description: Step to pause after ("None" to never pause)
+    required: false
+    default: None
+  hours:
+    description: Maximum length of the pause, in whole hours
+    required: false
+    default: "1"
+
+runs:
+  using: composite
+  steps:
+    - name: Check pause
+      id: check
+      shell: bash
+      env:
+        CURRENT_STEP: ${{ inputs.step }}
+        TARGET_STEP: ${{ inputs.sleep-after }}
+      run: |
+        echo "CURRENT STEP: ${CURRENT_STEP}"
+        echo "TARGET STEP: ${TARGET_STEP}"
+        pause=false
+        [[ "${CURRENT_STEP}" == "${TARGET_STEP}" ]] && pause=true
+        echo "pause=$pause" >> "$GITHUB_OUTPUT"
+
+    - name: Setup tmate session (detached)
+      if: steps.check.outputs.pause == 'true'
+      continue-on-error: true
+      uses: canonical/action-tmate@main
+      with:
+        detached: true
+
+    - name: Pause
+      if: steps.check.outputs.pause == 'true'
+      shell: bash
+      continue-on-error: true
+      env:
+        CURRENT_STEP: ${{ inputs.step }}
+        HOURS: ${{ inputs.hours }}
+      run: |
+        socket=/tmp/tmate.sock
+        continue_file="$GITHUB_WORKSPACE/continue"
+        if [[ ! -S "$socket" ]]; then
+          echo "::warning::No tmate session; not pausing"
+          exit 0
+        fi
+        [[ "$HOURS" =~ ^[0-9]+$ ]] || { echo "::error::hours must be a whole number"; exit 1; }
+        {
+          echo "### Paused after: ${CURRENT_STEP}"
+          echo
+          echo "For up to ${HOURS}h, through the tmate session (the connection command is in the tmate step log)."
+          echo "Resume by exiting the tmate shell or with \`touch \$GITHUB_WORKSPACE/continue\`."
+        } >> "$GITHUB_STEP_SUMMARY"
+        deadline=$((SECONDS + HOURS * 3600))
+        while ((SECONDS < deadline)); do
+          if [[ ! -S "$socket" ]]; then
+            echo "The tmate session ended; resuming"
+            exit 0
+          fi
+          if [[ -e "$continue_file" ]]; then
+            echo "Found $continue_file; resuming"
+            rm -f "$continue_file"
+            exit 0
+          fi
+          if (((deadline - SECONDS) % 600 < 15)); then
+            echo "Paused; $(((deadline - SECONDS) / 60)) minutes left"
+          fi
+          sleep 15
+        done
+        echo "Pause timed out after ${HOURS}h; killing the tmate session"
+        tmate -S "$socket" kill-server || true

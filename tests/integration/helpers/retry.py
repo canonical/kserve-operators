@@ -16,8 +16,8 @@ RETRY_FOR_TEN_MINUTES = tenacity.Retrying(
     reraise=True,
 )
 
-RETRY_FOR_TWENTY_MINUTES = tenacity.Retrying(
+RETRY_FOR_THIRTY_MINUTES = tenacity.Retrying(
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=20),
-    stop=tenacity.stop_after_delay(1200),
+    stop=tenacity.stop_after_delay(1800),
     reraise=True,
 )

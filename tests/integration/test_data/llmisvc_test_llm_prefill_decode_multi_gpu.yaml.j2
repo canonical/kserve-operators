@@ -1,0 +1,197 @@
+{%- if hf_token %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ name }}-hf-token
+  namespace: default
+type: Opaque
+stringData:
+  HF_TOKEN: {{ hf_token | tojson }}
+---
+{%- endif %}
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: {{ name }}
+  namespace: default
+spec:
+  model:
+    uri: {{ model_uri }}
+    name: {{ model_name }}
+  storageInitializer:
+    enabled: false
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+  # vLLM on 8001: 8000 is the routing sidecar's.
+  template:
+    runtimeClassName: nvidia
+    # Prefill and decode on different nodes, so the KV cache goes over InfiniBand.
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: {{ name }}
+                llm-d.ai/role: prefill
+    volumes:
+      - name: kserve-pvc-source
+        emptyDir: {}
+      # NCCL between the tensor-parallel workers needs more than the default 64 MiB.
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+    initContainers:
+      - name: storage-initializer
+        image: {{ storage_initializer_image }}
+{%- if hf_token %}
+        env:
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ name }}-hf-token
+                key: HF_TOKEN
+{%- endif %}
+        args:
+          - {{ model_uri }}
+          - /mnt/models
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+    containers:
+      - name: main
+        image: {{ vllm_image }}
+        args:
+          - "--enforce-eager"
+          # https://docs.vllm.ai/en/stable/features/nixl_connector_usage/
+          - "--kv-transfer-config"
+          - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          - "--tensor-parallel-size"
+          - "{{ tensor_parallel_size }}"
+          - "--port"
+          - "8001"
+        securityContext:
+          # RDMA pins memory beyond the memlock limit: IPC_LOCK lifts it, and only root can use
+          # it in the vLLM image. See capabilities(7), CAP_IPC_LOCK, and
+          # https://github.com/Mellanox/k8s-rdma-shared-dev-plugin/blob/master/example/test-hca-pod.yaml
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            add: ["IPC_LOCK"]
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+          - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: UCX_TLS
+            value: rc,sm,self,cuda_copy,cuda_ipc
+          - name: UCX_NET_DEVICES
+            value: "{{ ucx_net_devices }}"
+        volumeMounts:
+          - name: kserve-pvc-source
+            mountPath: /mnt/models
+            readOnly: true
+          - name: dshm
+            mountPath: /dev/shm
+        # Host-side sizing for a 4B bf16 model (~8 GiB of weights), CPU per GPU worker; vLLM sizes GPU memory
+        # itself (--gpu-memory-utilization). Revisit for larger models.
+        resources:
+          requests:
+            cpu: "{{ 2 * tensor_parallel_size }}"
+            memory: "16Gi"
+            nvidia.com/gpu: "{{ tensor_parallel_size }}"
+            {{ rdma_resource }}: "1"
+          limits:
+            cpu: "{{ 4 * tensor_parallel_size }}"
+            memory: "64Gi"
+            nvidia.com/gpu: "{{ tensor_parallel_size }}"
+            {{ rdma_resource }}: "1"
+  prefill:
+    replicas: 1
+    template:
+      runtimeClassName: nvidia
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ name }}
+                  llm-d.ai/role: decode
+      volumes:
+        - name: kserve-pvc-source
+          emptyDir: {}
+        # NCCL between the tensor-parallel workers needs more than the default 64 MiB.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+      initContainers:
+        - name: storage-initializer
+          image: {{ storage_initializer_image }}
+{%- if hf_token %}
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ name }}-hf-token
+                  key: HF_TOKEN
+{%- endif %}
+          args:
+            - {{ model_uri }}
+            - /mnt/models
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+      containers:
+        - name: main
+          image: {{ vllm_image }}
+          args:
+            - "--enforce-eager"
+            - "--kv-transfer-config"
+            - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            - "--tensor-parallel-size"
+            - "{{ tensor_parallel_size }}"
+          securityContext:
+            # RDMA pins memory beyond the memlock limit: IPC_LOCK lifts it, and only root can use
+            # it in the vLLM image. See capabilities(7), CAP_IPC_LOCK, and
+            # https://github.com/Mellanox/k8s-rdma-shared-dev-plugin/blob/master/example/test-hca-pod.yaml
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add: ["IPC_LOCK"]
+          env:
+            - name: VLLM_LOGGING_LEVEL
+              value: INFO
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: UCX_TLS
+              value: rc,sm,self,cuda_copy,cuda_ipc
+            - name: UCX_NET_DEVICES
+              value: "{{ ucx_net_devices }}"
+          volumeMounts:
+            - name: kserve-pvc-source
+              mountPath: /mnt/models
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+          # Host-side sizing for a 4B bf16 model (~8 GiB of weights), CPU per GPU worker; vLLM sizes GPU memory
+          # itself (--gpu-memory-utilization). Revisit for larger models.
+          resources:
+            requests:
+              cpu: "{{ 2 * tensor_parallel_size }}"
+              memory: "16Gi"
+              nvidia.com/gpu: "{{ tensor_parallel_size }}"
+              {{ rdma_resource }}: "1"
+            limits:
+              cpu: "{{ 4 * tensor_parallel_size }}"
+              memory: "64Gi"
+              nvidia.com/gpu: "{{ tensor_parallel_size }}"
+              {{ rdma_resource }}: "1"

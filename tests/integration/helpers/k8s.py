@@ -83,3 +83,25 @@ def get_running_workload_pod(isvc_name: str, namespace: str = NAMESPACE_DEFAULT)
         if pod.status and pod.status.phase == "Running":
             return cast(str, pod.metadata.name)
     raise AssertionError(f"No running workload pod found for LLMInferenceService '{isvc_name}'")
+
+
+def get_running_workload_pods_by_role(
+    isvc_name: str, namespace: str = NAMESPACE_DEFAULT
+) -> dict[str, Pod]:
+    """Return the Running workload pods of a prefill/decode LLMInferenceService by role.
+
+    The keys are the ``llm-d.ai/role`` label values (``prefill``, ``decode``).
+    """
+    pods = get_client().list(
+        Pod,
+        namespace=namespace,
+        labels={
+            "app.kubernetes.io/name": isvc_name,
+            "kserve.io/component": "workload",
+        },
+    )
+    return {
+        pod.metadata.labels["llm-d.ai/role"]: pod
+        for pod in pods
+        if pod.status and pod.status.phase == "Running" and "llm-d.ai/role" in pod.metadata.labels
+    }

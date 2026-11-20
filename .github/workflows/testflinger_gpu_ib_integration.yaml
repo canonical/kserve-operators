@@ -1,19 +1,216 @@
 name: Testflinger GPU + InfiniBand integration tests
 
-# Placeholder: workflow_dispatch only works for workflows that exist on the
-# default branch. This stub lets the real workflow, still in development on
-# feat/KF-9208-gpu-ib-integration, be dispatched from that branch:
-#   gh workflow run testflinger_gpu_ib_integration.yaml --ref feat/KF-9208-gpu-ib-integration
-# It is replaced by the real workflow when that branch is merged.
+# Dispatch only: self-hosted runner and lab hardware must not run on fork PRs.
 
 on:
   workflow_dispatch:
+    inputs:
+      ssh-import-ids:
+        description: "Extra lp:/gh: identities (space separated) with SSH access to the machines; gh:<triggering user> is always added"
+        required: false
+        default: ""
+        type: string
+      sleep-after:
+        description: (Debug only) Pause in a tmate session after <step>, before releasing the machines
+        required: false
+        default: None
+        type: choice
+        options:
+          - None
+          - Set up cluster
+          - Run multi-GPU bundle integration tests
+      pause-hours:
+        description: Maximum length of the sleep-after pause, in whole hours
+        required: false
+        default: "1"
+        type: string
+      job-priority-overrides:
+        description: Submit with the job_priority values of agent-job-overrides.yaml (the Testflinger client must be allowed to use them)
+        required: false
+        default: false
+        type: boolean
+      reservation-timeout-hours:
+        description: Testflinger reservation timeout in hours
+        required: false
+        default: "6"
+        type: string
+      pytest-args:
+        description: Extra pytest arguments, e.g. "-k gpu"
+        required: false
+        default: ""
+        type: string
+      juju-channel:
+        description: Juju snap channel
+        required: false
+        default: 3.6/stable
+        type: string
+      k8s-channel:
+        description: k8s snap channel
+        required: false
+        default: 1.34-classic/stable
+        type: string
+      gpu-operator-version:
+        description: NVIDIA GPU Operator Helm chart version
+        required: false
+        default: v26.7.2
+        type: string
+      network-operator-version:
+        description: NVIDIA Network Operator Helm chart version
+        required: false
+        default: 26.7.0
+        type: string
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
-  placeholder:
-    name: Placeholder
+  get-charm-paths:
+    name: Get charm paths
     runs-on: ubuntu-latest
+    outputs:
+      charm-paths: ${{ steps.get-charm-paths.outputs.charm-paths }}
     steps:
-      - run: echo "Placeholder; dispatch this workflow from the feat/KF-9208-gpu-ib-integration branch."
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get paths for all charms in this repo
+        id: get-charm-paths
+        uses: canonical/kubeflow-ci/actions/get-charm-paths@main
+
+  build:
+    strategy:
+      matrix:
+        charm: ${{ fromJSON(needs.get-charm-paths.outputs.charm-paths) }}
+    name: Build charm | ${{ matrix.charm }}
+    needs:
+      - get-charm-paths
+    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v53.0.0
+    with:
+      path-to-charm-directory: ${{ matrix.charm }}
+      cache: true
+    permissions:
+      actions: read
+      contents: read
+
+  gpu-ib-integration:
+    name: GPU + InfiniBand integration tests
+    needs:
+      - build
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    # Includes waiting for the Testflinger agents to be free.
+    timeout-minutes: 2880
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      # The triggering user also gets SSH access to the machines.
+      - name: Collect SSH identities
+        id: ssh-ids
+        env:
+          IDS: ${{ inputs.ssh-import-ids }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          if [[ -n "$ACTOR" && "$ACTOR" != *"[bot]" ]]; then
+            IDS="$IDS gh:$ACTOR"
+          fi
+          echo "ids=$IDS" >> "$GITHUB_OUTPUT"
+
+      - name: Set up cluster
+        id: setup
+        uses: ./.github/actions/gpu-ib-cluster/setup
+        with:
+          ssh-import-ids: ${{ steps.ssh-ids.outputs.ids }}
+          testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          job-priority-overrides: ${{ inputs.job-priority-overrides }}
+          reservation-timeout-hours: ${{ inputs.reservation-timeout-hours }}
+          juju-channel: ${{ inputs.juju-channel }}
+          k8s-channel: ${{ inputs.k8s-channel }}
+          gpu-operator-version: ${{ inputs.gpu-operator-version }}
+          network-operator-version: ${{ inputs.network-operator-version }}
+          vllm-controller-name: vllm
+
+      - name: Pause after cluster setup
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/gpu-ib-cluster/pause
+        with:
+          step: Set up cluster
+          sleep-after: ${{ inputs.sleep-after }}
+          hours: ${{ inputs.pause-hours }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tox and poetry
+        run: python -m pip install --quiet tox poetry
+
+      # Under $HOME: the strictly confined juju snap can't read charms elsewhere.
+      - name: Download packed charm(s)
+        timeout-minutes: 5
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ needs.build.outputs.artifact-prefix }}-*
+          merge-multiple: true
+          path: ${{ steps.setup.outputs.state-dir }}
+
+      - name: Run multi-GPU bundle integration tests
+        env:
+          CHARMS_PATH: ${{ steps.setup.outputs.state-dir }}/charms/
+          PYTEST_ARGS: ${{ inputs.pytest-args }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          juju switch "${{ steps.setup.outputs.vllm-controller }}"
+          read -r -a extra_args <<<"$PYTEST_ARGS"
+          tox -e bundle-integration-multi-gpu -- --keep-models --charms-path="$CHARMS_PATH" \
+            "${extra_args[@]}"
+
+      - name: Pause after tests
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/gpu-ib-cluster/pause
+        with:
+          step: Run multi-GPU bundle integration tests
+          sleep-after: ${{ inputs.sleep-after }}
+          hours: ${{ inputs.pause-hours }}
+
+      - name: Collect Kubernetes logs
+        if: always() && steps.setup.outputs.state-dir != ''
+        continue-on-error: true
+        uses: canonical/charmed-kubeflow-solutions/.github/actions/collect-k8s-logs@main
+        with:
+          name: k8s-logs-gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
+          namespace-pattern: '.*'
+          resources: llminferenceservices gateways httproutes
+
+      - name: Install charmcraft
+        if: always() && steps.setup.outputs.state-dir != ''
+        continue-on-error: true
+        run: sudo snap install charmcraft --classic
+
+      - name: Collect charm debug artifacts
+        if: always() && steps.setup.outputs.state-dir != ''
+        continue-on-error: true
+        uses: canonical/kubeflow-ci/actions/dump-charm-debug-artifacts@main
+        with:
+          artifact-prefix: gpu-ib-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Print IB counters
+        if: always() && steps.setup.outputs.state-dir != ''
+        run: ${{ github.workspace }}/.github/actions/gpu-ib-cluster/scripts/collect-ib-counters.sh
+
+      - name: Release cluster
+        if: always()
+        uses: ./.github/actions/gpu-ib-cluster/release
+        with:
+          testflinger-client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          testflinger-secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+
+      # A pause resumed with the continue file leaves its session open, and action-tmate's
+      # post step would wait for connected clients to leave.
+      - name: Close tmate session
+        if: always()
+        run: |
+          if [[ -S /tmp/tmate.sock ]]; then
+            tmate -S /tmp/tmate.sock kill-server || true
+          fi

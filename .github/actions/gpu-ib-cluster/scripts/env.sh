@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+# Sourced by the other scripts: settings (env vars with defaults), state paths under
+# $STATE_DIR, and shared helpers (logging, SSH options, tunnels, aproxy bypass).
+
+# shellcheck disable=SC2034
+
+set -euo pipefail
+
+ACTION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export ACTION_DIR
+export SCRIPTS_DIR="$ACTION_DIR/scripts"
+export IB_SCRIPTS="$SCRIPTS_DIR/ib"
+export TESTFLINGER_DIR="$ACTION_DIR/testflinger"
+
+export CLUSTER="${CLUSTER:-tor-A100_x2_IB}"
+export SERIES="${SERIES:-noble}"
+export JUJU_CHANNEL="${JUJU_CHANNEL:-3.6/stable}"
+export KUBECTL_CHANNEL="${KUBECTL_CHANNEL:-latest/stable}"
+export HELM_CHANNEL="${HELM_CHANNEL:-latest/stable}"
+export YQ_VERSION="${YQ_VERSION:-v4.44.3}"
+
+export SSH_IMPORT_IDS="${SSH_IMPORT_IDS:-}"
+export RESERVATION_TIMEOUT_SECONDS="${RESERVATION_TIMEOUT_SECONDS:-21600}"
+export ACQUIRE_TIMEOUT_SECONDS="${ACQUIRE_TIMEOUT_SECONDS:-154800}"
+
+# Under $HOME and not hidden: the strictly confined juju snap can't read elsewhere.
+export STATE_DIR="${STATE_DIR:-$HOME/gpu-ib-cluster-state-${GITHUB_RUN_ID:-local}${GITHUB_RUN_ATTEMPT:+-$GITHUB_RUN_ATTEMPT}}"
+export BIN_DIR="$STATE_DIR/bin"
+export JOB_DATA_PATH="$STATE_DIR/testflinger-job-data.yaml"
+export CLUSTER_DATA_PATH="$STATE_DIR/testflinger-cluster-data.yaml"
+export KUBECONFIG_PATH="$STATE_DIR/kubeconfig"
+export VENV_DIR="$STATE_DIR/venv"
+export APROXY_RULE_COMMENT="gpu-ib-cluster ${GITHUB_RUN_ID:-local}${GITHUB_RUN_ATTEMPT:+-$GITHUB_RUN_ATTEMPT}"
+export SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-$STATE_DIR/id_ed25519}"
+
+export PATH="$BIN_DIR:$PATH"
+
+export VLLM_CONTROLLER_NAME="${VLLM_CONTROLLER_NAME:-vllm}"
+export VLLM_STORAGE_CLASS="${VLLM_STORAGE_CLASS:-csi-rawfile-default}"
+
+export K8S_CHANNEL="${K8S_CHANNEL:-1.34-classic/stable}"
+export LB_CIDR="${LB_CIDR:-10.243.10.0/24}"
+_default_registries='[{"url": "http://10.141.186.140:5000", "host": "docker.io"}, {"url": "http://10.141.186.145:5000", "host": "registry.k8s.io"}]'
+export K8S_REGISTRIES="${K8S_REGISTRIES:-$_default_registries}"
+
+export NVIDIA_HELM_REPO="${NVIDIA_HELM_REPO:-https://helm.ngc.nvidia.com/nvidia}"
+export GPU_OPERATOR_VERSION="${GPU_OPERATOR_VERSION:-v26.7.2}"
+export GPU_OPERATOR_NAMESPACE="gpu-operator"
+export NETWORK_OPERATOR_VERSION="${NETWORK_OPERATOR_VERSION:-26.7.0}"
+export NETWORK_OPERATOR_NAMESPACE="network-operator"
+
+export IB_IFNAMES_JSON="${IB_IFNAMES_JSON:-[\"ibp18s0\"]}"
+export DISABLE_ACS="${DISABLE_ACS:-true}"
+export RDMA_RESOURCE_NAME="${RDMA_RESOURCE_NAME:-rdma_shared_device_ib}"
+export RDMA_HCA_MAX="${RDMA_HCA_MAX:-63}"
+_default_ib_test_pairs='[{"server_node": "worker-1", "client_node": "worker-2"}]'
+export IB_TEST_PAIRS_JSON="${IB_TEST_PAIRS_JSON:-$_default_ib_test_pairs}"
+export IB_MIN_BW_MB_PER_SEC="${IB_MIN_BW_MB_PER_SEC:-1000}"
+
+SSH_OPTS=(-i "$SSH_PRIVATE_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o BatchMode=yes)
+
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+  log() { echo ">> $*"; }
+  die() {
+    echo "::error::$*" >&2
+    exit 1
+  }
+  group() { echo "::group::$*"; }
+  endgroup() { echo "::endgroup::"; }
+else
+  log() { echo -e "\033[1;34m>> $*\033[0m"; }
+  die() {
+    echo -e "\033[1;31mERROR: $*\033[0m" >&2
+    exit 1
+  }
+  group() { log "$*"; }
+  endgroup() { :; }
+fi
+
+require_cluster_data() {
+  [[ -s "$CLUSTER_DATA_PATH" ]] || die "No cluster data at $CLUSTER_DATA_PATH; run 01-reserve-machines.sh first"
+}
+
+require_kubeconfig() {
+  [[ -s "$KUBECONFIG_PATH" ]] || die "No kubeconfig at $KUBECONFIG_PATH; run 02-deploy-k8s.sh first"
+}
+
+machine_addresses() {
+  yq '.[] | select(has("IP")) | .username + "@" + .IP' "$JOB_DATA_PATH"
+}
+
+worker_addresses_json() {
+  yq -o json -I0 '[.["worker-gpu"][].machine_address]' "$CLUSTER_DATA_PATH"
+}
+
+start_tunnel() {
+  local name="$1" remote="$2"
+  shift 2
+  local pidfile="$STATE_DIR/sshuttle-$name.pid"
+  if [[ -s "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    return 0
+  fi
+  log "Starting sshuttle '$name' via $remote for: $*"
+  sshuttle -r "$remote" -e "ssh ${SSH_OPTS[*]}" --daemon --pidfile "$pidfile" "$@"
+  local subnet
+  for subnet in "$@"; do
+    aproxy_bypass "$subnet"
+  done
+}
+
+# Runners DNAT outbound TCP to aproxy, which resets K8s API/LB traffic but
+# carries SSH to the lab, so only the tunnelled subnet[:port] bypasses it.
+aproxy_bypass() {
+  local net="${1%%:*}" port=""
+  [[ "$1" == *:* ]] && port="${1##*:}"
+  sudo nft list chain ip aproxy output &>/dev/null || return 0
+  if [[ -n "$port" ]]; then
+    sudo nft insert rule ip aproxy output ip daddr "$net" tcp dport "$port" accept comment "\"$APROXY_RULE_COMMENT\""
+  else
+    sudo nft insert rule ip aproxy output ip daddr "$net" accept comment "\"$APROXY_RULE_COMMENT\""
+  fi
+  log "aproxy bypass for $1"
+}
+
+# Each tunnel goes via a host that isn't its destination, so SSH stays on aproxy.
+start_lab_tunnels() {
+  local workers
+  mapfile -t workers < <(jq -r '.[]' <<<"$(worker_addresses_json)")
+  ((${#workers[@]} >= 2)) || die "The tunnels need at least two workers"
+  if sudo nft list table ip aproxy &>/dev/null; then
+    group "aproxy nft rules"
+    sudo nft list table ip aproxy
+    endgroup
+  fi
+  start_tunnel lb "${workers[0]}" "$LB_CIDR"
+  start_tunnel k8s-api "${workers[1]}" "${workers[0]#*@}/32:6443"
+}
+
+kctl() { kubectl --kubeconfig "$KUBECONFIG_PATH" "$@"; }
+
+gh_output() {
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    echo "$1=$2" >>"$GITHUB_OUTPUT"
+  fi
+}
