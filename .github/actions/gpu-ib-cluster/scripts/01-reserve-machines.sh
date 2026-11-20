@@ -56,8 +56,7 @@ PYTHONUNBUFFERED=1 "$VENV_DIR/bin/python" "$TESTFLINGER_DIR/deploy_testflinger_c
   "$job_config" \
   "${overrides_args[@]}" \
   --series "$SERIES" \
-  --first-wave-timeout-seconds 0 \
-  --second-wave-timeout-seconds "$ACQUIRE_TIMEOUT_SECONDS" \
+  --timeout-seconds "$ACQUIRE_TIMEOUT_SECONDS" \
   --output-filepath "$JOB_DATA_PATH" \
   --cluster-output-filepath "$CLUSTER_DATA_PATH"
 endgroup
