@@ -244,6 +244,8 @@ def test_on_kserve_controller_ready_active(harness: Harness, mocked_resource_han
     assert harness.get_container_pebble_plan("kserve-controller")._services != {}
 
     updated_plan = harness.get_container_pebble_plan("kserve-controller").to_dict()
+    environment = updated_plan["services"]["kserve-controller"]["environment"]
+    assert environment.pop("KSERVE_CONFIG_HASH") == harness.charm._inference_service_config_hash
     assert KSERVE_CONTROLLER_EXPECTED_LAYER == updated_plan
 
     service = harness.model.unit.get_container("kserve-controller").get_service(
@@ -338,9 +340,7 @@ def test_generate_gateways_context_knative_mode_no_relation(
     )
 
 
-@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_knative_no_relation(
-    _mocked_restart_controller_service,
     harness: Harness,
     mocker,
     mocked_resource_handler,
@@ -391,9 +391,7 @@ def test_generate_gateways_context_standard_mode_missing_data(
     "remote_data",
     ({"gateway_name": "test-name"}, {"gateway_namespace": "test-namespace"}),
 )
-@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_knative_missing_data(
-    _mocked_restart_controller_service,
     remote_data,
     harness: Harness,
     mocker,
@@ -461,9 +459,7 @@ def test_generate_gateways_context_standard_mode_pass(
     assert actual_gateway_context == expected_gateway_context
 
 
-@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_knative_mode_pass(
-    _mocked_restart_controller_service,
     harness: Harness,
     mocker,
     mocked_resource_handler,
@@ -571,42 +567,55 @@ def test_gen_certs_if_missing(cert_data_dict, should_certs_refresh, harness: Har
     assert mocked_gen_certs.called == should_certs_refresh
 
 
-def test_restart_controller_service(harness: Harness, mocked_resource_handler, mocker):
-    """Checks the controller service is restarted correctly."""
-    harness.begin()
-
-    # Before pebble ready, the service should not be
-    # there, so no action should be taken
-    harness.charm._restart_controller_service()
-    controller_pebble_plan = harness.get_container_pebble_plan(
-        harness.charm._controller_container_name
-    )
-    controller_service = controller_pebble_plan.services.get(
-        harness.charm._controller_container_name
-    )
-    assert controller_service is None
-
-    # Add relation with ingress-gateway providers
+def _relate_knative_gateways(harness: Harness):
+    """Add the ingress-gateway and local-gateway relations with their data."""
     relation_id_ingress = harness.add_relation("ingress-gateway", "test-istio-pilot")
     relation_id_local = harness.add_relation("local-gateway", "test-knative-serving")
+    harness.update_relation_data(
+        relation_id_ingress,
+        "test-istio-pilot",
+        {"gateway_name": "test-ingress-name", "gateway_namespace": "test-ingress-namespace"},
+    )
+    harness.update_relation_data(
+        relation_id_local,
+        "test-knative-serving",
+        {"gateway_name": "test-local-name", "gateway_namespace": "test-local-namespace"},
+    )
 
-    # Updated the data bag with ingress-gateway
-    remote_ingress_data = {
-        "gateway_name": "test-ingress-name",
-        "gateway_namespace": "test-ingress-namespace",
-    }
-    remote_local_data = {
-        "gateway_name": "test-local-name",
-        "gateway_namespace": "test-local-namespace",
-    }
-    harness.update_relation_data(relation_id_ingress, "test-istio-pilot", remote_ingress_data)
-    harness.update_relation_data(relation_id_local, "test-knative-serving", remote_local_data)
 
-    # Simulate what happens after the pebble ready event
+def test_update_status_does_not_restart_controller(
+    harness: Harness, mocked_resource_handler, mocker
+):
+    """update-status with an unchanged configuration leaves the controller running."""
+    harness.begin()
+    _relate_knative_gateways(harness)
     harness.container_pebble_ready(harness.charm._controller_container_name)
-    mocked_container_restart = mocker.patch.object(harness.charm.controller_container, "restart")
-    harness.charm._restart_controller_service()
-    mocked_container_restart.assert_called_once()
+    mocked_restart = mocker.patch.object(harness.charm.controller_container, "restart")
+    mocked_replan = mocker.patch.object(harness.charm.controller_container, "replan")
+
+    harness.charm.on.update_status.emit()
+
+    mocked_restart.assert_not_called()
+    mocked_replan.assert_not_called()
+
+
+def test_config_change_restarts_controller(harness: Harness, mocked_resource_handler, mocker):
+    """A change to inferenceservice-config changes the layer, so Pebble restarts the controller."""
+    harness.begin()
+    _relate_knative_gateways(harness)
+    harness.container_pebble_ready(harness.charm._controller_container_name)
+    hash_before = harness.charm._inference_service_config_hash
+    mocked_replan = mocker.patch.object(harness.charm.controller_container, "replan")
+
+    harness.update_config({"deployment-mode": "standard"})
+
+    hash_after = (
+        harness.get_container_pebble_plan("kserve-controller")
+        .services["kserve-controller"]
+        .environment["KSERVE_CONFIG_HASH"]
+    )
+    assert hash_after != hash_before
+    mocked_replan.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -939,9 +948,7 @@ def test_send_object_storage_manifests_clears_stale_manifests(harness: Harness, 
     mocked_service_accounts_send.assert_called_once_with([])
 
 
-@patch("charm.KServeControllerCharm._restart_controller_service")
 def test_generate_gateways_context_standard_mode(
-    _mocked_restart_controller_service,
     harness: Harness,
     mocker,
     mocked_resource_handler,

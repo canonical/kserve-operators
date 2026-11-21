@@ -12,6 +12,7 @@ develop a new k8s charm using the Operator Framework:
     https://discourse.charmhub.io/t/4208
 """
 
+import hashlib
 import json
 import logging
 from base64 import b64encode
@@ -56,10 +57,9 @@ from ops.model import (
     BlockedStatus,
     Container,
     MaintenanceStatus,
-    ModelError,
     WaitingStatus,
 )
-from ops.pebble import APIError, Layer, PathError, ProtocolError
+from ops.pebble import Layer, PathError, ProtocolError
 from serialized_data_interface import (
     NoCompatibleVersions,
     NoVersionsListed,
@@ -375,6 +375,20 @@ class KServeControllerCharm(CharmBase):
         return manifests
 
     @property
+    def _inference_service_config_hash(self) -> str:
+        """Return the SHA-256 of the rendered inferenceservice-config ConfigMap.
+
+        The controller reads this ConfigMap only at startup. Putting the hash in the
+        Pebble layer makes update_layer replan, and Pebble restart the controller,
+        only when the ConfigMap changes.
+        """
+        context = {**self.inference_service_context, **self.images_context}
+        rendered = "".join(
+            Template(Path(file).read_text()).render(**context) for file in CONFIG_FILES
+        )
+        return hashlib.sha256(rendered.encode()).hexdigest()
+
+    @property
     def _controller_pebble_layer(self):
         """Return the Pebble layer for the workload."""
         return Layer(
@@ -388,6 +402,7 @@ class KServeControllerCharm(CharmBase):
                         "environment": {
                             "POD_NAMESPACE": self.model.name,
                             "SECRET_NAME": "kserve-webhook-server-cert",
+                            "KSERVE_CONFIG_HASH": self._inference_service_config_hash,
                         },
                         "on-check-failure": {
                             "kserve-controller-ready": "restart",
@@ -779,11 +794,6 @@ class KServeControllerCharm(CharmBase):
                 log,
             )
 
-            # The kserve-controller service must be restarted whenever the
-            # configuration is changed, otherwise the service will remain
-            # unaware of such changes.
-            self._restart_controller_service()
-
             # FIXME: This block sets the charm to Maintenance and relies on update status hook
             # to retrigger the reconciliation. We can replace this with Pebble Notices, or Pebble
             # Checks once https://github.com/canonical/pebble/issues/164 is resolved.
@@ -1087,35 +1097,6 @@ class KServeControllerCharm(CharmBase):
             container.push(f"{destination_path}/ca.crt", certs_store.ca, make_dirs=True)
         except (ProtocolError, PathError) as e:
             raise GenericCharmRuntimeError("Failed to push certs to container") from e
-
-    def _restart_controller_service(self) -> None:
-        """Restart the kserve-controller service.
-
-        This helper allows restarting the kserve-controller service
-        from any state (running, not running).
-        Since this helper is not responsible for setting up the service,
-        it returns if the kserve-controller container is not reachable
-        or the kserve-controller service is not found.
-        """
-        # Check for container connection before attempting to restart the service
-        if not self.controller_container.can_connect():
-            log.info("Skipping the service restart, kserve-controller container is not reachable")
-            return
-
-        # If the kserve-controller service is not running, do nothing
-        try:
-            self.controller_container.get_service(self._controller_container_name).is_running()
-        except ModelError:
-            log.info("Service not found, nothing to restart.")
-            return
-
-        try:
-            self.controller_container.restart(self._controller_container_name)
-            log.info("Restarted the controller pebble service.")
-        except APIError as err:
-            raise GenericCharmRuntimeError(
-                f"Failed to restart {self._controller_container_name} service"
-            ) from err
 
 
 def _extract_runtimes_names(manifests: LightkubeResourcesList) -> dict:
