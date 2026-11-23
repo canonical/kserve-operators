@@ -40,7 +40,6 @@ from .helpers.llmisvc_ops import apply_llmisvc_example
 from .helpers.retry import RETRY_FOR_TEN_MINUTES, RETRY_FOR_THREE_MINUTES
 
 logger = logging.getLogger(__name__)
-logging.getLogger("jubilant.wait").setLevel("WARNING")
 
 pytestmark = pytest.mark.cos
 
