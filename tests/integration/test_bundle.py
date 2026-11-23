@@ -219,7 +219,7 @@ def test_deploy_llm_via_charm(juju: jubilant.Juju, charms_path: str):
     wait_llm_integrator_blocked(juju, "No node can fit a worker")
 
     logger.info("Resetting the memory options; llm-integrator should recover and serve")
-    juju.config(LLM_INTEGRATOR_APP, {"memory-request": None, "memory-limit": None})
+    juju.config(LLM_INTEGRATOR_APP, reset=["memory-request", "memory-limit"])
     wait_llm_integrator_active(juju)
 
     logger.info("Verifying the charm-created LLMInferenceService serves completions")
