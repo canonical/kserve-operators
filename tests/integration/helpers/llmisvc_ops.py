@@ -13,8 +13,8 @@ from .constants import LLMISVC_NAME, NAMESPACE_DEFAULT
 from .k8s import LLMInferenceService, apply_yaml, get_client
 from .retry import (
     RETRY_FOR_TEN_MINUTES,
+    RETRY_FOR_THIRTY_MINUTES,
     RETRY_FOR_THREE_MINUTES,
-    RETRY_FOR_TWENTY_MINUTES,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,10 +34,10 @@ def apply_llmisvc_example(manifest_path: str, context: dict, name: str = LLMISVC
             apply_yaml(rendered_manifest)
 
     logger.info(
-        "Waiting for LLMInferenceService routing and workloads readiness (up to 20 minutes)..."
+        "Waiting for LLMInferenceService routing and workloads readiness (up to 30 minutes)..."
     )
     client = get_client()
-    for attempt in RETRY_FOR_TWENTY_MINUTES:
+    for attempt in RETRY_FOR_THIRTY_MINUTES:
         with attempt:
             llmisvc = client.get(LLMInferenceService, name=name, namespace=NAMESPACE_DEFAULT)
             status = llmisvc.status or {}

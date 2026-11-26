@@ -5,6 +5,8 @@
 """Assertions used by the bundle integration tests."""
 
 import logging
+import time
+from dataclasses import dataclass
 
 import requests
 from lightkube import ApiError
@@ -38,7 +40,10 @@ from .constants import (
     LLMISVC_NAME,
     LOCAL_AGGREGATED_METRICS_PORT,
     LOCAL_CONTROLLER_METRICS_PORT,
+    LOCAL_VLLM_METRICS_PORT,
     NAMESPACE_DEFAULT,
+    VLLM_DECODE_PORT,
+    VLLM_PREFILL_PORT,
 )
 from .k8s import (
     Gateway,
@@ -47,8 +52,9 @@ from .k8s import (
     generic_resource_for_crd,
     get_client,
     get_running_workload_pod,
+    get_running_workload_pods_by_role,
 )
-from .kubectl import port_forward
+from .kubectl import port_forward, read_node_files
 from .retry import RETRY_FOR_TEN_MINUTES, RETRY_FOR_THREE_MINUTES
 
 logger = logging.getLogger(__name__)
@@ -207,6 +213,153 @@ def _assert_prometheus_exposition(
             return
 
 
+def _prefill_decode_pods(name: str, namespace: str) -> dict:
+    pods = get_running_workload_pods_by_role(name, namespace)
+    missing = {"prefill", "decode"} - pods.keys()
+    if missing:
+        raise AssertionError(
+            f"LLMInferenceService '{name}' has no Running pod for role(s) {sorted(missing)}"
+        )
+    return pods
+
+
+def assert_prefill_decode_on_different_nodes(name: str, namespace: str) -> None:
+    """Assert the prefill and decode pods run on different nodes."""
+    pods = _prefill_decode_pods(name, namespace)
+    nodes = {role: pod.spec.nodeName for role, pod in pods.items()}
+    logger.info("Prefill/decode pod placement: %s", nodes)
+    assert nodes["prefill"] != nodes["decode"], f"prefill and decode share a node: {nodes}"
+
+
+def assert_prefill_decode_request_resources(
+    name: str, namespace: str, resources: dict[str, str]
+) -> None:
+    """Assert the vLLM container of both pools requests and is limited to ``resources``."""
+    for role, pod in _prefill_decode_pods(name, namespace).items():
+        main = next(container for container in pod.spec.containers if container.name == "main")
+        for resource, amount in resources.items():
+            assert (
+                main.resources.requests.get(resource) == amount
+            ), f"{role} pod requests {main.resources.requests.get(resource)} {resource}"
+            assert (
+                main.resources.limits.get(resource) == amount
+            ), f"{role} pod is limited to {main.resources.limits.get(resource)} {resource}"
+
+
+def _sum_metric(metrics_text: str, metric: str) -> float | None:
+    """Sum the samples of ``metric`` in a Prometheus payload; None if it is absent."""
+    values = [
+        float(line.rsplit(" ", 1)[1])
+        for line in metrics_text.splitlines()
+        if line.startswith((f"{metric}{{", f"{metric} "))
+    ]
+    return sum(values) if values else None
+
+
+def _read_pod_metrics(pod_name: str, namespace: str, port: int) -> str:
+    """Return the Prometheus payload served on ``port`` of the pod."""
+    with port_forward(namespace, f"pod/{pod_name}", f"{LOCAL_VLLM_METRICS_PORT}:{port}"):
+        # Give the port-forward a moment to start listening.
+        for remaining in reversed(range(30)):
+            try:
+                response = requests.get(
+                    f"http://127.0.0.1:{LOCAL_VLLM_METRICS_PORT}/metrics", timeout=20
+                )
+                response.raise_for_status()
+                return response.text
+            except requests.RequestException:
+                if not remaining:
+                    raise
+                time.sleep(2)
+    raise AssertionError("unreachable")
+
+
+@dataclass(frozen=True)
+class PrefillDecodeTraffic:
+    """Cumulative KV cache traffic counters of a prefill/decode LLMInferenceService."""
+
+    nixl_bytes: float
+    nixl_failed: float
+    prefill_ib_sent_bytes: int
+    decode_ib_received_bytes: int
+
+
+def _ib_port_data_bytes(node: str, ib_device: str, image: str) -> tuple[int, int]:
+    """Return the bytes sent and received by ``ib_device`` (``<hca>:<port>``) on ``node``."""
+    hca, _, port = ib_device.partition(":")
+    counters = f"/sys/class/infiniband/{hca}/ports/{port or 1}/counters"
+    sent, received = read_node_files(
+        node, image, f"{counters}/port_xmit_data", f"{counters}/port_rcv_data"
+    )
+    # The port data counters count 4-byte words.
+    return int(sent) * 4, int(received) * 4
+
+
+def get_prefill_decode_traffic(
+    name: str, namespace: str, ib_device: str, image: str
+) -> PrefillDecodeTraffic:
+    """Read the NIXL metrics of both vLLM servers and the IB counters of their nodes.
+
+    ``image`` runs the pods reading the IB counters; it should already be on the nodes.
+    """
+    pods = _prefill_decode_pods(name, namespace)
+    ports = {"prefill": VLLM_PREFILL_PORT, "decode": VLLM_DECODE_PORT}
+    nixl_bytes, nixl_failed = 0.0, 0.0
+    for role, pod in pods.items():
+        metrics = _read_pod_metrics(pod.metadata.name, namespace, ports[role])
+        nixl_bytes += _sum_metric(metrics, "vllm:nixl_bytes_transferred_sum") or 0.0
+        nixl_failed += _sum_metric(metrics, "vllm:nixl_num_failed_transfers_total") or 0.0
+    prefill_sent, _ = _ib_port_data_bytes(pods["prefill"].spec.nodeName, ib_device, image)
+    _, decode_received = _ib_port_data_bytes(pods["decode"].spec.nodeName, ib_device, image)
+    traffic = PrefillDecodeTraffic(nixl_bytes, nixl_failed, prefill_sent, decode_received)
+    logger.info(
+        "Prefill/decode traffic: NIXL %.0f B (%.0f failed transfers), "
+        "prefill node sent %d B and decode node received %d B over %s",
+        nixl_bytes,
+        nixl_failed,
+        prefill_sent,
+        decode_received,
+        ib_device,
+    )
+    return traffic
+
+
+def assert_kv_transferred_over_ib(
+    name: str, namespace: str, ib_device: str, image: str, before: PrefillDecodeTraffic
+) -> None:
+    """Assert the KV cache moved from prefill to decode through NIXL over IB since ``before``.
+
+    NIXL must report newly transferred bytes and no failed transfer. The decode pool
+    reads the KV cache from the prefill GPU memory with RDMA, so the IB port of the
+    prefill node must have sent, and the one of the decode node received, at least
+    as many bytes.
+    """
+    for attempt in RETRY_FOR_THREE_MINUTES:
+        with attempt:
+            after = get_prefill_decode_traffic(name, namespace, ib_device, image)
+            nixl = after.nixl_bytes - before.nixl_bytes
+            sent = after.prefill_ib_sent_bytes - before.prefill_ib_sent_bytes
+            received = after.decode_ib_received_bytes - before.decode_ib_received_bytes
+            assert after.nixl_failed == 0, f"NIXL reported {after.nixl_failed:.0f} failed transfers"
+            assert nixl > 0, "no new KV cache bytes transferred through NIXL yet"
+            assert sent >= nixl, (
+                f"the prefill node sent {sent} B over {ib_device}, "
+                f"less than the {nixl:.0f} B transferred by NIXL"
+            )
+            assert received >= nixl, (
+                f"the decode node received {received} B over {ib_device}, "
+                f"less than the {nixl:.0f} B transferred by NIXL"
+            )
+    logger.info(
+        "NIXL transferred %.0f B of KV cache; over %s the prefill node sent %d B "
+        "and the decode node received %d B",
+        nixl,
+        ib_device,
+        sent,
+        received,
+    )
+
+
 def assert_llmisvc_metrics_endpoints(namespace: str, app_name: str = LLMISVC_APP_NAME) -> None:
     logger.info(
         "Validating llmisvc service exposes both controller and aggregated metrics ports..."
@@ -264,8 +417,10 @@ def _gateway_lb_service_name(gateway_name: str, gateway_namespace: str) -> str:
     return services[0].metadata.name
 
 
-def _post_completion_and_assert(url: str, model: str, name: str) -> None:
+def _post_completion_and_assert(url: str, model: str, name: str, prompt: str | None = None) -> None:
     payload = {"model": model, **_COMPLETION_PAYLOAD}
+    if prompt is not None:
+        payload["prompt"] = prompt
     response = requests.post(
         url,
         headers={"Content-Type": "application/json"},
@@ -285,6 +440,7 @@ def assert_prediction(
     name: str = LLMISVC_NAME,
     model: str = LLMISVC_MODEL_NAME,
     namespace: str = NAMESPACE_DEFAULT,
+    prompt: str | None = None,
 ) -> None:
     completions_path = f"/{namespace}/{name}/v1/completions"
 
@@ -293,7 +449,7 @@ def assert_prediction(
         url = f"http://{gw_ip}{completions_path}"
         for attempt in RETRY_FOR_TEN_MINUTES:
             with attempt:
-                _post_completion_and_assert(url, model=model, name=name)
+                _post_completion_and_assert(url, model=model, name=name, prompt=prompt)
                 return
 
     service_name = _gateway_lb_service_name(gateway_name, gateway_namespace)
@@ -301,7 +457,10 @@ def assert_prediction(
         for attempt in RETRY_FOR_TEN_MINUTES:
             with attempt:
                 _post_completion_and_assert(
-                    f"http://127.0.0.1:8080{completions_path}", model=model, name=name
+                    f"http://127.0.0.1:8080{completions_path}",
+                    model=model,
+                    name=name,
+                    prompt=prompt,
                 )
                 return
 

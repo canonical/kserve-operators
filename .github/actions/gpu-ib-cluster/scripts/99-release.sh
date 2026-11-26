@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+# Cancels the Testflinger jobs, stops the sshuttle tunnels, removes the aproxy bypass
+# rules and the Juju client entries, and deletes the local state.
+#
+# Best effort, never fails. RELEASE_MACHINES=false keeps the reservations and
+# the local state for debugging.
+
+source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
+set +e
+
+if [[ "${RELEASE_MACHINES:-true}" != "true" ]]; then
+  log "RELEASE_MACHINES=${RELEASE_MACHINES}: keeping the Testflinger reservations and the local state in $STATE_DIR"
+  exit 0
+fi
+
+uncancelled=0
+if [[ -s "$JOB_DATA_PATH" ]]; then
+  log "Cancelling Testflinger jobs"
+  while IFS= read -r job_id; do
+    [[ -n "$job_id" && "$job_id" != "null" ]] || continue
+    testflinger-cli cancel "$job_id" && continue
+    state="$(testflinger-cli status "$job_id" 2>/dev/null)"
+    case "$state" in
+      cancelled | complete | completed | cleanup) echo "$job_id already $state" ;;
+      *)
+        echo "::warning::Cannot cancel $job_id (state: ${state:-unknown})"
+        uncancelled=1
+        ;;
+    esac
+  done < <(yq '.[].job_id' "$JOB_DATA_PATH")
+else
+  log "No job data at $JOB_DATA_PATH: nothing to cancel"
+fi
+
+log "Stopping sshuttle tunnels"
+for pidfile in "$STATE_DIR"/sshuttle-*.pid; do
+  [[ -f "$pidfile" ]] || continue
+  kill "$(cat "$pidfile")" 2>/dev/null || sudo kill "$(cat "$pidfile")" 2>/dev/null
+  rm -f "$pidfile"
+done
+
+log "Removing aproxy bypass rules"
+while read -r handle; do
+  sudo nft delete rule ip aproxy output handle "$handle"
+done < <(sudo nft -a list chain ip aproxy output 2>/dev/null \
+  | grep -F "comment \"$APROXY_RULE_COMMENT\"" | sed -n 's/.*# handle \([0-9]*\)$/\1/p')
+
+log "Removing Juju client entries"
+juju unregister -y "$VLLM_CONTROLLER_NAME" 2>/dev/null
+juju remove-cloud --client "$VLLM_CONTROLLER_NAME" 2>/dev/null
+
+if ((uncancelled)); then
+  log "Keeping $STATE_DIR: re-run 99-release.sh to retry the cancellations"
+elif [[ -d "$STATE_DIR" ]]; then
+  while IFS= read -r addr; do
+    ssh-keygen -R "${addr#*@}" &>/dev/null
+  done < <([[ -s "$JOB_DATA_PATH" ]] && machine_addresses)
+  log "Removing local state $STATE_DIR"
+  rm -rf "$STATE_DIR"
+fi
+
+log "Released."
+exit 0

@@ -53,7 +53,6 @@ from .helpers.retry import RETRY_FOR_THREE_MINUTES
 from .helpers.s3_integrator import deploy_s3_integrator
 
 logger = logging.getLogger(__name__)
-logging.getLogger("jubilant.wait").setLevel("WARNING")
 
 KEDA_APP = "keda-controller"
 PROMETHEUS_APP = "prometheus"
