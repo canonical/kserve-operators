@@ -23,6 +23,7 @@ from lightkube.resources.core_v1 import Pod, Secret, ServiceAccount
 from tests.integration.constants import APP_NAME, ISVC
 
 KSERVE_WORKLOAD_CONTAINER = "kserve-container"
+STORAGE_INITIALIZER_CONTAINER = "storage-initializer"
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +83,32 @@ def safe_load_file_to_text(filename: str) -> str:
     return text
 
 
+def _print_container_logs(
+    lightkube_client: lightkube.Client, pod: Pod, container: str, tail_lines: int
+):
+    """Print the last lines of a container's logs, tolerating a container that has not started."""
+    try:
+        lines = list(
+            lightkube_client.log(
+                name=pod.metadata.name,
+                namespace=pod.metadata.namespace,
+                container=container,
+                tail_lines=tail_lines,
+            )
+        )
+    except ApiError:
+        logger.info("Failed to retrieve %s logs - the container might not have started", container)
+        return
+    if not lines:
+        logger.info("No %s logs found", container)
+    for line in lines:
+        logger.info(line.strip())
+
+
 def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: int = 50):
-    """Prints the logs for kserve serving container in the Pod backing an InferenceService.
+    """Prints the state and logs of the Pods backing an InferenceService.
+
+    Includes the storage-initializer, so a stuck or failing model download is visible.
 
     Args:
         lightkube_client: Client to connect to kubernetes
@@ -100,24 +125,22 @@ def print_inf_svc_logs(lightkube_client: lightkube.Client, inf_svc, tail_lines: 
             namespace=inf_svc.metadata.namespace,
         )
     )
-    if len(pods) > 0:
-        printed_logs = False
-        pod = pods[0]
-        try:
-            for line in lightkube_client.log(
-                name=pod.metadata.name,
-                namespace=pod.metadata.namespace,
-                container=KSERVE_WORKLOAD_CONTAINER,
-                tail_lines=tail_lines,
-            ):
-                printed_logs = True
-                logger.info(line.strip())
-            if not printed_logs:
-                logger.info("No logs found - the pod might still be starting up")
-        except ApiError:
-            logger.info("Failed to retrieve logs - the pod might still be starting up")
-    else:
+    if not pods:
         logger.info("No Pods found - the pod might not be launched yet")
+        return
+    for pod in pods:
+        status = pod.status
+        logger.info("Pod %s phase: %s", pod.metadata.name, status.phase if status else None)
+        for container_status in (status.initContainerStatuses or []) if status else []:
+            logger.info(
+                "Init container %s: restarts=%s state=%s",
+                container_status.name,
+                container_status.restartCount,
+                container_status.state,
+            )
+        for container in (STORAGE_INITIALIZER_CONTAINER, KSERVE_WORKLOAD_CONTAINER):
+            logger.info("Logs of container %s:", container)
+            _print_container_logs(lightkube_client, pod, container, tail_lines)
 
 
 # Helpers for fetching resource dispatcher resources
