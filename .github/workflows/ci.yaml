@@ -156,6 +156,10 @@ jobs:
           merge-multiple: true
 
       - name: Run integration tests
+        env:
+          # Credentials for the S3 bucket hosting the test models of the InferenceServices.
+          AWS_ACCESS_KEY_ID: ${{ secrets.LLM_STORAGE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.LLM_STORAGE_AWS_SECRET_ACCESS_KEY }}
         run: |
           juju add-model kubeflow --config automatically-retry-hooks=false
           tox -e ${{ matrix.charm }}-${{ matrix.test-type }} -- --model kubeflow --charm-path=${{ github.workspace }}/charms/${{ matrix.charm }}/${{ matrix.charm }}_ubuntu@24.04-amd64.charm
