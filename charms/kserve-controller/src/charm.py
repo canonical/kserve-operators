@@ -12,6 +12,7 @@ develop a new k8s charm using the Operator Framework:
     https://discourse.charmhub.io/t/4208
 """
 
+import hashlib
 import json
 import logging
 from base64 import b64encode
@@ -46,6 +47,7 @@ from jsonschema import ValidationError
 from lightkube import ApiError, Client
 from lightkube.generic_resource import load_in_cluster_generic_resources
 from lightkube.models.core_v1 import ServicePort
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from lightkube_extensions.batch import create_charm_default_labels
 from object_storage import S3Requirer
 from ops import main
@@ -56,10 +58,9 @@ from ops.model import (
     BlockedStatus,
     Container,
     MaintenanceStatus,
-    ModelError,
     WaitingStatus,
 )
-from ops.pebble import APIError, Layer, PathError, ProtocolError
+from ops.pebble import Layer, PathError, ProtocolError
 from serialized_data_interface import (
     NoCompatibleVersions,
     NoVersionsListed,
@@ -91,6 +92,19 @@ K8S_RESOURCE_FILES = [
 KRH_SCOPE_K8S = "kserve-controller-k8s"
 KRH_SCOPE_CONFIG = "kserve-controller-config"
 KRH_SCOPE_CLUSTER_RUNTIMES = "kserve-controller-cluster-runtimes"
+
+# Optional CRDs that the controller looks up by group/version and kind when it starts, to decide
+# what to watch, and caches, even when not found. Keys are CRD names, values are the versions:
+# https://github.com/kserve/kserve/blob/v0.17.0/pkg/controller/v1beta1/inferenceservice/controller.go#L613-L635
+# https://github.com/kserve/kserve/blob/v0.17.0/pkg/controller/v1alpha1/inferencegraph/controller.go#L364-L370
+# https://github.com/kserve/kserve/blob/v0.17.0/pkg/utils/utils.go#L236-L256
+# Gateway API's HTTPRoute is left out: without it the controller exits, and Pebble restarts it.
+OPTIONAL_CRDS = {
+    "services.serving.knative.dev": "v1",
+    "virtualservices.networking.istio.io": "v1beta1",
+    "scaledobjects.keda.sh": "v1alpha1",
+    "opentelemetrycollectors.opentelemetry.io": "v1beta1",
+}
 
 # Relation names
 SDI_INGRESS_GATEWAY_RELATION = "ingress-gateway"
@@ -375,6 +389,36 @@ class KServeControllerCharm(CharmBase):
         return manifests
 
     @property
+    def _inference_service_config_hash(self) -> str:
+        """Return the SHA-256 of the rendered inferenceservice-config ConfigMap.
+
+        The controller reads this ConfigMap only at startup. Putting the hash in the
+        Pebble layer makes update_layer replan, and Pebble restart the controller,
+        only when the ConfigMap changes.
+        """
+        context = {**self.inference_service_context, **self.images_context}
+        rendered = "".join(
+            Template(Path(file).read_text()).render(**context) for file in CONFIG_FILES
+        )
+        return hashlib.sha256(rendered.encode()).hexdigest()
+
+    @property
+    def _optional_crds_hash(self) -> str:
+        """Return the SHA-256 of the optional CRDs that the controller would find at startup.
+
+        The controller checks for these CRDs only at startup. Putting the hash in the
+        Pebble layer makes update_layer replan, and Pebble restart the controller, only
+        when one of them is installed or removed.
+        """
+        client = self.k8s_resource_handler.lightkube_client
+        available = [
+            f"{name}/{version}"
+            for name, version in OPTIONAL_CRDS.items()
+            if _is_crd_version_served(client, name, version)
+        ]
+        return hashlib.sha256("\n".join(available).encode()).hexdigest()
+
+    @property
     def _controller_pebble_layer(self):
         """Return the Pebble layer for the workload."""
         return Layer(
@@ -388,6 +432,8 @@ class KServeControllerCharm(CharmBase):
                         "environment": {
                             "POD_NAMESPACE": self.model.name,
                             "SECRET_NAME": "kserve-webhook-server-cert",
+                            "KSERVE_CONFIG_HASH": self._inference_service_config_hash,
+                            "KSERVE_CRDS_HASH": self._optional_crds_hash,
                         },
                         "on-check-failure": {
                             "kserve-controller-ready": "restart",
@@ -779,11 +825,6 @@ class KServeControllerCharm(CharmBase):
                 log,
             )
 
-            # The kserve-controller service must be restarted whenever the
-            # configuration is changed, otherwise the service will remain
-            # unaware of such changes.
-            self._restart_controller_service()
-
             # FIXME: This block sets the charm to Maintenance and relies on update status hook
             # to retrigger the reconciliation. We can replace this with Pebble Notices, or Pebble
             # Checks once https://github.com/canonical/pebble/issues/164 is resolved.
@@ -1088,34 +1129,22 @@ class KServeControllerCharm(CharmBase):
         except (ProtocolError, PathError) as e:
             raise GenericCharmRuntimeError("Failed to push certs to container") from e
 
-    def _restart_controller_service(self) -> None:
-        """Restart the kserve-controller service.
 
-        This helper allows restarting the kserve-controller service
-        from any state (running, not running).
-        Since this helper is not responsible for setting up the service,
-        it returns if the kserve-controller container is not reachable
-        or the kserve-controller service is not found.
-        """
-        # Check for container connection before attempting to restart the service
-        if not self.controller_container.can_connect():
-            log.info("Skipping the service restart, kserve-controller container is not reachable")
-            return
+def _is_crd_version_served(client: Client, name: str, version: str) -> bool:
+    """Return whether the CRD exists, is established and serves the given version.
 
-        # If the kserve-controller service is not running, do nothing
-        try:
-            self.controller_container.get_service(self._controller_container_name).is_running()
-        except ModelError:
-            log.info("Service not found, nothing to restart.")
-            return
-
-        try:
-            self.controller_container.restart(self._controller_container_name)
-            log.info("Restarted the controller pebble service.")
-        except APIError as err:
-            raise GenericCharmRuntimeError(
-                f"Failed to restart {self._controller_container_name} service"
-            ) from err
+    That is when API discovery, which the controller uses to look up CRDs, lists it.
+    """
+    try:
+        crd = client.get(CustomResourceDefinition, name=name)
+    except ApiError as e:
+        if e.status.code == 404:
+            return False
+        raise
+    conditions = (crd.status.conditions if crd.status else None) or []
+    established = any(c.type == "Established" and c.status == "True" for c in conditions)
+    served = any(v.name == version and v.served for v in crd.spec.versions)
+    return established and served
 
 
 def _extract_runtimes_names(manifests: LightkubeResourcesList) -> dict:
