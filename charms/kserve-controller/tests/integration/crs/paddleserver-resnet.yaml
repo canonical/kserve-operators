@@ -4,10 +4,11 @@ metadata:
   name: "paddle-resnet50"
 spec:
   predictor:
+    serviceAccountName: kserve-test-models-s3
     model:
       modelFormat:
         name: paddle
-      storageUri: "gs://kfserving-examples/models/paddle/resnet"
+      storageUri: "s3://charmed-kubeflow-llm-storage/kserve-controller-models/paddle/resnet"
       resources:
         limits:
           cpu: 1

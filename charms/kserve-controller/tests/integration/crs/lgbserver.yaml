@@ -4,10 +4,11 @@ metadata:
   name: "lightgbm-iris"
 spec:
   predictor:
+    serviceAccountName: kserve-test-models-s3
     model:
       modelFormat:
         name: lightgbm
-      storageUri: "gs://kfserving-examples/models/lightgbm/iris"
+      storageUri: "s3://charmed-kubeflow-llm-storage/kserve-controller-models/lightgbm/iris"
       resources:
         limits:
           cpu: 1

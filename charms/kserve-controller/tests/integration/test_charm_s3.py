@@ -55,14 +55,15 @@ from tests.integration.constants import (
     CUSTOM_IMAGES_PATH,
     MANIFESTS_SUFFIX,
     METADATA,
+    MODELS_S3_BUCKET,
     PODDEFAULTS_CRD_TEMPLATE,
     S3_BUCKET,
     S3_MODEL_KEY,
-    S3_MODEL_URL,
     SKLEARN_INF_SVC_NAME,
     SKLEARN_INF_SVC_OBJECT,
     SKLEARN_S3_INF_SVC_NAME,
     SKLEARN_S3_INF_SVC_OBJECT,
+    SKLEARN_S3_SOURCE_KEY,
     YAMLS_PREFIX,
 )
 from tests.integration.utils import (
@@ -428,7 +429,8 @@ async def test_inference_service_from_s3_object_storage(
         s3_connection_info,
         bucket=S3_BUCKET,
         key=S3_MODEL_KEY,
-        model_url=S3_MODEL_URL,
+        source_bucket=MODELS_S3_BUCKET,
+        source_key=SKLEARN_S3_SOURCE_KEY,
     )
 
     # Wait for the resource-dispatcher to populate the S3 Secret and ServiceAccount in the

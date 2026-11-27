@@ -1,0 +1,23 @@
+# Used by test_inference_service_proxy_envs_configuration, which only checks the
+# storage-initializer env and never downloads the model, so it needs no S3 credentials.
+# It has no serviceAccountName because, with proxy config set, KServe produces an invalid
+# storage-initializer env for ServiceAccount S3 credentials and the pod is rejected.
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "sklearn-v2-iris"
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: sklearn
+      protocolVersion: v2
+      runtime: kserve-sklearnserver
+      storageUri: "s3://charmed-kubeflow-llm-storage/kserve-controller-models/sklearn/model"
+      resources:
+        limits:
+          cpu: 1
+          memory: 500Mi
+        requests:
+          cpu: 100m
+          memory: 250Mi

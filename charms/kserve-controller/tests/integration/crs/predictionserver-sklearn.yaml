@@ -4,12 +4,13 @@ metadata:
   name: "predictionserver-sklearn-iris"
 spec:
   predictor:
+    serviceAccountName: kserve-test-models-s3
     model:
       modelFormat:
         name: sklearn
       protocolVersion: v2
       runtime: kserve-predictiveserver
-      storageUri: "gs://kfserving-examples/models/sklearn/1.0/model"
+      storageUri: "s3://charmed-kubeflow-llm-storage/kserve-controller-models/sklearn/model"
       resources:
         limits:
           cpu: 1
