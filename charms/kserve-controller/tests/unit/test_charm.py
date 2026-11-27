@@ -9,12 +9,21 @@ import ops.testing
 import pytest
 from charmed_service_mesh_helpers.interfaces import GatewayMetadata
 from lightkube import ApiError
+from lightkube.models.apiextensions_v1 import (
+    CustomResourceDefinitionCondition,
+    CustomResourceDefinitionNames,
+    CustomResourceDefinitionSpec,
+    CustomResourceDefinitionStatus,
+    CustomResourceDefinitionVersion,
+)
+from lightkube.models.meta_v1 import ObjectMeta
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from ops import StatusBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 from serialized_data_interface import SerializedDataInterface
 
-from charm import KServeControllerCharm, ObjectStillExistsError
+from charm import KServeControllerCharm, ObjectStillExistsError, _is_crd_version_served
 from tests.test_data.manifests import MANIFESTS_TEST_DATA
 
 # enable simulation of container networking
@@ -246,6 +255,7 @@ def test_on_kserve_controller_ready_active(harness: Harness, mocked_resource_han
     updated_plan = harness.get_container_pebble_plan("kserve-controller").to_dict()
     environment = updated_plan["services"]["kserve-controller"]["environment"]
     assert environment.pop("KSERVE_CONFIG_HASH") == harness.charm._inference_service_config_hash
+    assert environment.pop("KSERVE_CRDS_HASH") == harness.charm._optional_crds_hash
     assert KSERVE_CONTROLLER_EXPECTED_LAYER == updated_plan
 
     service = harness.model.unit.get_container("kserve-controller").get_service(
@@ -616,6 +626,96 @@ def test_config_change_restarts_controller(harness: Harness, mocked_resource_han
     )
     assert hash_after != hash_before
     mocked_replan.assert_called_once()
+
+
+def _crd(name: str, version: str, served: bool = True, established: str = "True"):
+    """Return a CustomResourceDefinition with one version and an Established condition."""
+    plural, group = name.split(".", 1)
+    return CustomResourceDefinition(
+        metadata=ObjectMeta(name=name),
+        spec=CustomResourceDefinitionSpec(
+            group=group,
+            names=CustomResourceDefinitionNames(kind="Kind", plural=plural),
+            scope="Namespaced",
+            versions=[CustomResourceDefinitionVersion(name=version, served=served, storage=True)],
+        ),
+        status=CustomResourceDefinitionStatus(
+            conditions=[CustomResourceDefinitionCondition(type="Established", status=established)]
+        ),
+    )
+
+
+def _fake_crd_get(crds: dict):
+    """Return a lightkube Client.get that finds only the CRDs in `crds`, by name."""
+
+    def get(resource, name=None, **kwargs):
+        if resource is not CustomResourceDefinition:
+            return MagicMock()
+        if name in crds:
+            return crds[name]
+        raise _FakeApiError(404)
+
+    return get
+
+
+KEDA_CRD = "scaledobjects.keda.sh"
+
+
+@pytest.mark.parametrize(
+    "crd, expected",
+    [
+        (_crd(KEDA_CRD, "v1alpha1"), True),
+        (None, False),
+        (_crd(KEDA_CRD, "v1alpha1", established="False"), False),
+        (_crd(KEDA_CRD, "v1alpha1", served=False), False),
+        (_crd(KEDA_CRD, "v1"), False),
+    ],
+    ids=["served", "missing", "not-established", "not-served", "other-version"],
+)
+def test_is_crd_version_served(crd, expected):
+    client = MagicMock()
+    client.get.side_effect = _fake_crd_get({KEDA_CRD: crd} if crd else {})
+
+    assert _is_crd_version_served(client, KEDA_CRD, "v1alpha1") is expected
+
+
+def test_is_crd_version_served_raises_other_api_errors():
+    client = MagicMock()
+    client.get.side_effect = _FakeApiError(403)
+
+    with pytest.raises(ApiError):
+        _is_crd_version_served(client, KEDA_CRD, "v1alpha1")
+
+
+def test_optional_crd_change_restarts_controller(
+    harness: Harness, mocked_resource_handler, mocker
+):
+    """Installing or removing an optional CRD changes the layer, so Pebble restarts it."""
+    crds = {}
+    mocked_resource_handler.lightkube_client.get.side_effect = _fake_crd_get(crds)
+    harness.begin()
+    _relate_knative_gateways(harness)
+    harness.container_pebble_ready(harness.charm._controller_container_name)
+    mocked_replan = mocker.patch.object(harness.charm.controller_container, "replan")
+
+    def crds_hash():
+        plan = harness.get_container_pebble_plan("kserve-controller")
+        return plan.services["kserve-controller"].environment["KSERVE_CRDS_HASH"]
+
+    hash_without_keda = crds_hash()
+
+    crds[KEDA_CRD] = _crd(KEDA_CRD, "v1alpha1")
+    harness.charm.on.update_status.emit()
+    assert crds_hash() != hash_without_keda
+    assert mocked_replan.call_count == 1
+
+    harness.charm.on.update_status.emit()
+    assert mocked_replan.call_count == 1
+
+    del crds[KEDA_CRD]
+    harness.charm.on.update_status.emit()
+    assert crds_hash() == hash_without_keda
+    assert mocked_replan.call_count == 2
 
 
 @pytest.mark.parametrize(

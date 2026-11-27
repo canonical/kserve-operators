@@ -1,0 +1,25 @@
+# Minimal stand-in for KEDA's ScaledObject CRD: the group, version and kind the KServe
+# controller looks up at startup. Used to check that a CRD installed after the controller
+# started is picked up.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: scaledobjects.keda.sh
+spec:
+  group: keda.sh
+  names:
+    kind: ScaledObject
+    listKind: ScaledObjectList
+    plural: scaledobjects
+    singular: scaledobject
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}
