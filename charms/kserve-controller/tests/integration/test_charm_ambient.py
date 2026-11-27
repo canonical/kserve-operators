@@ -22,6 +22,8 @@ from charmed_kubeflow_chisme.testing import (
     get_alert_rules,
     get_pod_names,
 )
+from lightkube import ApiError
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from lightkube.resources.core_v1 import (
     ConfigMap,
     Pod,
@@ -40,6 +42,7 @@ from tests.integration.constants import (
     CONFIGMAP_TEMPLATE_PATH,
     CONTAINERS_SECURITY_CONTEXT_MAP,
     CUSTOM_IMAGES_PATH,
+    KEDA_SCALEDOBJECTS_CRD_PATH,
     MANIFESTS_SUFFIX,
     METADATA,
     PODDEFAULTS_CRD_TEMPLATE,
@@ -458,6 +461,47 @@ async def test_inference_service_proxy_envs_configuration(
             assert http_proxy_env == test_http_proxy
             assert https_proxy_env == test_https_proxy
             assert no_proxy_env == test_no_proxy
+
+
+def count_scaled_object_watches(lightkube_client: lightkube.Client, namespace: str) -> int:
+    """Return how many times the controller started watching ScaledObjects, from its logs."""
+    pod_name = get_pod_names(namespace, APP_NAME)[0]
+    logs = lightkube_client.log(pod_name, namespace=namespace, container="kserve-controller")
+    return sum("kind source: *v1alpha1.ScaledObject" in line for line in logs)
+
+
+@pytest.mark.abort_on_fail
+async def test_optional_crd_installed_later_is_watched(
+    ops_test: OpsTest, lightkube_client: lightkube.Client
+):
+    """A CRD that the controller looks up only at startup is picked up when installed later.
+
+    KEDA's ScaledObject CRD stands in for all of them.
+    """
+    namespace = ops_test.model.name
+    crd = lightkube.codecs.load_all_yaml(KEDA_SCALEDOBJECTS_CRD_PATH.read_text())[0]
+    try:
+        lightkube_client.get(CustomResourceDefinition, crd.metadata.name)
+        pytest.skip(f"{crd.metadata.name} already exists in the cluster")
+    except ApiError as e:
+        if e.status.code != 404:
+            raise
+    watches_before = count_scaled_object_watches(lightkube_client, namespace)
+
+    lightkube_client.create(crd)
+    try:
+        async with ops_test.fast_forward(fast_interval="30s"):
+            for attempt in RETRY_FOR_THREE_MINUTES:
+                with attempt:
+                    watches = count_scaled_object_watches(lightkube_client, namespace)
+                    assert watches > watches_before
+    finally:
+        lightkube_client.delete(CustomResourceDefinition, crd.metadata.name)
+
+    async with ops_test.fast_forward(fast_interval="30s"):
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600
+        )
 
 
 @pytest.mark.abort_on_fail

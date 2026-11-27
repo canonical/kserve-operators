@@ -15,6 +15,7 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 CONFIGMAP_NAME = "inferenceservice-config"
 PODDEFAULTS_CRD_TEMPLATE = "./tests/integration/crds/poddefaults.yaml"
+KEDA_SCALEDOBJECTS_CRD_PATH = Path("./tests/integration/crds/keda-scaledobjects.yaml")
 CONTAINERS_SECURITY_CONTEXT_MAP = generate_container_securitycontext_map(METADATA)
 
 # ConfigMap
