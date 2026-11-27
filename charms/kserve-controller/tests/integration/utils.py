@@ -9,7 +9,6 @@ import boto3
 import lightkube
 import lightkube.codecs
 import lightkube.generic_resource
-import requests
 import tenacity
 import yaml
 from botocore.exceptions import ClientError
@@ -20,7 +19,14 @@ from jinja2 import Template
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Pod, Secret, ServiceAccount
 
-from tests.integration.constants import APP_NAME, ISVC
+from tests.integration.constants import (
+    APP_NAME,
+    AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY,
+    ISVC,
+    MODELS_S3_ENDPOINT,
+    MODELS_S3_REGION,
+)
 
 KSERVE_WORKLOAD_CONTAINER = "kserve-container"
 STORAGE_INITIALIZER_CONTAINER = "storage-initializer"
@@ -171,20 +177,28 @@ def upload_model_to_object_storage(
     s3_connection_info: S3ConnectionInfo,
     bucket: str,
     key: str,
-    model_url: str,
+    source_bucket: str,
+    source_key: str,
 ):
-    """Download a model artifact and upload it to the S3-compatible object store.
+    """Copy a model artifact from the shared models bucket to the S3-compatible object store.
 
     Args:
         s3_connection_info: The S3ConnectionInfo (endpoint, credentials, region) returned
             by chisme's `setup_microceph()`.
         bucket: Name of the bucket to create (if needed) and upload the model to.
         key: Object key under which the model artifact is stored.
-        model_url: URL to download the model artifact from.
+        source_bucket: Bucket in the shared models store to read the model artifact from.
+        source_key: Object key of the model artifact in the source bucket.
     """
-    logger.info("Downloading model from %s", model_url)
-    response = requests.get(model_url, timeout=60)
-    response.raise_for_status()
+    source_client = boto3.client(
+        "s3",
+        endpoint_url=f"https://{MODELS_S3_ENDPOINT}",
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=MODELS_S3_REGION,
+    )
+    logger.info("Downloading model from s3://%s/%s", source_bucket, source_key)
+    body = source_client.get_object(Bucket=source_bucket, Key=source_key)["Body"].read()
 
     s3_client = boto3.client(
         "s3",
@@ -204,7 +218,7 @@ def upload_model_to_object_storage(
             raise
 
     logger.info("Uploading model to s3://%s/%s", bucket, key)
-    s3_client.put_object(Bucket=bucket, Key=key, Body=response.content)
+    s3_client.put_object(Bucket=bucket, Key=key, Body=body)
 
 
 # Assert helpers

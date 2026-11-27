@@ -4,12 +4,13 @@ metadata:
   name: "xgboost-v2-iris"
 spec:
   predictor:
+    serviceAccountName: kserve-test-models-s3
     model:
       modelFormat:
         name: xgboost
       protocolVersion: v2
       runtime: kserve-xgbserver
-      storageUri: "gs://kfserving-examples/models/xgboost/iris"
+      storageUri: "s3://charmed-kubeflow-llm-storage/kserve-controller-models/xgboost/iris"
       resources:
         limits:
           cpu: 1
